@@ -13,6 +13,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
     strategy:
       matrix:
         python-version: ["3.13"]
