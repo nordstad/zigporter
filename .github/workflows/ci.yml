@@ -19,7 +19,7 @@ jobs:
       pull-requests: write
     strategy:
       matrix:
-        python-version: ["3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
           files: junit.xml
 
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.13'
+        if: matrix.python-version == '3.14'
         uses: codecov/codecov-action@v4
         with:
           files: coverage.xml
