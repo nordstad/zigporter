@@ -110,7 +110,7 @@ def _get_z2m_config_optional() -> tuple[str, str]:
 
 @app.command()
 def setup() -> None:
-    """Create or update the configuration file at ~/.config/zigporter/.env.
+    """Create or update the configuration file in the zigporter config directory.
 
     Prompts for Home Assistant URL, token, and Zigbee2MQTT ingress URL, then
     writes them to the user config directory and tests the connection.
@@ -147,7 +147,7 @@ def export(
         None,
         "--output",
         "-o",
-        help="Output file path. Defaults to ~/.config/zigporter/zha-export.json.",
+        help="Output file path. Defaults to zha-export.json in the zigporter config directory.",
     ),
     pretty: bool = typer.Option(False, "--pretty", help="Pretty-print JSON output."),
 ) -> None:
@@ -238,12 +238,12 @@ def _resolve_or_fetch_export(
 def migrate(
     zha_export: Path = typer.Argument(
         None,
-        help="Path to a ZHA export JSON file. Defaults to ~/.config/zigporter/zha-export.json.",
+        help="Path to a ZHA export JSON file. Defaults to zha-export.json in the zigporter config directory.",
     ),
     state: Path = typer.Option(
         None,
         "--state",
-        help="Path to the migration state file. Defaults to ~/.config/zigporter/migration-state.json.",
+        help="Path to the migration state file. Defaults to migration-state.json in the zigporter config directory.",
     ),
     status: bool = typer.Option(
         False,

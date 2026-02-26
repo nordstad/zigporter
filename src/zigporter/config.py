@@ -2,11 +2,12 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from platformdirs import user_config_dir
 
 
 def config_dir() -> Path:
-    """Return (and create) the user-level config directory ~/.config/zigporter/."""
-    d = Path.home() / ".config" / "zigporter"
+    """Return (and create) the platform-appropriate config directory for zigporter."""
+    d = Path(user_config_dir("zigporter"))
     d.mkdir(parents=True, exist_ok=True)
     return d
 

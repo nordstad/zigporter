@@ -1,4 +1,4 @@
-"""Interactive setup wizard — creates or updates ~/.config/zigporter/.env."""
+"""Interactive setup wizard — creates or updates .env in the zigporter config directory."""
 
 import asyncio
 import ssl
