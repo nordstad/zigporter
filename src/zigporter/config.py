@@ -19,6 +19,10 @@ def default_state_path() -> Path:
     return config_dir() / "migration-state.json"
 
 
+def backup_confirmed_path() -> Path:
+    return config_dir() / ".backup-confirmed"
+
+
 def _load_env() -> None:
     # CWD .env takes highest precedence; fall back to ~/.config/zigporter/.env
     if not load_dotenv(Path.cwd() / ".env"):

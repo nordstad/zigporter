@@ -7,13 +7,18 @@ import typer
 from rich.console import Console
 
 from zigporter.commands.check import check_command
-from zigporter.commands.compare import compare_command
 from zigporter.commands.export import export_command, run_export
 from zigporter.commands.inspect import inspect_command
 from zigporter.commands.list_z2m import list_z2m_command
 from zigporter.commands.migrate import migrate_command
-from zigporter.commands.rename import rename_command
-from zigporter.config import default_export_path, default_state_path, load_config, load_z2m_config
+from zigporter.commands.setup import setup_command
+from zigporter.config import (
+    backup_confirmed_path,
+    default_export_path,
+    default_state_path,
+    load_config,
+    load_z2m_config,
+)
 
 app = typer.Typer(
     name="zigporter",
@@ -64,6 +69,7 @@ def _get_config() -> tuple[str, str, bool]:
         return load_config()
     except ValueError as exc:
         console.print(f"[red]Configuration error:[/red] {exc}")
+        console.print("  Run [bold]zigporter setup[/bold] to create your config file.")
         raise typer.Exit(code=1) from exc
 
 
@@ -72,6 +78,7 @@ def _get_z2m_config() -> tuple[str, str]:
         return load_z2m_config()
     except ValueError as exc:
         console.print(f"[red]Configuration error:[/red] {exc}")
+        console.print("  Run [bold]zigporter setup[/bold] to create your config file.")
         raise typer.Exit(code=1) from exc
 
 
@@ -91,17 +98,22 @@ def _get_z2m_config_optional() -> tuple[str, str]:
 
 
 @app.command()
-def check(
-    skip_backup: bool = typer.Option(
-        False,
-        "--skip-backup",
-        help="Skip the backup reminder (for re-runs where you have already backed up).",
-    ),
-) -> None:
+def setup() -> None:
+    """Create or update the configuration file at ~/.config/zigporter/.env.
+
+    Prompts for Home Assistant URL, token, and Zigbee2MQTT ingress URL, then
+    writes them to the user config directory and tests the connection.
+    """
+    if not setup_command():
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def check() -> None:
     """Verify that all requirements are in place before migrating.
 
-    Checks HA connectivity, ZHA status, and Z2M availability, then prompts
-    you to confirm a backup. Run this before your first migration session.
+    Checks HA connectivity, ZHA status, and Z2M availability.
+    Run this before your first migration session.
     """
     ha_url, token, verify_ssl = _get_config_optional()
     z2m_url, _ = _get_z2m_config_optional()
@@ -111,7 +123,7 @@ def check(
         token=token,
         verify_ssl=verify_ssl,
         z2m_url=z2m_url,
-        skip_backup=skip_backup,
+        skip_backup=True,
     )
     if not ok:
         raise typer.Exit(code=1)
@@ -144,38 +156,6 @@ def list_z2m() -> None:
     list_z2m_command(
         ha_url=ha_url, token=token, z2m_url=z2m_url, verify_ssl=verify_ssl, mqtt_topic=mqtt_topic
     )
-
-
-@app.command()
-def compare(
-    zha_export: Path = typer.Argument(
-        ...,
-        help="Path to a ZHA export JSON file produced by the export command.",
-        exists=True,
-    ),
-) -> None:
-    """Compare a ZHA export against current Zigbee2MQTT devices."""
-    compare_command(zha_export=str(zha_export))
-
-
-@app.command()
-def rename(
-    zha_export: Path = typer.Argument(
-        ...,
-        help="Path to a ZHA export JSON file produced by the export command.",
-        exists=True,
-    ),
-    apply: bool = typer.Option(
-        False,
-        "--apply",
-        help="Apply rename changes. Without this flag the command runs in dry-run mode.",
-    ),
-) -> None:
-    """Rename Zigbee2MQTT devices/entities to match names from a ZHA export.
-
-    Runs in dry-run mode by default. Use --apply to execute changes.
-    """
-    rename_command(zha_export=str(zha_export), apply=apply)
 
 
 def _resolve_or_fetch_export(
@@ -274,14 +254,18 @@ def migrate(
     z2m_url, mqtt_topic = _get_z2m_config()
 
     if not skip_checks and not status:
+        already_confirmed = backup_confirmed_path().exists()
         ok = check_command(
             ha_url=ha_url,
             token=token,
             verify_ssl=verify_ssl,
             z2m_url=z2m_url,
+            skip_backup=already_confirmed,
         )
         if not ok:
             raise typer.Exit(code=1)
+        if not already_confirmed:
+            backup_confirmed_path().touch()
 
     export_path = _resolve_or_fetch_export(zha_export, ha_url, token, verify_ssl)
     state_path = state if state is not None else default_state_path()

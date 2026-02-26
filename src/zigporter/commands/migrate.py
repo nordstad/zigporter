@@ -321,9 +321,10 @@ async def step_rename(
         console.print(f"[red]Rename failed: {exc}[/red]")
         return False
 
-    # Set area in HA if device has one — must use the new Z2M device_id
+    # Set area in HA if device has one — must use the new Z2M device_id.
+    # Z2M may take a moment to register in HA after renaming, so we poll briefly.
     if device.area_id:
-        z2m_device_id = await ha_client.get_z2m_device_id(device.ieee)
+        z2m_device_id = await _wait_for_z2m_device_in_ha(device, ha_client, timeout=30)
         if z2m_device_id:
             try:
                 await ha_client.update_device_area(z2m_device_id, device.area_id)
@@ -633,6 +634,59 @@ async def step_show_test_checklist(device: ZHADevice, ha_client: HAClient) -> No
 
 
 # ---------------------------------------------------------------------------
+# Pre-migration dependency summary
+# ---------------------------------------------------------------------------
+
+
+async def _show_device_deps(device: ZHADevice, ha_client: HAClient) -> None:
+    """Show automations, scripts, and scenes that reference this device before migration starts."""
+    old_ids = {e.entity_id for e in device.entities}
+
+    matching_scripts: list[dict[str, Any]] = []
+    matching_scenes: list[dict[str, Any]] = []
+    try:
+        scripts, scenes = await asyncio.gather(ha_client.get_scripts(), ha_client.get_scenes())
+        matching_scripts = [s for s in scripts if _collect_entity_ids(s) & old_ids]
+        matching_scenes = [s for s in scenes if set(s.get("entities", {}).keys()) & old_ids]
+    except Exception:
+        pass
+
+    has_automations = bool(device.automations)
+    has_scripts = bool(matching_scripts)
+    has_scenes = bool(matching_scenes)
+
+    if not has_automations and not has_scripts and not has_scenes:
+        return
+
+    console.print()
+    console.rule("[bold cyan]Dependencies[/bold cyan]")
+    console.print("[dim]These will need testing after migration:[/dim]\n")
+
+    if has_automations:
+        console.print(f"  [bold]Automations[/bold] ({len(device.automations)})")
+        for auto in device.automations:
+            console.print(f"  [cyan]□[/cyan]  {auto.alias}")
+
+    if has_scripts:
+        console.print(f"\n  [bold]Scripts[/bold] ({len(matching_scripts)})")
+        for s in matching_scripts:
+            name = s.get("alias") or s.get("id", "?")
+            console.print(f"  [cyan]□[/cyan]  {name}")
+
+    if has_scenes:
+        console.print(f"\n  [bold]Scenes[/bold] ({len(matching_scenes)})")
+        for s in matching_scenes:
+            name = s.get("name") or s.get("id", "?")
+            console.print(f"  [cyan]□[/cyan]  {name}")
+
+    console.print(
+        "\n  [dim]Tip: Run [bold]zigporter inspect[/bold] for dashboard cards "
+        "and full entity details.[/dim]"
+    )
+    console.rule()
+
+
+# ---------------------------------------------------------------------------
 # Main wizard orchestrator
 # ---------------------------------------------------------------------------
 
@@ -660,6 +714,8 @@ async def run_wizard(
         "[dim]You can abort safely at step 1. After that, the device must complete\n"
         "pairing with Z2M before it can be used again.[/dim]".format(name=device.name)
     )
+
+    await _show_device_deps(device, ha_client)
 
     mark_in_progress(state, device.ieee)
     save_state(state, state_path)

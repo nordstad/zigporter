@@ -52,7 +52,7 @@ Data Layer      models.py (Pydantic), migration_state.py (persistent JSON)
 
 **State persistence:** `MigrationState` serializes to JSON on disk, keyed by IEEE address. Device progress is tracked as `PENDING → IN_PROGRESS → MIGRATED / FAILED`.
 
-**`compare` and `rename` commands are stubs** — the module files exist but the logic is not yet implemented.
+**`compare` and `rename` commands have been removed** — they were unimplemented stubs. Use `migrate --status` and `list-z2m` instead.
 
 ## Configuration
 
