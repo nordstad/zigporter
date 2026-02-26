@@ -11,6 +11,15 @@
 CLI tool to migrate Zigbee devices from ZHA to Zigbee2MQTT in Home Assistant.
 Runs an interactive per-device wizard with persistent state so migrations can be paused and resumed across sessions.
 
+> **Early Development Notice**
+> This tool is in early development and has only been tested with one specific setup:
+> - Home Assistant OS 2026.2.3
+> - Supervisor 2026.02.2
+> - Zigbee2MQTT 2.8.0-1
+>
+> I have not had the possibility to test with different HA or Z2M versions and setups.
+> Feedback is very welcome — please open an [issue](https://github.com/nordstad/zigporter/issues) or submit a [PR](https://github.com/nordstad/zigporter/pulls) if you test with a different configuration.
+
 ## Requirements
 
 - Python 3.12+
