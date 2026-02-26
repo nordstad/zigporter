@@ -19,7 +19,7 @@ coverage:
 
 comment:
   # Post PR comments with coverage changes
-  layout: "header, diff, flags, components, footer"
+  layout: "header, diff, coverage, flags, components, footer"
   behavior: default  # Update existing comment
   require_changes: false  # Always comment, even if no coverage change
 
