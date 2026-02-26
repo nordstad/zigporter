@@ -5,7 +5,7 @@
 ```
 CLI Layer       main.py  (Typer, --help / --version)
     ↓
-Command Layer   commands/{export, migrate, list_z2m, compare*, rename*}.py
+Command Layer   commands/{export, migrate, list_z2m, check, inspect, setup}.py
     ↓
 Client Layer    ha_client.py   (WebSocket + REST)
                 z2m_client.py  (HTTP ingress, three-tier auth)
@@ -13,8 +13,6 @@ Client Layer    ha_client.py   (WebSocket + REST)
 Data Layer      models.py           (Pydantic v2)
                 migration_state.py  (JSON on disk, keyed by IEEE)
 ```
-
-`compare` and `rename` commands are stubs — not yet implemented.
 
 ## API communication
 
