@@ -31,6 +31,7 @@ features = [
 ]
 
 [[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
 scheme = "slate"
 primary = "teal"
 accent = "cyan"
@@ -38,6 +39,7 @@ toggle.icon = "lucide/moon"
 toggle.name = "Switch to light mode"
 
 [[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
 scheme = "default"
 primary = "teal"
 accent = "cyan"
