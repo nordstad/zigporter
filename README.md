@@ -8,8 +8,10 @@
 
 # zigporter
 
-CLI tool to migrate Zigbee devices from ZHA to Zigbee2MQTT in Home Assistant.
-Runs an interactive per-device wizard with persistent state so migrations can be paused and resumed across sessions.
+*Because re-pairing 30 Zigbee devices by hand is a special kind of misery.*
+
+CLI tool that automates the ZHA → Zigbee2MQTT migration in Home Assistant — one device at a
+time, with checkpoints so you can stop and pick up where you left off.
 
 > **Early Development Notice**
 > This tool is in early development and has only been tested with one specific setup:
