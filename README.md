@@ -8,7 +8,7 @@
 
 # zigporter
 
-*Because re-pairing 30 Zigbee devices by hand is a special kind of misery.*
+*Because migrating 30 Zigbee devices in Home Assistant by hand is a special kind of misery.*
 
 CLI tool that automates the ZHA → Zigbee2MQTT migration in Home Assistant — one device at a
 time, with checkpoints so you can stop and pick up where you left off.
