@@ -34,17 +34,41 @@ uv tool install zigporter
 
 ## Configuration
 
+**Option 1 — Setup wizard (recommended)**
+
 ```bash
-cp .env.example .env   # fill in your values
+zigporter setup
 ```
 
-| Variable | Description |
-|---|---|
-| `HA_URL` | Home Assistant URL |
-| `HA_TOKEN` | [Long-Lived Access Token](https://www.home-assistant.io/docs/authentication/#your-account-profile) |
-| `HA_VERIFY_SSL` | `true` / `false` (false for self-signed certs) |
-| `Z2M_URL` | Zigbee2MQTT ingress URL |
-| `Z2M_MQTT_TOPIC` | Z2M base topic (default: `zigbee2mqtt`) |
+Prompts for all values and saves to `~/.config/zigporter/.env`.
+
+**Option 2 — Manual config file**
+
+Create `~/.config/zigporter/.env` (see `.env.example` for the template):
+
+```bash
+mkdir -p ~/.config/zigporter
+cp .env.example ~/.config/zigporter/.env
+# edit the file with your values
+```
+
+**Option 3 — Environment variables**
+
+Export directly in your shell or add to `~/.zshenv` / `~/.bashrc`:
+
+```bash
+export HA_URL=https://your-ha-instance.local
+export HA_TOKEN=your_token
+export Z2M_URL=https://your-ha-instance.local/abc123_zigbee2mqtt
+```
+
+| Variable | Required | Description |
+|---|---|---|
+| `HA_URL` | Yes | Home Assistant URL |
+| `HA_TOKEN` | Yes | [Long-Lived Access Token](https://www.home-assistant.io/docs/authentication/#your-account-profile) |
+| `HA_VERIFY_SSL` | No | `true` / `false` (default: `true`; use `false` for self-signed certs) |
+| `Z2M_URL` | Yes | Zigbee2MQTT ingress URL |
+| `Z2M_MQTT_TOPIC` | No | Z2M base topic (default: `zigbee2mqtt`) |
 
 ## Usage
 

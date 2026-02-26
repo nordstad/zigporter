@@ -56,15 +56,8 @@ Data Layer      models.py (Pydantic), migration_state.py (persistent JSON)
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in:
-
-```
-HA_URL=https://your-ha-instance.local
-HA_TOKEN=your_long_lived_access_token_here
-HA_VERIFY_SSL=true        # set false for self-signed certs
-Z2M_URL=https://your-ha-instance.local/<ingress-slug>
-Z2M_MQTT_TOPIC=zigbee2mqtt   # only needed if using a non-default Z2M base topic
-```
+Run `zigporter setup` or create `~/.config/zigporter/.env`. CWD `.env` still works as
+a project-level override (useful for `uv run` development).
 
 `config.py` loads these via `python-dotenv` and exposes a `Config` dataclass. SSL context is built from `HA_VERIFY_SSL` and passed through all HTTP/WebSocket calls.
 
