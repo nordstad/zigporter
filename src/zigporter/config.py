@@ -2,16 +2,17 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from platformdirs import user_config_path
 
 
 def config_dir() -> Path:
-    """Return (and create) the config directory for zigporter (~/.config/zigporter)."""
-    new = Path.home() / ".config" / "zigporter"
-    old = Path(os.path.expanduser("~/Library/Application Support/zigporter"))
-    if old.exists() and not new.exists():
-        old.rename(new)
-    new.mkdir(parents=True, exist_ok=True)
-    return new
+    """Return (and create) the platform-appropriate config directory for zigporter.
+
+    - Linux:   ~/.config/zigporter
+    - macOS:   ~/Library/Application Support/zigporter
+    - Windows: C:\\Users\\<user>\\AppData\\Local\\zigporter
+    """
+    return user_config_path("zigporter", ensure_exists=True)
 
 
 def default_export_path() -> Path:
