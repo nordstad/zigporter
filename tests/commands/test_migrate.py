@@ -472,6 +472,36 @@ async def test_step_reconcile_skips_on_cancel(mock_ha_client):
     mock_ha_client.rename_entity_id.assert_not_called()
 
 
+async def test_step_reconcile_skips_when_ha_already_renamed(mock_ha_client):
+    """When HA auto-renames entities between the first fetch and applying, skip them gracefully."""
+    mock_ha_client.get_entity_registry = AsyncMock(
+        side_effect=[
+            # First call: entity still has IEEE-hex name → rename proposal is built
+            [
+                {
+                    "entity_id": "sensor.0x00124b002a5333ab_temperature",
+                    "device_id": "z2m-device-id",
+                    "disabled_by": None,
+                }
+            ],
+            # Second call (re-fetch before applying): HA already renamed it
+            [
+                {
+                    "entity_id": "sensor.kontor_temp_sensor_temperature",
+                    "device_id": "z2m-device-id",
+                    "disabled_by": None,
+                }
+            ],
+        ]
+    )
+
+    with patch("questionary.confirm") as mock_confirm:
+        mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=True)
+        await step_reconcile_entity_ids(_KONTOR_DEVICE, mock_ha_client)
+
+    mock_ha_client.rename_entity_id.assert_not_called()
+
+
 async def test_step_reconcile_no_zha_match(mock_ha_client):
     """A hex-named entity with no matching ZHA feature is silently skipped."""
     mock_ha_client.get_entity_registry = AsyncMock(
