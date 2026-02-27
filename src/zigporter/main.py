@@ -303,5 +303,36 @@ def inspect(
     inspect_command(ha_url=ha_url, token=token, verify_ssl=verify_ssl, debug=debug)
 
 
+@app.command()
+def rename(
+    old_entity_id: str = typer.Argument(..., help="Current entity ID to rename."),
+    new_entity_id: str = typer.Argument(..., help="New entity ID to assign."),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Apply the rename. Without this flag the command runs as a dry run and prompts for confirmation.",
+    ),
+) -> None:
+    """Rename an entity ID and update all references in automations, scripts, scenes, and dashboards.
+
+    Defaults to a dry run that shows what would change. Pass --apply or confirm
+    the prompt to write the changes.
+
+    Note: Jinja2 template strings (e.g. {{ states('old.id') }}) are not patched
+    automatically — review them manually after renaming.
+    """
+    from zigporter.commands.rename import rename_command  # noqa: PLC0415
+
+    ha_url, token, verify_ssl = _get_config()
+    rename_command(
+        ha_url=ha_url,
+        token=token,
+        verify_ssl=verify_ssl,
+        old_entity_id=old_entity_id,
+        new_entity_id=new_entity_id,
+        apply=apply,
+    )
+
+
 if __name__ == "__main__":
     app()

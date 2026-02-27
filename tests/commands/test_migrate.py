@@ -63,6 +63,10 @@ def mock_ha_client():
     )
     client.get_panels = AsyncMock(return_value={})
     client.get_lovelace_config = AsyncMock(return_value=None)
+    client.save_lovelace_config = AsyncMock(return_value=None)
+    client.update_automation = AsyncMock(return_value=None)
+    client.update_script = AsyncMock(return_value=None)
+    client.update_scene = AsyncMock(return_value=None)
     return client
 
 

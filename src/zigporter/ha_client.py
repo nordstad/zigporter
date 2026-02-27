@@ -228,6 +228,45 @@ class HAClient:
             }
         )
 
+    async def save_lovelace_config(
+        self, config: dict[str, Any], url_path: str | None = None
+    ) -> None:
+        """Save (overwrite) a Lovelace dashboard config."""
+        cmd: dict[str, Any] = {"type": "lovelace/config/save", "config": config}
+        if url_path is not None:
+            cmd["url_path"] = url_path
+        await self._ws_command(cmd)
+
+    async def update_automation(self, automation_id: str, config: dict[str, Any]) -> None:
+        """Update a UI-managed automation config by ID."""
+        await self._ws_command(
+            {
+                "type": "config/automation/update",
+                "automation_id": automation_id,
+                "config": config,
+            }
+        )
+
+    async def update_script(self, script_id: str, config: dict[str, Any]) -> None:
+        """Update a UI-managed script config by ID."""
+        await self._ws_command(
+            {
+                "type": "config/script/update",
+                "script_id": script_id,
+                "config": config,
+            }
+        )
+
+    async def update_scene(self, scene_id: str, config: dict[str, Any]) -> None:
+        """Update a UI-managed scene config by ID."""
+        await self._ws_command(
+            {
+                "type": "config/scene/update",
+                "scene_id": scene_id,
+                "config": config,
+            }
+        )
+
     async def call_service(self, domain: str, service: str, service_data: dict[str, Any]) -> None:
         """Call a Home Assistant service via WebSocket."""
         await self._ws_command(
