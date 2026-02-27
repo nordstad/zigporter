@@ -304,3 +304,48 @@ async def test_get_all_ws_data_automation_failure_returns_empty(client, mocker):
 
     result = await client.get_all_ws_data()
     assert result["automation_configs"] == []
+
+
+async def test_save_lovelace_config_without_url_path(client, mocker):
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.save_lovelace_config({"views": []})
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "lovelace/config/save"
+    assert "url_path" not in sent
+
+
+async def test_save_lovelace_config_with_url_path(client, mocker):
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.save_lovelace_config({"views": []}, url_path="mobile")
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "lovelace/config/save"
+    assert sent["url_path"] == "mobile"
+
+
+async def test_update_automation(client, mocker):
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.update_automation("auto1", {"alias": "Test"})
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "config/automation/update"
+    assert sent["automation_id"] == "auto1"
+
+
+async def test_update_script(client, mocker):
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.update_script("script1", {"alias": "Test"})
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "config/script/update"
+    assert sent["script_id"] == "script1"
+
+
+async def test_update_scene(client, mocker):
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.update_scene("scene1", {"name": "Evening"})
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "config/scene/update"
+    assert sent["scene_id"] == "scene1"

@@ -413,3 +413,132 @@ def test_rename_plan_total_occurrences():
         ],
     )
     assert plan.total_occurrences == 6
+
+
+# ---------------------------------------------------------------------------
+# run_rename
+# ---------------------------------------------------------------------------
+
+_SIMPLE_PLAN = RenamePlan(
+    old_entity_id="switch.old",
+    new_entity_id="switch.new",
+    locations=[
+        RenameLocation(
+            context="registry", name="HA entity registry", item_id="switch.old", occurrences=1
+        ),
+        RenameLocation(context="automation", name="My auto", item_id="a1", occurrences=1),
+    ],
+)
+
+
+async def test_run_rename_apply_success(mocker):
+    mocker.patch("zigporter.commands.rename.HAClient")
+    mocker.patch("zigporter.commands.rename.build_rename_plan", return_value=_SIMPLE_PLAN)
+    mocker.patch("zigporter.commands.rename.execute_rename", new=AsyncMock())
+
+    from zigporter.commands.rename import run_rename  # noqa: PLC0415
+
+    result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", True)
+    assert result is True
+
+
+async def test_run_rename_validation_error(mocker):
+    mocker.patch("zigporter.commands.rename.HAClient")
+    mocker.patch("zigporter.commands.rename.build_rename_plan", side_effect=ValueError("not found"))
+
+    from zigporter.commands.rename import run_rename  # noqa: PLC0415
+
+    result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", True)
+    assert result is False
+
+
+async def test_run_rename_no_tty_no_apply(mocker):
+    mocker.patch("zigporter.commands.rename.HAClient")
+    mocker.patch("zigporter.commands.rename.build_rename_plan", return_value=_SIMPLE_PLAN)
+    mocker.patch("zigporter.commands.rename.sys").stdin.isatty.return_value = False
+
+    from zigporter.commands.rename import run_rename  # noqa: PLC0415
+
+    result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", False)
+    assert result is False
+
+
+async def test_run_rename_confirmed(mocker):
+    mocker.patch("zigporter.commands.rename.HAClient")
+    mocker.patch("zigporter.commands.rename.build_rename_plan", return_value=_SIMPLE_PLAN)
+    mock_execute = mocker.patch("zigporter.commands.rename.execute_rename", new=AsyncMock())
+    mocker.patch("zigporter.commands.rename.sys").stdin.isatty.return_value = True
+    mock_q = mocker.MagicMock()
+    mock_q.unsafe_ask_async = AsyncMock(return_value=True)
+    mocker.patch("zigporter.commands.rename.questionary.confirm", return_value=mock_q)
+
+    from zigporter.commands.rename import run_rename  # noqa: PLC0415
+
+    result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", False)
+    assert result is True
+    mock_execute.assert_called_once()
+
+
+async def test_run_rename_aborted(mocker):
+    mocker.patch("zigporter.commands.rename.HAClient")
+    mocker.patch("zigporter.commands.rename.build_rename_plan", return_value=_SIMPLE_PLAN)
+    mocker.patch("zigporter.commands.rename.execute_rename", new=AsyncMock())
+    mocker.patch("zigporter.commands.rename.sys").stdin.isatty.return_value = True
+    mock_q = mocker.MagicMock()
+    mock_q.unsafe_ask_async = AsyncMock(return_value=False)
+    mocker.patch("zigporter.commands.rename.questionary.confirm", return_value=mock_q)
+
+    from zigporter.commands.rename import run_rename  # noqa: PLC0415
+
+    result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", False)
+    assert result is True  # aborted is not an error
+
+
+# ---------------------------------------------------------------------------
+# rename_command
+# ---------------------------------------------------------------------------
+
+
+def test_rename_command_success(mocker):
+    mocker.patch("zigporter.commands.rename.asyncio.run", return_value=True)
+
+    from zigporter.commands.rename import rename_command  # noqa: PLC0415
+
+    rename_command("https://ha.test", "token", True, "switch.old", "switch.new", False)
+
+
+def test_rename_command_failure(mocker):
+    import typer  # noqa: PLC0415
+
+    mocker.patch("zigporter.commands.rename.asyncio.run", return_value=False)
+
+    from zigporter.commands.rename import rename_command  # noqa: PLC0415
+
+    with pytest.raises(typer.Exit):
+        rename_command("https://ha.test", "token", True, "switch.old", "switch.new", False)
+
+
+# ---------------------------------------------------------------------------
+# rename CLI (main.py)
+# ---------------------------------------------------------------------------
+
+
+def test_rename_cli_invokes_rename_command(mocker):
+    mocker.patch("zigporter.main._get_config", return_value=("https://ha.test", "token", True))
+    mock_cmd = mocker.patch("zigporter.commands.rename.rename_command")
+
+    from typer.testing import CliRunner  # noqa: PLC0415
+
+    from zigporter.main import app  # noqa: PLC0415
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["rename", "switch.old", "switch.new", "--apply"])
+    assert result.exit_code == 0
+    mock_cmd.assert_called_once_with(
+        ha_url="https://ha.test",
+        token="token",
+        verify_ssl=True,
+        old_entity_id="switch.old",
+        new_entity_id="switch.new",
+        apply=True,
+    )
