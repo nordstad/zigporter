@@ -1,6 +1,6 @@
 [project]
 name = "zigporter"
-version = "0.1.4"
+version = "0.1.5"
 description = "CLI tool to migrate Zigbee devices from ZHA to Zigbee2MQTT in Home Assistant"
 readme = "README.md"
 authors = [
