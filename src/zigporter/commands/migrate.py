@@ -681,6 +681,42 @@ async def step_show_test_checklist(device: ZHADevice, ha_client: HAClient) -> No
 
 
 # ---------------------------------------------------------------------------
+# Post-rename device summary (entities + dashboards)
+# ---------------------------------------------------------------------------
+
+
+async def step_show_inspect_summary(device: ZHADevice, ha_client: HAClient) -> None:
+    """Show current entities and dashboard cards for the migrated Z2M device.
+
+    Called after entity ID reconciliation (step 5) and before validation (step 6)
+    so the user can see which dashboard cards reference the device's entities.
+    """
+    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+
+    try:
+        z2m_device_id = await ha_client.get_z2m_device_id(device.ieee)
+        if z2m_device_id is None:
+            return
+
+        full_registry = await ha_client.get_entity_registry()
+        entity_ids = [
+            e["entity_id"]
+            for e in full_registry
+            if e.get("device_id") == z2m_device_id and not e.get("disabled_by")
+        ]
+
+        if not entity_ids:
+            return
+
+        console.print()
+        console.rule(f"[bold cyan]{device.name}[/bold cyan]")
+        await show_migrate_inspect_summary(entity_ids, ha_client)
+        console.rule()
+    except Exception:
+        pass  # Non-critical — never interrupt the wizard
+
+
+# ---------------------------------------------------------------------------
 # Pre-migration dependency summary
 # ---------------------------------------------------------------------------
 
@@ -792,6 +828,9 @@ async def run_wizard(
 
         # Step 5 — Restore entity IDs
         await step_reconcile_entity_ids(device, ha_client)
+
+        # Show entity and dashboard summary before validation
+        await step_show_inspect_summary(device, ha_client)
 
         # Step 6 — Validate
         valid = await step_validate(device, ha_client)

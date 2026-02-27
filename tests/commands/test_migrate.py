@@ -60,6 +60,8 @@ def mock_ha_client():
             {"entity_id": "switch.kitchen_plug", "device_id": "z2m-device-id", "disabled_by": None}
         ]
     )
+    client.get_panels = AsyncMock(return_value={})
+    client.get_lovelace_config = AsyncMock(return_value=None)
     return client
 
 
@@ -613,3 +615,62 @@ async def test_step_reconcile_no_zha_match(mock_ha_client):
         mock_confirm.assert_not_called()
 
     mock_ha_client.rename_entity_id.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# step_show_inspect_summary
+# ---------------------------------------------------------------------------
+
+
+async def test_step_show_inspect_summary_skips_when_no_z2m_device(sample_device, mock_ha_client):
+    """When Z2M device is not found in HA, entity registry is never queried."""
+    from zigporter.commands.migrate import step_show_inspect_summary  # noqa: PLC0415
+
+    mock_ha_client.get_z2m_device_id = AsyncMock(return_value=None)
+
+    await step_show_inspect_summary(sample_device, mock_ha_client)
+
+    mock_ha_client.get_entity_registry.assert_not_called()
+
+
+async def test_step_show_inspect_summary_skips_when_no_entities(sample_device, mock_ha_client):
+    """When Z2M device has no enabled entities, dashboard fetch is skipped."""
+    from zigporter.commands.migrate import step_show_inspect_summary  # noqa: PLC0415
+
+    mock_ha_client.get_entity_registry = AsyncMock(return_value=[])
+
+    await step_show_inspect_summary(sample_device, mock_ha_client)
+
+    mock_ha_client.get_panels.assert_not_called()
+
+
+async def test_step_show_inspect_summary_normal(sample_device, mock_ha_client):
+    """Normal path: fetches entity registry and dashboard data then shows the summary."""
+    from zigporter.commands.migrate import step_show_inspect_summary  # noqa: PLC0415
+
+    mock_ha_client.get_lovelace_config = AsyncMock(
+        return_value={
+            "views": [
+                {
+                    "title": "Home",
+                    "cards": [{"type": "entities", "entities": ["switch.kitchen_plug"]}],
+                }
+            ]
+        }
+    )
+
+    await step_show_inspect_summary(sample_device, mock_ha_client)
+
+    mock_ha_client.get_z2m_device_id.assert_called_once_with(sample_device.ieee)
+    mock_ha_client.get_entity_registry.assert_called()
+    mock_ha_client.get_panels.assert_called_once()
+
+
+async def test_step_show_inspect_summary_swallows_exceptions(sample_device, mock_ha_client):
+    """Exceptions during summary fetching do not propagate — the wizard must not be interrupted."""
+    from zigporter.commands.migrate import step_show_inspect_summary  # noqa: PLC0415
+
+    mock_ha_client.get_z2m_device_id = AsyncMock(side_effect=RuntimeError("network error"))
+
+    # Must not raise
+    await step_show_inspect_summary(sample_device, mock_ha_client)

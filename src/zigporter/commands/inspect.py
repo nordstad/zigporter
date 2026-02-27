@@ -198,6 +198,75 @@ async def fetch_all_data(ha_client: HAClient) -> dict[str, Any]:
     }
 
 
+async def show_migrate_inspect_summary(
+    entity_ids: list[str],
+    ha_client: HAClient,
+) -> None:
+    """Show entities and dashboard cards for a freshly migrated device.
+
+    Called from the migration wizard before the validate step.
+    Fetches only dashboard data — entity IDs are provided by the caller.
+    """
+    if not entity_ids:
+        return
+
+    target = set(entity_ids)
+
+    panels_data = await ha_client.get_panels()
+
+    dashboard_url_paths: list[str | None] = []
+    dashboard_titles: dict[str | None, str] = {}
+
+    for panel_key, panel in panels_data.items():
+        if panel.get("component_name") != "lovelace":
+            continue
+        panel_url = panel.get("url_path") or panel_key
+        if panel_url in ("lovelace", ""):
+            lv_path: str | None = None
+            title = panel.get("title") or "Default"
+        else:
+            lv_path = panel_url
+            title = panel.get("title") or panel_url
+        if lv_path not in dashboard_url_paths:
+            dashboard_url_paths.append(lv_path)
+            dashboard_titles[lv_path] = title
+
+    if None not in dashboard_url_paths:
+        dashboard_url_paths.insert(0, None)
+        dashboard_titles[None] = "Default"
+
+    lovelace_configs = await asyncio.gather(
+        *[ha_client.get_lovelace_config(p) for p in dashboard_url_paths]
+    )
+
+    dashboard_refs: list[DashboardRef] = []
+    for url_path, config in zip(dashboard_url_paths, lovelace_configs, strict=True):
+        if config is None:
+            continue
+        title = dashboard_titles.get(url_path, url_path or "Default")
+        dashboard_refs.extend(_scan_dashboard(config, title, target))
+
+    console.print(f"\n[bold]Entities[/bold] ({len(entity_ids)})")
+    for eid in sorted(entity_ids):
+        console.print(f"  [dim]{eid}[/dim]")
+
+    if dashboard_refs:
+        console.print(f"\n[bold]Dashboards[/bold] ({len(dashboard_refs)} cards)")
+        for ref in dashboard_refs:
+            card_label = f"{ref.card_type} card"
+            if ref.card_title:
+                card_label += f' "{ref.card_title}"'
+            console.print(
+                f"  [cyan]□[/cyan]  {ref.dashboard_title} "
+                f"[dim]›[/dim] {ref.view_title} "
+                f"[dim]›[/dim] {card_label}"
+            )
+            for eid in ref.matched_entities:
+                console.print(f"       [dim]{eid}[/dim]")
+    else:
+        console.print("\n  [dim]No dashboard cards found referencing these entities.[/dim]")
+
+
 # ---------------------------------------------------------------------------
 # Dependency builder
 # ---------------------------------------------------------------------------

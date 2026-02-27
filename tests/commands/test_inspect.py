@@ -369,3 +369,85 @@ def test_show_report_no_deps():
         dashboard_refs=[],
     )
     show_report(deps)  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# show_migrate_inspect_summary
+# ---------------------------------------------------------------------------
+
+
+async def test_show_migrate_inspect_summary_empty_entity_ids():
+    """Empty entity_ids list returns immediately without calling ha_client."""
+    from unittest.mock import AsyncMock, MagicMock  # noqa: PLC0415
+
+    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+
+    ha_client = MagicMock()
+    ha_client.get_panels = AsyncMock(return_value={})
+    await show_migrate_inspect_summary([], ha_client)
+    ha_client.get_panels.assert_not_called()
+
+
+async def test_show_migrate_inspect_summary_with_matching_dashboard():
+    """Shows entities list and dashboard cards that reference them."""
+    from unittest.mock import AsyncMock, MagicMock  # noqa: PLC0415
+
+    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+
+    ha_client = MagicMock()
+    ha_client.get_panels = AsyncMock(return_value={})
+    ha_client.get_lovelace_config = AsyncMock(
+        return_value={
+            "views": [
+                {
+                    "title": "Main",
+                    "cards": [{"type": "entities", "entities": ["switch.kitchen_plug"]}],
+                }
+            ]
+        }
+    )
+
+    await show_migrate_inspect_summary(["switch.kitchen_plug"], ha_client)
+
+    ha_client.get_panels.assert_called_once()
+    ha_client.get_lovelace_config.assert_called_once_with(None)
+
+
+async def test_show_migrate_inspect_summary_no_matching_dashboard():
+    """Shows 'No dashboard cards' message when no cards reference the entities."""
+    from unittest.mock import AsyncMock, MagicMock  # noqa: PLC0415
+
+    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+
+    ha_client = MagicMock()
+    ha_client.get_panels = AsyncMock(return_value={})
+    ha_client.get_lovelace_config = AsyncMock(
+        return_value={
+            "views": [{"title": "Home", "cards": [{"type": "button", "entity": "light.other"}]}]
+        }
+    )
+
+    await show_migrate_inspect_summary(["switch.kitchen_plug"], ha_client)
+
+    ha_client.get_lovelace_config.assert_called_once_with(None)
+
+
+async def test_show_migrate_inspect_summary_discovers_extra_dashboards():
+    """Extra Lovelace dashboards discovered from panels are also scanned."""
+    from unittest.mock import AsyncMock, MagicMock  # noqa: PLC0415
+
+    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+
+    ha_client = MagicMock()
+    ha_client.get_panels = AsyncMock(
+        return_value={
+            "lovelace": {"component_name": "lovelace", "url_path": ""},
+            "mobile": {"component_name": "lovelace", "url_path": "mobile"},
+        }
+    )
+    ha_client.get_lovelace_config = AsyncMock(return_value=None)
+
+    await show_migrate_inspect_summary(["switch.kitchen_plug"], ha_client)
+
+    # default (None) + "mobile"
+    assert ha_client.get_lovelace_config.call_count == 2
