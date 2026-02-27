@@ -472,6 +472,67 @@ async def test_step_reconcile_skips_on_cancel(mock_ha_client):
     mock_ha_client.rename_entity_id.assert_not_called()
 
 
+async def test_step_reconcile_skips_conflicting_target(mock_ha_client):
+    """A stale entity already occupying the target ID blocks the rename and shows a warning."""
+    mock_ha_client.get_entity_registry = AsyncMock(
+        return_value=[
+            # Z2M entity — still IEEE-named
+            {
+                "entity_id": "sensor.0x00124b002a5333ab_temperature",
+                "device_id": "z2m-device-id",
+                "disabled_by": None,
+            },
+            # Stale entity from a different device already using the target ID
+            {
+                "entity_id": "sensor.kontor_temp_sensor_temperature",
+                "device_id": "other-stale-device-id",
+                "disabled_by": None,
+            },
+        ]
+    )
+
+    with patch("questionary.confirm") as mock_confirm:
+        await step_reconcile_entity_ids(_KONTOR_DEVICE, mock_ha_client)
+        mock_confirm.assert_not_called()  # no rename to confirm — all blocked
+
+    mock_ha_client.rename_entity_id.assert_not_called()
+
+
+async def test_step_reconcile_partial_conflict(mock_ha_client):
+    """When only some targets are blocked, unblocked renames still proceed."""
+    mock_ha_client.get_entity_registry = AsyncMock(
+        return_value=[
+            # Both Z2M entities still IEEE-named
+            {
+                "entity_id": "sensor.0x00124b002a5333ab_temperature",
+                "device_id": "z2m-device-id",
+                "disabled_by": None,
+            },
+            {
+                "entity_id": "sensor.0x00124b002a5333ab_humidity",
+                "device_id": "z2m-device-id",
+                "disabled_by": None,
+            },
+            # Stale entity blocks only the temperature rename
+            {
+                "entity_id": "sensor.kontor_temp_sensor_temperature",
+                "device_id": "other-stale-device-id",
+                "disabled_by": None,
+            },
+        ]
+    )
+
+    with patch("questionary.confirm") as mock_confirm:
+        mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=True)
+        await step_reconcile_entity_ids(_KONTOR_DEVICE, mock_ha_client)
+
+    # Only the humidity rename (unblocked) should go through
+    mock_ha_client.rename_entity_id.assert_called_once_with(
+        "sensor.0x00124b002a5333ab_humidity",
+        "sensor.kontor_temp_sensor_humidity",
+    )
+
+
 async def test_step_reconcile_skips_when_ha_already_renamed(mock_ha_client):
     """When HA auto-renames entities between the first fetch and applying, skip them gracefully."""
     mock_ha_client.get_entity_registry = AsyncMock(
