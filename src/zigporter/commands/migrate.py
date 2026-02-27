@@ -414,7 +414,11 @@ async def step_reconcile_entity_ids(device: ZHADevice, ha_client: HAClient) -> N
         domain = e.entity_id.split(".")[0]
         zha_by_domain.setdefault(domain, []).append(e)
 
+    # Index the full registry by entity_id so we can detect stale conflicts.
+    registry_by_id = {e["entity_id"]: e for e in full_registry}
+
     renames: list[tuple[str, str]] = []  # (current_entity_id, target_entity_id)
+    conflicts: list[tuple[str, str]] = []  # renames blocked by a stale entity at the target ID
     for entry in z2m_entities:
         current_id: str = entry["entity_id"]
         if not _is_ieee_entity(current_id):
@@ -433,17 +437,43 @@ async def step_reconcile_entity_ids(device: ZHADevice, ha_client: HAClient) -> N
         if len(candidates) != 1:
             continue  # ambiguous or no match — skip
         target_id = candidates[0].entity_id
-        if target_id != current_id:
+        if target_id == current_id:
+            continue
+        # If the target entity ID already exists and belongs to a different device, it is a
+        # stale/leftover entity (e.g. an old ZHA entry that was never cleaned up).  Renaming
+        # into it would either fail or silently overwrite it, leaving the dashboard broken.
+        existing = registry_by_id.get(target_id)
+        if existing and existing.get("device_id") != z2m_device_id:
+            conflicts.append((current_id, target_id))
+        else:
             renames.append((current_id, target_id))
 
-    if not renames:
+    if not renames and not conflicts:
         console.print("[green]✓ Entity IDs already use friendly names[/green]")
         return
 
-    console.print("\n  The following entity IDs will be updated:\n")
-    for current_id, target_id in renames:
-        console.print(f"  [dim]{current_id}[/dim]")
-        console.print(f"    → [bold]{target_id}[/bold]")
+    if renames:
+        console.print("\n  The following entity IDs will be updated:\n")
+        for current_id, target_id in renames:
+            console.print(f"  [dim]{current_id}[/dim]")
+            console.print(f"    → [bold]{target_id}[/bold]")
+
+    if conflicts:
+        console.print(
+            "\n  [yellow]The following renames are blocked by stale entities already using "
+            "the target ID.[/yellow]\n  Clean them up in "
+            "[bold]Settings → Devices & Services → Entities[/bold] and re-run the wizard:\n"
+        )
+        for current_id, target_id in conflicts:
+            console.print(f"  [dim]{current_id}[/dim]")
+            console.print(
+                f"    → [yellow]{target_id}[/yellow] [dim](entity ID already in use)[/dim]"
+            )
+
+    if not renames:
+        console.print()
+        return
+
     console.print()
 
     confirmed = await questionary.confirm(
