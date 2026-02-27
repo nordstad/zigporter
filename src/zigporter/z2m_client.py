@@ -178,7 +178,7 @@ class Z2MClient:
         """Return the full Z2M device list."""
         try:
             return await self._get("/api/devices")
-        except RuntimeError:
+        except (RuntimeError, httpx.HTTPStatusError, httpx.RequestError):
             return await self._get_devices_via_ha()
 
     async def get_device_by_ieee(self, ieee: str) -> dict[str, Any] | None:

@@ -175,6 +175,51 @@ async def test_get_devices_falls_back_to_ha_registry_when_session_fails(client, 
     assert result[0]["definition"]["vendor"] == "IKEA"
 
 
+@respx.mock
+async def test_get_devices_falls_back_to_ha_registry_on_http_error(client, respx_mock):
+    """Non-RuntimeError HTTP errors (e.g. 503) also trigger the HA registry fallback."""
+    # Bearer returns a 503 — httpx.HTTPStatusError should be caught and trigger fallback
+    respx.get(f"{Z2M_URL}/api/devices").mock(
+        side_effect=[
+            httpx.Response(200, content=b"<html/>", headers={"content-type": "text/html"}),
+            httpx.Response(503),
+        ]
+    )
+    respx.post(INGRESS_SESSION_URL).mock(
+        return_value=httpx.Response(200, json={"data": {"session": SESSION}})
+    )
+
+    registry_entry = {
+        "id": "dev1",
+        "name": "Porch Sensor",
+        "name_by_user": None,
+        "manufacturer": "Sonoff",
+        "model": "SNZB-03",
+        "identifiers": [["mqtt", "zigbee2mqtt_0x1122334455667788"]],
+        "area_id": None,
+    }
+
+    from unittest.mock import AsyncMock, patch
+
+    ws_messages = iter(
+        [
+            json.dumps({"type": "auth_required"}),
+            json.dumps({"type": "auth_ok"}),
+            json.dumps({"id": 1, "type": "result", "success": True, "result": [registry_entry]}),
+        ]
+    )
+    mock_ws = AsyncMock()
+    mock_ws.recv = AsyncMock(side_effect=ws_messages)
+    mock_ws.__aenter__ = AsyncMock(return_value=mock_ws)
+    mock_ws.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("websockets.connect", return_value=mock_ws):
+        result = await client.get_devices()
+
+    assert len(result) == 1
+    assert result[0]["ieee_address"] == "0x1122334455667788"
+
+
 # ---------------------------------------------------------------------------
 # permit_join and rename
 # ---------------------------------------------------------------------------

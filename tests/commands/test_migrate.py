@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from zigporter.commands.migrate import (
+    step_pair_with_z2m,
     step_reconcile_entity_ids,
     step_remove_from_zha,
     step_rename,
@@ -674,3 +675,72 @@ async def test_step_show_inspect_summary_swallows_exceptions(sample_device, mock
 
     # Must not raise
     await step_show_inspect_summary(sample_device, mock_ha_client)
+
+
+# ---------------------------------------------------------------------------
+# step_pair_with_z2m
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def pair_device() -> ZHADevice:
+    return ZHADevice(
+        device_id="dev-pair",
+        ieee="c4:d8:c8:ff:fe:3e:e5:cf",
+        name="Hallway Dimmer",
+        manufacturer="IKEA",
+        model="E2201",
+        device_type="EndDevice",
+        entities=[],
+    )
+
+
+async def test_step_pair_detects_correct_device(pair_device, mock_z2m_client):
+    """When the expected device joins Z2M it is returned and permit join is closed."""
+    z2m_entry = {"ieee_address": "0xc4d8c8fffe3ee5cf", "friendly_name": "0xc4d8c8fffe3ee5cf"}
+    # First call (pre-snapshot) returns empty; second (first poll) returns the device.
+    mock_z2m_client.get_devices = AsyncMock(side_effect=[[], [z2m_entry]])
+
+    with patch("questionary.select"), patch("questionary.confirm"):
+        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=10)
+
+    assert result is not None
+    assert result["ieee_address"] == "0xc4d8c8fffe3ee5cf"
+    mock_z2m_client.disable_permit_join.assert_called_once()
+
+
+async def test_step_pair_warns_on_wrong_device(pair_device, mock_z2m_client, capsys):
+    """When an unexpected device joins, a warning is printed and polling continues."""
+    wrong_device = {"ieee_address": "0xd44867fffe150421", "friendly_name": "0xd44867fffe150421"}
+    correct_device = {"ieee_address": "0xc4d8c8fffe3ee5cf", "friendly_name": "Hallway Dimmer"}
+
+    # Call 0: pre-snapshot (empty), Call 1: wrong device joined, Call 2: correct device joined
+    mock_z2m_client.get_devices = AsyncMock(
+        side_effect=[[], [wrong_device], [wrong_device, correct_device]]
+    )
+
+    with patch("questionary.select"), patch("questionary.confirm"):
+        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=20)
+
+    captured = capsys.readouterr()
+    assert "different device joined Z2M" in captured.out
+    assert "0xd44867fffe150421" in captured.out
+    assert result is not None
+    assert result["ieee_address"] == "0xc4d8c8fffe3ee5cf"
+
+
+async def test_step_pair_force_continue_constructs_fallback(pair_device, mock_z2m_client):
+    """Force-continue with device still not found returns an IEEE-based fallback entry."""
+    # Pre-snapshot returns empty; all polls also return empty — device never appears.
+    mock_z2m_client.get_devices = AsyncMock(return_value=[])
+
+    with (
+        patch("questionary.select") as mock_select,
+        patch("zigporter.commands.migrate.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="force")
+        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=1)
+
+    assert result is not None
+    assert result["ieee_address"] == "0xc4d8c8fffe3ee5cf"
+    assert result["friendly_name"] == "0xc4d8c8fffe3ee5cf"

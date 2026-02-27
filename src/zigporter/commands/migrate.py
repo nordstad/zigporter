@@ -19,6 +19,7 @@ from zigporter.migration_state import (
     save_state,
 )
 from zigporter.models import ZHADevice, ZHAExport
+from zigporter.utils import normalize_ieee
 from zigporter.z2m_client import Z2MClient
 
 console = Console()
@@ -38,7 +39,7 @@ _STYLE = questionary.Style(
     ]
 )
 
-WIZARD_STEPS = 6
+WIZARD_STEPS = 7
 
 # Zigbee PermitJoin duration is an 8-bit field; 255 = always-on, so 254 is the
 # practical maximum for a timed window.  Requests larger than this are silently
@@ -248,6 +249,15 @@ async def step_pair_with_z2m(
     console.print(f"\nTrigger [bold]{device.name}[/bold] to join now...")
     console.print(f"Waiting for device [dim]{device.ieee}[/dim] to appear in Z2M...\n")
 
+    # Snapshot the device list before polling so we can detect unexpected joiners.
+    try:
+        known_iees: set[str] = {
+            normalize_ieee(d.get("ieee_address", "")) for d in await z2m_client.get_devices()
+        }
+    except Exception:
+        known_iees = set()
+    target_ieee = normalize_ieee(device.ieee)
+
     elapsed = 0
     poll_interval = 3
     pj_started_at = 0  # elapsed seconds when permit join was last issued
@@ -270,7 +280,28 @@ async def step_pair_with_z2m(
             f"  ⠸ Listening for new device  [{remaining:03d}s remaining]",
             end="\r",
         )
-        z2m_device = await z2m_client.get_device_by_ieee(device.ieee)
+        try:
+            all_devices = await z2m_client.get_devices()
+        except Exception:
+            all_devices = []
+
+        # Detect unexpected joiners: a new device appeared but it's not the one we want.
+        for d in all_devices:
+            d_ieee = normalize_ieee(d.get("ieee_address", ""))
+            if d_ieee and d_ieee not in known_iees and d_ieee != target_ieee:
+                console.print(
+                    f"\n  [yellow]⚠ A different device joined Z2M:[/yellow] "
+                    f"[dim]{d.get('ieee_address')}[/dim] "
+                    f"([bold]{d.get('friendly_name')}[/bold])\n"
+                    f"  This is NOT [bold]{device.name}[/bold]. "
+                    f"Put the correct device in pairing mode."
+                )
+                known_iees.add(d_ieee)  # suppress repeat warnings for the same interloper
+
+        z2m_device = next(
+            (d for d in all_devices if normalize_ieee(d.get("ieee_address", "")) == target_ieee),
+            None,
+        )
         if z2m_device:
             console.print(
                 f"\n[green]✓ Device found in Z2M:[/green] "
@@ -280,10 +311,42 @@ async def step_pair_with_z2m(
             return z2m_device
 
     await z2m_client.disable_permit_join()
-    console.print("\n[yellow]Timed out waiting for device.[/yellow]")
-    retry = await questionary.confirm("Retry pairing?", style=_STYLE).unsafe_ask_async()
-    if retry:
+    console.print(f"\n[yellow]Timed out waiting for[/yellow] [dim]{device.ieee}[/dim]")
+    choice = await questionary.select(
+        "How would you like to proceed?",
+        choices=[
+            questionary.Choice("Retry — poll for another 5 minutes", value="retry"),
+            questionary.Choice(
+                "Force continue — I can see the device joined Z2M (green interview)",
+                value="force",
+            ),
+            questionary.Choice("Mark as failed — revisit this device later", value="fail"),
+        ],
+        style=_STYLE,
+    ).unsafe_ask_async()
+
+    if choice == "retry":
         return await step_pair_with_z2m(device, z2m_client, timeout)
+    if choice == "force":
+        # One final attempt to pick up the device from the Z2M API
+        try:
+            z2m_device = await z2m_client.get_device_by_ieee(device.ieee)
+        except Exception:
+            z2m_device = None
+        if z2m_device:
+            console.print(
+                f"[green]✓ Device found in Z2M:[/green] "
+                f"[bold]{z2m_device.get('friendly_name')}[/bold]"
+            )
+            return z2m_device
+        # Z2M names a newly joined device by its IEEE hex by default; the rename
+        # step will correct this to the original ZHA name.
+        ieee_hex = f"0x{normalize_ieee(device.ieee)}"
+        console.print(
+            f"[yellow]Proceeding with fallback name:[/yellow] {ieee_hex}\n"
+            f"[dim]The rename step will set the correct name.[/dim]"
+        )
+        return {"ieee_address": ieee_hex, "friendly_name": ieee_hex}
     return None
 
 
@@ -504,7 +567,7 @@ async def step_reconcile_entity_ids(device: ZHADevice, ha_client: HAClient) -> N
 
 
 async def step_validate(device: ZHADevice, ha_client: HAClient, retries: int = 10) -> bool:
-    _print_step(6, "Validate")
+    _print_step(7, "Validate")
 
     z2m_device_id = await _wait_for_z2m_device_in_ha(device, ha_client)
     if z2m_device_id is None:
@@ -688,9 +751,10 @@ async def step_show_test_checklist(device: ZHADevice, ha_client: HAClient) -> No
 async def step_show_inspect_summary(device: ZHADevice, ha_client: HAClient) -> None:
     """Show current entities and dashboard cards for the migrated Z2M device.
 
-    Called after entity ID reconciliation (step 5) and before validation (step 6)
+    Called after entity ID reconciliation (step 5) and before validation (step 7)
     so the user can see which dashboard cards reference the device's entities.
     """
+    _print_step(6, "Review entities & dashboards")
     from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
 
     try:
@@ -785,14 +849,15 @@ async def run_wizard(
 
     console.print(
         "\nThis wizard will migrate [bold]{name}[/bold] from ZHA to Zigbee2MQTT "
-        "in 6 steps:\n"
+        "in 7 steps:\n"
         "\n"
         "  [cyan]1[/cyan]  Remove from ZHA    Unpair the device from ZHA [red](cannot be undone)[/red]\n"
         "  [cyan]2[/cyan]  Reset device       Factory-reset to clear the old ZHA pairing\n"
         "  [cyan]3[/cyan]  Pair with Z2M      Put device in pairing mode and join Zigbee2MQTT\n"
         "  [cyan]4[/cyan]  Rename             Restore original name and area in Z2M\n"
         "  [cyan]5[/cyan]  Restore entity IDs Rename IEEE-hex entity IDs back to friendly names\n"
-        "  [cyan]6[/cyan]  Validate           Confirm entities come back online\n"
+        "  [cyan]6[/cyan]  Review             Inspect entities and dashboard cards\n"
+        "  [cyan]7[/cyan]  Validate           Confirm entities come back online\n"
         "\n"
         "[dim]You can abort safely at step 1. After that, the device must complete\n"
         "pairing with Z2M before it can be used again.[/dim]".format(name=device.name)
