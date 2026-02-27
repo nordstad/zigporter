@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
 
+- Show entity and dashboard summary in the migration wizard between step 5 (Restore entity IDs) and step 6 (Validate). After renaming, the wizard now displays the device's current entity IDs and all Lovelace dashboard cards that reference them — the same inspect-style output as `zigporter inspect`.
 
 ## [0.1.3] - 2026-02-27
 
