@@ -472,6 +472,38 @@ async def test_step_reconcile_skips_on_cancel(mock_ha_client):
     mock_ha_client.rename_entity_id.assert_not_called()
 
 
+async def test_step_reconcile_no_op_when_target_equals_current(mock_ha_client):
+    """When the ZHA entity_id matches the Z2M entity_id exactly, no rename is needed."""
+    device_with_ieee_entity = ZHADevice(
+        device_id="device-abc",
+        ieee="00:12:4b:00:2a:53:33:ab",
+        name="Kontor Temp Sensor",
+        device_type="EndDevice",
+        entities=[
+            ZHAEntity(
+                entity_id="sensor.0x00124b002a5333ab_temperature",
+                name="Temperature",
+                platform="zha",
+            ),
+        ],
+    )
+    mock_ha_client.get_entity_registry = AsyncMock(
+        return_value=[
+            {
+                "entity_id": "sensor.0x00124b002a5333ab_temperature",
+                "device_id": "z2m-device-id",
+                "disabled_by": None,
+            }
+        ]
+    )
+
+    with patch("questionary.confirm") as mock_confirm:
+        await step_reconcile_entity_ids(device_with_ieee_entity, mock_ha_client)
+        mock_confirm.assert_not_called()
+
+    mock_ha_client.rename_entity_id.assert_not_called()
+
+
 async def test_step_reconcile_skips_conflicting_target(mock_ha_client):
     """A stale entity already occupying the target ID blocks the rename and shows a warning."""
     mock_ha_client.get_entity_registry = AsyncMock(
