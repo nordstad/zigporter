@@ -453,7 +453,19 @@ async def step_reconcile_entity_ids(device: ZHADevice, ha_client: HAClient) -> N
         console.print("[yellow]Entity ID restore skipped.[/yellow]")
         return
 
+    # Re-fetch right before applying: HA may have auto-renamed entities when Z2M renamed the
+    # device.  Any IEEE-named entity that's already gone was handled by HA — skip it silently.
+    refreshed = await ha_client.get_entity_registry()
+    still_ieee = {
+        e["entity_id"]
+        for e in refreshed
+        if e.get("device_id") == z2m_device_id and _is_ieee_entity(e["entity_id"])
+    }
+
     for current_id, target_id in renames:
+        if current_id not in still_ieee:
+            console.print(f"[green]✓[/green] {current_id} → (already renamed by HA)")
+            continue
         try:
             await ha_client.rename_entity_id(current_id, target_id)
             console.print(f"[green]✓[/green] {current_id} → {target_id}")
