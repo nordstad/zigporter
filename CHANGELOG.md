@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+
+## [0.1.5] - 2026-02-27
+
+### Fixed
+
+- fix: detect wrong device joining Z2M, force-continue at timeout, fix 7-step wizard (#14)
+
 ## [0.1.5] - 2026-02-27
 
 ### Fixed
@@ -89,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/nordstad/zigporter/compare/v0.1.5...v0.1.5
 [0.1.5]: https://github.com/nordstad/zigporter/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/nordstad/zigporter/compare/v0.1.4...v0.1.4
 [0.1.3]: https://github.com/nordstad/zigporter/compare/v0.1.3...v0.1.3
