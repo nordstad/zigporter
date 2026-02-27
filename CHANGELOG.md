@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+
+## [0.1.2] - 2026-02-27
+
+### Fixed
+
+- fix: skip entity ID renames that HA already applied after Z2M rename (#11)
+
 ## [0.1.2] - 2026-02-27
 
 ### Fixed
@@ -45,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/nordstad/zigporter/compare/v0.1.2...v0.1.2
 [0.1.2]: https://github.com/nordstad/zigporter/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nordstad/zigporter/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nordstad/zigporter/releases/tag/v0.1.0
