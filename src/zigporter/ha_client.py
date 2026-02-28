@@ -7,6 +7,15 @@ import websockets
 
 from zigporter.utils import normalize_ieee
 
+# Sentinel returned by get_lovelace_config when HA confirms the dashboard is in YAML mode.
+# Use is_yaml_mode() to distinguish this from a genuine fetch failure (None).
+YAML_MODE: dict[str, Any] = {}
+
+
+def is_yaml_mode(v: object) -> bool:
+    """Return True iff v is the YAML_MODE sentinel from get_lovelace_config."""
+    return v is YAML_MODE
+
 
 class HAClient:
     """Client for Home Assistant REST and WebSocket APIs."""
@@ -123,8 +132,11 @@ class HAClient:
         return await self._ws_command({"type": "config/area_registry/list"})
 
     async def get_automation_configs(self) -> list[dict[str, Any]]:
-        """Fetch automation configurations."""
-        return await self._ws_command({"type": "config/automation/list"})
+        """Fetch automation configurations. Returns [] if unsupported."""
+        try:
+            return await self._ws_command({"type": "config/automation/list"})
+        except RuntimeError:
+            return []
 
     async def get_scripts(self) -> list[dict[str, Any]]:
         """Fetch UI-managed script configurations. Returns [] if unsupported."""
@@ -147,25 +159,50 @@ class HAClient:
         except RuntimeError:
             return {}
 
+    async def get_config_entries(self) -> list[dict[str, Any]]:
+        """Fetch all config entries (includes helpers like min_max, template, group).
+
+        Returns [] if unsupported.
+        """
+        try:
+            return await self._ws_command({"type": "config_entries/get"}) or []
+        except RuntimeError:
+            return []
+
+    async def update_config_entry_options(self, entry_id: str, options: dict[str, Any]) -> None:
+        """Update a config entry's options and trigger a reload."""
+        await self._ws_command(
+            {
+                "type": "config_entries/update",
+                "entry_id": entry_id,
+                "options": options,
+            }
+        )
+
     async def get_lovelace_config(self, url_path: str | None = None) -> dict[str, Any] | None:
         """Fetch Lovelace config for one dashboard. url_path=None → default dashboard.
 
-        Tries WebSocket first; falls back to REST API if the WS command fails
-        (common when Lovelace is in yaml mode or the dashboard is panel-defined).
+        Tries WebSocket first with force=True to bypass HA's in-memory cache.
+        Falls back to REST API if the WS command fails.
+
+        Returns the YAML_MODE sentinel (check with is_yaml_mode()) when HA confirms
+        the dashboard is in YAML mode. Returns None on other fetch failures.
         """
-        cmd: dict[str, Any] = {"type": "lovelace/config"}
+        cmd: dict[str, Any] = {"type": "lovelace/config", "force": True}
         if url_path is not None:
             cmd["url_path"] = url_path
+        _yaml_mode = False
         try:
             result = await self._ws_command(cmd)
-            if result:
+            if result is not None:
                 return result
-        except RuntimeError:
-            pass
+        except RuntimeError as exc:
+            if "mode_not_storage" in str(exc) or "config_requires_reload" in str(exc):
+                _yaml_mode = True
 
-        # REST fallback — works for yaml-mode and some panel-defined dashboards
+        # REST fallback — force=true ensures HA reads from .storage/ not memory cache
         try:
-            params: dict[str, str] = {}
+            params: dict[str, str] = {"force": "true"}
             if url_path is not None:
                 params["url_path"] = url_path
             async with httpx.AsyncClient(
@@ -175,7 +212,7 @@ class HAClient:
                 resp.raise_for_status()
                 return resp.json()
         except Exception:
-            return None
+            return YAML_MODE if _yaml_mode else None
 
     async def get_z2m_device_id(self, ieee: str) -> str | None:
         """Find the HA device_id for a Z2M-paired device by IEEE address.
@@ -203,6 +240,21 @@ class HAClient:
         """Return all entity IDs registered to a given HA device."""
         registry = await self.get_entity_registry()
         return [e["entity_id"] for e in registry if e.get("device_id") == device_id]
+
+    async def get_entities_for_device(self, device_id: str) -> list[dict[str, Any]]:
+        """Return full entity registry entries for a given HA device."""
+        registry = await self.get_entity_registry()
+        return [e for e in registry if e.get("device_id") == device_id]
+
+    async def rename_device_name(self, device_id: str, name_by_user: str) -> None:
+        """Set the user-facing name for a device in the HA device registry."""
+        await self._ws_command(
+            {
+                "type": "config/device_registry/update",
+                "device_id": device_id,
+                "name_by_user": name_by_user,
+            }
+        )
 
     async def remove_zha_device(self, ieee: str) -> None:
         """Remove a ZHA device by IEEE address via the zha.remove service."""

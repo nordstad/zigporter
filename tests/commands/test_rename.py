@@ -113,14 +113,14 @@ def test_deep_replace_non_string_passthrough():
 def test_discover_dashboards_empty_panels():
     url_paths, titles = _discover_dashboards({})
     assert url_paths == [None]
-    assert titles[None] == "Default"
+    assert titles[None] == "Overview"
 
 
 def test_discover_dashboards_default_panel():
     panels = {"lovelace": {"component_name": "lovelace", "url_path": "", "title": None}}
     url_paths, titles = _discover_dashboards(panels)
     assert None in url_paths
-    assert titles[None] == "Default"
+    assert titles[None] == "Overview"
 
 
 def test_discover_dashboards_extra_panel():
@@ -135,12 +135,28 @@ def test_discover_dashboards_extra_panel():
 
 
 def test_discover_dashboards_ignores_non_lovelace():
+    # "config" is in _NON_LOVELACE_PANELS so it's excluded via URL blocklist.
     panels = {
         "config": {"component_name": "config"},
         "lovelace": {"component_name": "lovelace", "url_path": ""},
     }
     url_paths, _ = _discover_dashboards(panels)
     assert len(url_paths) == 1
+
+
+def test_discover_dashboards_includes_custom_panel():
+    """HACS/custom frontend panels with non-lovelace component_name must be included."""
+    panels = {
+        "lovelace": {"component_name": "lovelace", "url_path": ""},
+        "dashboard-mushroom": {
+            "component_name": "custom:mushroom",
+            "url_path": "dashboard-mushroom",
+            "title": "Mushroom",
+        },
+    }
+    url_paths, titles = _discover_dashboards(panels)
+    assert "dashboard-mushroom" in url_paths
+    assert titles["dashboard-mushroom"] == "Mushroom"
 
 
 # ---------------------------------------------------------------------------
@@ -540,5 +556,566 @@ def test_rename_cli_invokes_rename_command(mocker):
         verify_ssl=True,
         old_entity_id="switch.old",
         new_entity_id="switch.new",
+        apply=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# slugify
+# ---------------------------------------------------------------------------
+
+
+def test_slugify_basic():
+    from zigporter.commands.rename import slugify  # noqa: PLC0415
+
+    assert slugify("Living Room Lamp") == "living_room_lamp"
+
+
+def test_slugify_unicode_transliteration():
+    from zigporter.commands.rename import slugify  # noqa: PLC0415
+
+    assert slugify("Büro (Office)") == "buro_office"
+
+
+def test_slugify_already_slug():
+    from zigporter.commands.rename import slugify  # noqa: PLC0415
+
+    assert slugify("kitchen_plug") == "kitchen_plug"
+
+
+def test_slugify_leading_trailing_separators():
+    from zigporter.commands.rename import slugify  # noqa: PLC0415
+
+    assert slugify("  my device  ") == "my_device"
+
+
+# ---------------------------------------------------------------------------
+# compute_entity_pairs
+# ---------------------------------------------------------------------------
+
+
+def test_compute_entity_pairs_all_match():
+    from zigporter.commands.rename import compute_entity_pairs  # noqa: PLC0415
+
+    entities = [
+        {"entity_id": "light.kitchen_plug", "original_name": "Light"},
+        {"entity_id": "sensor.kitchen_plug_power", "original_name": "Power"},
+    ]
+    matched, odd = compute_entity_pairs(entities, "kitchen_plug", "living_room_lamp")
+    assert len(matched) == 2
+    assert len(odd) == 0
+    assert ("light.kitchen_plug", "light.living_room_lamp") in matched
+    assert ("sensor.kitchen_plug_power", "sensor.living_room_lamp_power") in matched
+
+
+def test_compute_entity_pairs_odd_entity():
+    from zigporter.commands.rename import compute_entity_pairs  # noqa: PLC0415
+
+    entities = [
+        {"entity_id": "light.kitchen_plug", "original_name": "Light"},
+        {"entity_id": "sensor.power_usage_custom", "original_name": "Power"},
+    ]
+    matched, odd = compute_entity_pairs(entities, "kitchen_plug", "living_room_lamp")
+    assert len(matched) == 1
+    assert len(odd) == 1
+    assert odd[0]["entity_id"] == "sensor.power_usage_custom"
+
+
+def test_compute_entity_pairs_empty_slug():
+    from zigporter.commands.rename import compute_entity_pairs  # noqa: PLC0415
+
+    entities = [{"entity_id": "light.some_entity", "original_name": "Light"}]
+    # empty old_slug → everything goes to odd
+    matched, odd = compute_entity_pairs(entities, "", "bedroom_lamp")
+    assert matched == []
+    assert len(odd) == 1
+
+
+# ---------------------------------------------------------------------------
+# fetch_ha_snapshot + build_rename_plan_from_snapshot
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_ha_snapshot_client():
+    client = MagicMock()
+    client.get_entity_registry = AsyncMock(
+        return_value=[
+            {"entity_id": "light.kitchen_plug", "device_id": "dev1"},
+            {"entity_id": "sensor.kitchen_plug_power", "device_id": "dev1"},
+        ]
+    )
+    client.get_automation_configs = AsyncMock(
+        return_value=[
+            {"id": "a1", "alias": "Auto", "action": [{"entity_id": "light.kitchen_plug"}]}
+        ]
+    )
+    client.get_scripts = AsyncMock(return_value=[])
+    client.get_scenes = AsyncMock(return_value=[])
+    client.get_panels = AsyncMock(return_value={})
+    client.get_lovelace_config = AsyncMock(return_value=None)
+    client.get_config_entries = AsyncMock(return_value=[])
+    return client
+
+
+async def test_fetch_ha_snapshot_returns_snapshot(mock_ha_snapshot_client):
+    from zigporter.commands.rename import fetch_ha_snapshot  # noqa: PLC0415
+
+    snapshot = await fetch_ha_snapshot(mock_ha_snapshot_client)
+    assert len(snapshot.entity_registry) == 2
+    assert len(snapshot.automations) == 1
+    assert snapshot.url_paths == [None]
+
+
+async def test_build_rename_plan_from_snapshot_finds_automation(mock_ha_snapshot_client):
+    from zigporter.commands.rename import (  # noqa: PLC0415
+        build_rename_plan_from_snapshot,
+        fetch_ha_snapshot,
+    )
+
+    snapshot = await fetch_ha_snapshot(mock_ha_snapshot_client)
+    plan = build_rename_plan_from_snapshot(snapshot, "light.kitchen_plug", "light.bedroom_lamp")
+    auto_locs = [loc for loc in plan.locations if loc.context == "automation"]
+    assert len(auto_locs) == 1
+
+
+async def test_build_rename_plan_from_snapshot_entity_not_found(mock_ha_snapshot_client):
+    from zigporter.commands.rename import (  # noqa: PLC0415
+        build_rename_plan_from_snapshot,
+        fetch_ha_snapshot,
+    )
+
+    snapshot = await fetch_ha_snapshot(mock_ha_snapshot_client)
+    with pytest.raises(ValueError, match="not found"):
+        build_rename_plan_from_snapshot(snapshot, "light.nonexistent", "light.new")
+
+
+async def test_build_rename_plan_from_snapshot_new_entity_exists(mock_ha_snapshot_client):
+    from zigporter.commands.rename import (  # noqa: PLC0415
+        build_rename_plan_from_snapshot,
+        fetch_ha_snapshot,
+    )
+
+    snapshot = await fetch_ha_snapshot(mock_ha_snapshot_client)
+    with pytest.raises(ValueError, match="already exists"):
+        build_rename_plan_from_snapshot(snapshot, "light.kitchen_plug", "sensor.kitchen_plug_power")
+
+
+# ---------------------------------------------------------------------------
+# YAML_MODE sentinel
+# ---------------------------------------------------------------------------
+
+
+def test_is_yaml_mode_sentinel():
+    from zigporter.ha_client import YAML_MODE, is_yaml_mode  # noqa: PLC0415
+
+    assert is_yaml_mode(YAML_MODE) is True
+    assert is_yaml_mode(None) is False
+    assert is_yaml_mode({}) is False  # different empty dict — not the sentinel
+    assert is_yaml_mode({"views": []}) is False
+
+
+async def test_build_rename_plan_from_snapshot_skips_yaml_mode(mock_ha_snapshot_client):
+    """Dashboards returning YAML_MODE must be skipped (not crash, not counted as refs)."""
+    from zigporter.commands.rename import (  # noqa: PLC0415
+        build_rename_plan_from_snapshot,
+        fetch_ha_snapshot,
+    )
+    from zigporter.ha_client import YAML_MODE  # noqa: PLC0415
+
+    mock_ha_snapshot_client.get_lovelace_config = AsyncMock(return_value=YAML_MODE)
+    snapshot = await fetch_ha_snapshot(mock_ha_snapshot_client)
+    plan = build_rename_plan_from_snapshot(snapshot, "light.kitchen_plug", "light.bedroom_lamp")
+    lv_locs = [loc for loc in plan.locations if loc.context == "lovelace"]
+    assert len(lv_locs) == 0
+
+
+# ---------------------------------------------------------------------------
+# execute_device_rename — verifies merged location updates
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_device_exec_client():
+    client = MagicMock()
+    client.rename_device_name = AsyncMock(return_value=None)
+    client.rename_entity_id = AsyncMock(return_value=None)
+    client.update_automation = AsyncMock(return_value=None)
+    client.update_script = AsyncMock(return_value=None)
+    client.update_scene = AsyncMock(return_value=None)
+    client.save_lovelace_config = AsyncMock(return_value=None)
+    return client
+
+
+async def test_execute_device_rename_renames_device_and_entities(mock_device_exec_client):
+    from zigporter.commands.rename import DeviceRenamePlan, RenameLocation, RenamePlan  # noqa: PLC0415
+    from zigporter.commands.rename import execute_device_rename  # noqa: PLC0415
+
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Living Room Plug",
+        plans=[
+            RenamePlan(
+                old_entity_id="light.kitchen_plug",
+                new_entity_id="light.living_room_plug",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="light.kitchen_plug",
+                        occurrences=1,
+                    )
+                ],
+            )
+        ],
+    )
+    await execute_device_rename(mock_device_exec_client, plan)
+    mock_device_exec_client.rename_device_name.assert_called_once_with("dev1", "Living Room Plug")
+    mock_device_exec_client.rename_entity_id.assert_called_once_with(
+        "light.kitchen_plug", "light.living_room_plug"
+    )
+
+
+async def test_execute_device_rename_merges_shared_automation(mock_device_exec_client):
+    """An automation referenced by two entities should be updated exactly once
+    with both substitutions applied."""
+    from zigporter.commands.rename import DeviceRenamePlan, RenameLocation, RenamePlan  # noqa: PLC0415
+    from zigporter.commands.rename import execute_device_rename  # noqa: PLC0415
+
+    shared_config = {
+        "id": "a1",
+        "alias": "Morning",
+        "action": [
+            {"entity_id": "light.kitchen_plug"},
+            {"entity_id": "sensor.kitchen_plug_power"},
+        ],
+    }
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Bedroom Lamp",
+        plans=[
+            RenamePlan(
+                old_entity_id="light.kitchen_plug",
+                new_entity_id="light.bedroom_lamp",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="light.kitchen_plug",
+                        occurrences=1,
+                    ),
+                    RenameLocation(
+                        context="automation",
+                        name="Morning",
+                        item_id="a1",
+                        occurrences=1,
+                        raw_config=shared_config,
+                    ),
+                ],
+            ),
+            RenamePlan(
+                old_entity_id="sensor.kitchen_plug_power",
+                new_entity_id="sensor.bedroom_lamp_power",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="sensor.kitchen_plug_power",
+                        occurrences=1,
+                    ),
+                    RenameLocation(
+                        context="automation",
+                        name="Morning",
+                        item_id="a1",
+                        occurrences=1,
+                        raw_config=shared_config,
+                    ),
+                ],
+            ),
+        ],
+    )
+    await execute_device_rename(mock_device_exec_client, plan)
+
+    # Automation updated exactly once
+    assert mock_device_exec_client.update_automation.call_count == 1
+    patched = mock_device_exec_client.update_automation.call_args[0][1]
+    # Both entity IDs replaced
+    assert patched["action"][0]["entity_id"] == "light.bedroom_lamp"
+    assert patched["action"][1]["entity_id"] == "sensor.bedroom_lamp_power"
+
+
+# ---------------------------------------------------------------------------
+# display_device_plan (smoke test)
+# ---------------------------------------------------------------------------
+
+
+def test_display_device_plan_no_raise():
+    from zigporter.commands.rename import DeviceRenamePlan, RenameLocation, RenamePlan  # noqa: PLC0415
+    from zigporter.commands.rename import display_device_plan  # noqa: PLC0415
+
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Bedroom Lamp",
+        plans=[
+            RenamePlan(
+                old_entity_id="light.kitchen_plug",
+                new_entity_id="light.bedroom_lamp",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="light.kitchen_plug",
+                        occurrences=1,
+                    ),
+                    RenameLocation(
+                        context="automation", name="Morning", item_id="a1", occurrences=1
+                    ),
+                ],
+            )
+        ],
+    )
+    display_device_plan(plan)  # must not raise
+
+
+def test_display_device_plan_shows_zero_ref_dashboards_when_auto_updated(mocker):
+    """Dashboards that were scanned but had 0 refs should appear even when other
+    locations were auto-updated."""
+    from zigporter.commands.rename import DeviceRenamePlan, RenameLocation, RenamePlan  # noqa: PLC0415
+    from zigporter.commands.rename import display_device_plan  # noqa: PLC0415
+
+    printed: list[str] = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **k: printed.append(" ".join(str(x) for x in a)),
+    )
+
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Bedroom Lamp",
+        plans=[
+            RenamePlan(
+                old_entity_id="light.kitchen_plug",
+                new_entity_id="light.bedroom_lamp",
+                locations=[
+                    RenameLocation(context="lovelace", name="Home", item_id="", occurrences=2),
+                ],
+            )
+        ],
+        scanned_names={"dashboards": ["Home", "Mushroom"]},
+        failed_dashboards=[],
+    )
+    display_device_plan(plan)
+    all_output = "\n".join(printed)
+    assert "Mushroom" in all_output
+    assert "0 references" in all_output
+
+
+def test_display_device_plan_shows_yaml_mode_dashboards_inline(mocker):
+    """YAML-mode dashboards should appear inline in the auto-updated block
+    with a YAML warning, even though they also appear in the manual steps below."""
+    from zigporter.commands.rename import DeviceRenamePlan, RenameLocation, RenamePlan  # noqa: PLC0415
+    from zigporter.commands.rename import display_device_plan  # noqa: PLC0415
+
+    printed: list[str] = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **k: printed.append(" ".join(str(x) for x in a)),
+    )
+
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Bedroom Lamp",
+        plans=[
+            RenamePlan(
+                old_entity_id="light.kitchen_plug",
+                new_entity_id="light.bedroom_lamp",
+                locations=[
+                    RenameLocation(context="lovelace", name="Home", item_id="", occurrences=2),
+                ],
+            )
+        ],
+        scanned_names={"dashboards": ["Home"]},
+        failed_dashboards=["Overview"],
+        failed_dashboard_paths=[None],
+    )
+    display_device_plan(plan)
+    all_output = "\n".join(printed)
+    assert "Overview" in all_output
+    assert "YAML mode" in all_output
+
+
+# ---------------------------------------------------------------------------
+# run_rename_device
+# ---------------------------------------------------------------------------
+
+
+_DEVICE = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+
+_DEVICE_PLAN = None  # built lazily in tests
+
+
+async def test_run_rename_device_apply_success(mocker):
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(
+        return_value=[
+            {"entity_id": "light.kitchen_plug", "original_name": "Light", "device_id": "dev1"}
+        ]
+    )
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=_DEVICE))
+    mocker.patch(
+        "zigporter.commands.rename.fetch_ha_snapshot",
+        new=AsyncMock(
+            return_value=MagicMock(
+                entity_registry=[
+                    {"entity_id": "light.kitchen_plug", "device_id": "dev1"},
+                ],
+                automations=[],
+                scripts=[],
+                scenes=[],
+                url_paths=[None],
+                titles={None: "Default"},
+                lovelace_configs=[None],
+            )
+        ),
+    )
+    mocker.patch(
+        "zigporter.commands.rename.build_rename_plan_from_snapshot",
+        return_value=RenamePlan(
+            old_entity_id="light.kitchen_plug",
+            new_entity_id="light.bedroom_lamp",
+            locations=[
+                RenameLocation(
+                    context="registry",
+                    name="HA entity registry",
+                    item_id="light.kitchen_plug",
+                    occurrences=1,
+                )
+            ],
+        ),
+    )
+    mocker.patch("zigporter.commands.rename.execute_device_rename", new=AsyncMock())
+
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    assert result is True
+
+
+async def test_run_rename_device_device_not_found(mocker):
+    mocker.patch("zigporter.commands.rename.HAClient")
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=None))
+
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Nonexistent Device", "New Name", True
+    )
+    assert result is False
+
+
+async def test_run_rename_device_no_tty_no_apply(mocker):
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(
+        return_value=[
+            {"entity_id": "light.kitchen_plug", "original_name": "Light", "device_id": "dev1"}
+        ]
+    )
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=_DEVICE))
+    mocker.patch(
+        "zigporter.commands.rename.fetch_ha_snapshot",
+        new=AsyncMock(
+            return_value=MagicMock(
+                entity_registry=[{"entity_id": "light.kitchen_plug", "device_id": "dev1"}],
+                automations=[],
+                scripts=[],
+                scenes=[],
+                url_paths=[None],
+                titles={None: "Default"},
+                lovelace_configs=[None],
+            )
+        ),
+    )
+    mocker.patch(
+        "zigporter.commands.rename.build_rename_plan_from_snapshot",
+        return_value=RenamePlan(
+            old_entity_id="light.kitchen_plug",
+            new_entity_id="light.bedroom_lamp",
+            locations=[
+                RenameLocation(
+                    context="registry",
+                    name="HA entity registry",
+                    item_id="light.kitchen_plug",
+                    occurrences=1,
+                )
+            ],
+        ),
+    )
+    mocker.patch("zigporter.commands.rename.sys").stdin.isatty.return_value = False
+
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", False
+    )
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# rename_device_command
+# ---------------------------------------------------------------------------
+
+
+def test_rename_device_command_success(mocker):
+    mocker.patch("zigporter.commands.rename.asyncio.run", return_value=True)
+
+    from zigporter.commands.rename import rename_device_command  # noqa: PLC0415
+
+    rename_device_command("https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", False)
+
+
+def test_rename_device_command_failure(mocker):
+    import typer  # noqa: PLC0415
+
+    mocker.patch("zigporter.commands.rename.asyncio.run", return_value=False)
+
+    from zigporter.commands.rename import rename_device_command  # noqa: PLC0415
+
+    with pytest.raises(typer.Exit):
+        rename_device_command(
+            "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", False
+        )
+
+
+# ---------------------------------------------------------------------------
+# rename-device CLI (main.py)
+# ---------------------------------------------------------------------------
+
+
+def test_rename_device_cli_invokes_rename_device_command(mocker):
+    mocker.patch("zigporter.main._get_config", return_value=("https://ha.test", "token", True))
+    mock_cmd = mocker.patch("zigporter.commands.rename.rename_device_command")
+
+    from typer.testing import CliRunner  # noqa: PLC0415
+
+    from zigporter.main import app  # noqa: PLC0415
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["rename-device", "Kitchen Plug", "Bedroom Lamp", "--apply"])
+    assert result.exit_code == 0
+    mock_cmd.assert_called_once_with(
+        ha_url="https://ha.test",
+        token="token",
+        verify_ssl=True,
+        old_name="Kitchen Plug",
+        new_name="Bedroom Lamp",
         apply=True,
     )
