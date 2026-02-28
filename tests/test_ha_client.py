@@ -505,3 +505,79 @@ async def test_ws_url_http_to_ws(client):
     assert c_http._ws_url == "ws://ha.test/api/websocket"
     c_https = HAClient(ha_url="https://ha.test", token=TOKEN)
     assert c_https._ws_url == "wss://ha.test/api/websocket"
+
+
+async def test_get_all_ws_data_unexpected_first_message(client, mocker):
+    """Line 73: _ws_bulk_query raises when first message is not auth_required."""
+    messages = [json.dumps({"type": "unexpected"})]
+    mock_ws = mocker.AsyncMock()
+    mock_ws.recv = mocker.AsyncMock(side_effect=messages)
+    mock_ws.__aenter__ = mocker.AsyncMock(return_value=mock_ws)
+    mock_ws.__aexit__ = mocker.AsyncMock(return_value=False)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+
+    with pytest.raises(RuntimeError, match="auth_required"):
+        await client.get_all_ws_data()
+
+
+async def test_get_all_ws_data_auth_failure(client, mocker):
+    """Line 78: _ws_bulk_query raises when auth_ok not received."""
+    messages = [
+        json.dumps({"type": "auth_required"}),
+        json.dumps({"type": "auth_invalid", "message": "Bad token"}),
+    ]
+    mock_ws = mocker.AsyncMock()
+    mock_ws.recv = mocker.AsyncMock(side_effect=messages)
+    mock_ws.__aenter__ = mocker.AsyncMock(return_value=mock_ws)
+    mock_ws.__aexit__ = mocker.AsyncMock(return_value=False)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+
+    with pytest.raises(RuntimeError, match="authentication failed"):
+        await client.get_all_ws_data()
+
+
+async def test_get_area_registry(client, mocker):
+    """Line 132: get_area_registry returns list of areas."""
+    mock_ws = _make_ws(mocker, [{"area_id": "living_room", "name": "Living Room"}])
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_area_registry()
+    assert result == [{"area_id": "living_room", "name": "Living Room"}]
+
+
+@respx.mock
+async def test_get_lovelace_config_rest_fallback_with_url_path(client, mocker):
+    """Line 207: REST fallback includes url_path query param."""
+    messages = [
+        json.dumps({"type": "auth_required"}),
+        json.dumps({"type": "auth_ok"}),
+        json.dumps({"id": 1, "type": "result", "success": False, "error": {"code": "failed"}}),
+    ]
+    mock_ws = mocker.AsyncMock()
+    mock_ws.recv = mocker.AsyncMock(side_effect=messages)
+    mock_ws.__aenter__ = mocker.AsyncMock(return_value=mock_ws)
+    mock_ws.__aexit__ = mocker.AsyncMock(return_value=False)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+
+    lv_config = {"views": [{"title": "Mobile"}]}
+    respx.get(f"{HA_URL}/api/lovelace/config").mock(
+        return_value=httpx.Response(200, json=lv_config)
+    )
+    result = await client.get_lovelace_config(url_path="mobile")
+    assert result == lv_config
+
+
+async def test_get_z2m_device_id_skips_non_mqtt_platform(client, mocker):
+    """Line 229: non-mqtt platform identifiers are skipped."""
+    registry = [
+        {
+            "id": "dev-zigbee",
+            "identifiers": [
+                ["zha", "00:11:22:33:44:55:66:77"],
+                ["mqtt", "zigbee2mqtt_0x0011223344556677"],
+            ],
+        }
+    ]
+    mock_ws = _make_ws(mocker, registry)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_z2m_device_id("00:11:22:33:44:55:66:77")
+    assert result == "dev-zigbee"

@@ -1940,3 +1940,216 @@ async def test_run_rename_device_no_valid_plans(mocker):
         "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
     )
     assert result is False
+
+
+# ---------------------------------------------------------------------------
+# find_device — exact match, no match, single partial match
+# ---------------------------------------------------------------------------
+
+
+async def test_find_device_exact_match():
+    """Line 654: exactly 1 exact match returns it directly."""
+    from zigporter.commands.rename import find_device  # noqa: PLC0415
+
+    devices = [
+        {"id": "d1", "name": "Kitchen Plug", "name_by_user": None},
+        {"id": "d2", "name": "Bedroom Lamp", "name_by_user": None},
+    ]
+    mock_ha = MagicMock()
+    mock_ha.get_device_registry = AsyncMock(return_value=devices)
+    result = await find_device(mock_ha, "Kitchen Plug")
+    assert result == devices[0]
+
+
+async def test_find_device_no_match():
+    """Line 658: no partial matches returns None."""
+    from zigporter.commands.rename import find_device  # noqa: PLC0415
+
+    mock_ha = MagicMock()
+    mock_ha.get_device_registry = AsyncMock(
+        return_value=[
+            {"id": "d1", "name": "Bedroom Lamp", "name_by_user": None},
+        ]
+    )
+    result = await find_device(mock_ha, "nonexistent")
+    assert result is None
+
+
+async def test_find_device_single_partial_match():
+    """Line 660: exactly 1 partial match returns it directly."""
+    from zigporter.commands.rename import find_device  # noqa: PLC0415
+
+    mock_ha = MagicMock()
+    mock_ha.get_device_registry = AsyncMock(
+        return_value=[
+            {"id": "d1", "name": "Kitchen Plug 2000", "name_by_user": None},
+        ]
+    )
+    result = await find_device(mock_ha, "kitchen")
+    assert result["id"] == "d1"
+
+
+# ---------------------------------------------------------------------------
+# run_rename_device — scanned_names population and dry-run confirm paths
+# ---------------------------------------------------------------------------
+
+
+async def test_run_rename_device_scanned_names_populated(mocker):
+    """Lines 1000-1023: automations/scripts/scenes/dashboards populate scanned_names."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    entities = [
+        {
+            "entity_id": "switch.kitchen_plug",
+            "name": None,
+            "original_name": None,
+            "device_id": "dev1",
+        }
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    snap = MagicMock(
+        entity_registry=[{"entity_id": "switch.kitchen_plug", "device_id": "dev1"}],
+        automations=[{"id": "a1", "alias": "Auto 1"}],
+        scripts=[{"id": "s1", "alias": "Script 1"}],
+        scenes=[{"id": "sc1", "name": "Scene 1"}],
+        url_paths=[None],
+        titles={None: "Overview"},
+        lovelace_configs=[{"views": []}],
+        config_entries=[],
+    )
+    mocker.patch("zigporter.commands.rename.fetch_ha_snapshot", new=AsyncMock(return_value=snap))
+    mock_plan = RenamePlan(
+        old_entity_id="switch.kitchen_plug",
+        new_entity_id="switch.bedroom_lamp",
+        locations=[
+            RenameLocation(
+                context="registry",
+                name="HA entity registry",
+                item_id="switch.kitchen_plug",
+                occurrences=1,
+            )
+        ],
+    )
+    mocker.patch(
+        "zigporter.commands.rename.build_rename_plan_from_snapshot", return_value=mock_plan
+    )
+    mocker.patch("zigporter.commands.rename.execute_device_rename", new=AsyncMock())
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    assert result is True
+
+
+async def test_run_rename_device_dry_run_no_tty(mocker):
+    """Lines 1040-1045: dry-run without TTY returns False."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    entities = [
+        {
+            "entity_id": "switch.kitchen_plug",
+            "name": None,
+            "original_name": None,
+            "device_id": "dev1",
+        }
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    snap = MagicMock(
+        entity_registry=[{"entity_id": "switch.kitchen_plug", "device_id": "dev1"}],
+        automations=[],
+        scripts=[],
+        scenes=[],
+        url_paths=[None],
+        titles={None: "Overview"},
+        lovelace_configs=[None],
+        config_entries=[],
+    )
+    mocker.patch("zigporter.commands.rename.fetch_ha_snapshot", new=AsyncMock(return_value=snap))
+    mock_plan = RenamePlan(
+        old_entity_id="switch.kitchen_plug",
+        new_entity_id="switch.bedroom_lamp",
+        locations=[
+            RenameLocation(
+                context="registry",
+                name="HA entity registry",
+                item_id="switch.kitchen_plug",
+                occurrences=1,
+            )
+        ],
+    )
+    mocker.patch(
+        "zigporter.commands.rename.build_rename_plan_from_snapshot", return_value=mock_plan
+    )
+    mock_sys = mocker.patch("zigporter.commands.rename.sys")
+    mock_sys.stdin.isatty.return_value = False
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", False
+    )
+    assert result is False
+
+
+async def test_run_rename_device_dry_run_aborted(mocker):
+    """Lines 1046-1051: dry-run with TTY, user aborts → returns True."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    entities = [
+        {
+            "entity_id": "switch.kitchen_plug",
+            "name": None,
+            "original_name": None,
+            "device_id": "dev1",
+        }
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    snap = MagicMock(
+        entity_registry=[{"entity_id": "switch.kitchen_plug", "device_id": "dev1"}],
+        automations=[],
+        scripts=[],
+        scenes=[],
+        url_paths=[None],
+        titles={None: "Overview"},
+        lovelace_configs=[None],
+        config_entries=[],
+    )
+    mocker.patch("zigporter.commands.rename.fetch_ha_snapshot", new=AsyncMock(return_value=snap))
+    mock_plan = RenamePlan(
+        old_entity_id="switch.kitchen_plug",
+        new_entity_id="switch.bedroom_lamp",
+        locations=[
+            RenameLocation(
+                context="registry",
+                name="HA entity registry",
+                item_id="switch.kitchen_plug",
+                occurrences=1,
+            )
+        ],
+    )
+    mocker.patch(
+        "zigporter.commands.rename.build_rename_plan_from_snapshot", return_value=mock_plan
+    )
+    mock_sys = mocker.patch("zigporter.commands.rename.sys")
+    mock_sys.stdin.isatty.return_value = True
+    mock_confirm = MagicMock()
+    mock_confirm.unsafe_ask_async = AsyncMock(return_value=False)
+    mocker.patch("zigporter.commands.rename.questionary.confirm", return_value=mock_confirm)
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", False
+    )
+    assert result is True
