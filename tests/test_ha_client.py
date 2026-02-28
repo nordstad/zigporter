@@ -349,3 +349,159 @@ async def test_update_scene(client, mocker):
     sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
     assert sent["type"] == "config/scene/update"
     assert sent["scene_id"] == "scene1"
+
+
+# ---------------------------------------------------------------------------
+# Missing coverage: _ssl_context (line 34), get_automation_configs failure (line 73),
+# get_scripts/scenes/panels fallbacks, get_config_entries, update_config_entry_options,
+# get_lovelace_config yaml_mode WS + REST fallback, get_entities_for_device,
+# rename_device_name, get_all_ws_data non-automation failure
+# ---------------------------------------------------------------------------
+
+
+def test_ssl_context_verify_false(client):
+    """Line 34-38: _ssl_context() returns an ssl.SSLContext when verify_ssl=False."""
+    import ssl  # noqa: PLC0415
+
+    ctx = client._ssl_context()
+    assert isinstance(ctx, ssl.SSLContext)
+    assert ctx.check_hostname is False
+
+
+def test_ssl_context_verify_true():
+    """Line 33: _ssl_context() returns True when verify_ssl=True."""
+    c = HAClient(ha_url=HA_URL, token=TOKEN, verify_ssl=True)
+    assert c._ssl_context() is True
+
+
+async def test_get_automation_configs_returns_empty_on_failure(client, mocker):
+    """Lines 73/138-139: RuntimeError → returns []."""
+    mock_ws = _make_ws_fail(mocker)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_automation_configs()
+    assert result == []
+
+
+async def test_get_config_entries_returns_list(client, mocker):
+    """Lines 167-168: normal path returns list."""
+    mock_ws = _make_ws(mocker, [{"entry_id": "ce1", "title": "Helper"}])
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_config_entries()
+    assert result == [{"entry_id": "ce1", "title": "Helper"}]
+
+
+async def test_get_config_entries_returns_empty_on_failure(client, mocker):
+    """Lines 169-170: RuntimeError → returns []."""
+    mock_ws = _make_ws_fail(mocker)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_config_entries()
+    assert result == []
+
+
+async def test_get_config_entries_returns_empty_when_none(client, mocker):
+    """Line 168: result is None → returns []."""
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_config_entries()
+    assert result == []
+
+
+async def test_update_config_entry_options(client, mocker):
+    """Lines 172-180: update_config_entry_options sends correct WS command."""
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.update_config_entry_options("ce1", {"entity_id": "switch.test"})
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "config_entries/update"
+    assert sent["entry_id"] == "ce1"
+    assert sent["options"] == {"entity_id": "switch.test"}
+
+
+@respx.mock
+async def test_get_lovelace_config_yaml_mode_ws_then_rest_fails(client, mocker):
+    """Lines 200-201, 214-215: WS raises mode_not_storage → REST also fails → YAML_MODE."""
+    from zigporter.ha_client import is_yaml_mode  # noqa: PLC0415
+
+    messages = [
+        json.dumps({"type": "auth_required"}),
+        json.dumps({"type": "auth_ok"}),
+        json.dumps(
+            {
+                "id": 1,
+                "type": "result",
+                "success": False,
+                "error": {"code": "mode_not_storage"},
+            }
+        ),
+    ]
+    mock_ws = mocker.AsyncMock()
+    mock_ws.recv = mocker.AsyncMock(side_effect=messages)
+    mock_ws.__aenter__ = mocker.AsyncMock(return_value=mock_ws)
+    mock_ws.__aexit__ = mocker.AsyncMock(return_value=False)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    respx.get(f"{HA_URL}/api/lovelace/config").mock(return_value=httpx.Response(400))
+
+    result = await client.get_lovelace_config()
+    assert is_yaml_mode(result)
+
+
+async def test_get_lovelace_config_with_url_path(client, mocker):
+    """Lines 192-193: url_path is passed in WS command."""
+    mock_ws = _make_ws(mocker, {"views": [{"title": "Mobile"}]})
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_lovelace_config(url_path="mobile")
+    assert result == {"views": [{"title": "Mobile"}]}
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent.get("url_path") == "mobile"
+
+
+async def test_get_entities_for_device(client, mocker):
+    """Lines 244-247: returns full entity dicts for matching device_id."""
+    registry = [
+        {"entity_id": "switch.plug", "device_id": "dev-abc", "name": "Plug"},
+        {"entity_id": "sensor.temp", "device_id": "dev-abc", "name": "Temp"},
+        {"entity_id": "light.other", "device_id": "dev-other", "name": "Other"},
+    ]
+    mock_ws = _make_ws(mocker, registry)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_entities_for_device("dev-abc")
+    assert len(result) == 2
+    assert all(e["device_id"] == "dev-abc" for e in result)
+
+
+async def test_rename_device_name(client, mocker):
+    """Lines 249-257: sends correct WS command for device rename."""
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.rename_device_name("dev-abc", "New Name")
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "config/device_registry/update"
+    assert sent["device_id"] == "dev-abc"
+    assert sent["name_by_user"] == "New Name"
+
+
+async def test_get_all_ws_data_non_automation_failure_raises(client, mocker):
+    """Lines 86-89: non-automation command failure raises RuntimeError."""
+    auth_msgs = [
+        json.dumps({"type": "auth_required"}),
+        json.dumps({"type": "auth_ok"}),
+    ]
+    fail_result = json.dumps(
+        {"id": 1, "type": "result", "success": False, "error": {"code": "unknown"}}
+    )
+    mock_ws = mocker.AsyncMock()
+    mock_ws.recv = mocker.AsyncMock(side_effect=auth_msgs + [fail_result])
+    mock_ws.__aenter__ = mocker.AsyncMock(return_value=mock_ws)
+    mock_ws.__aexit__ = mocker.AsyncMock(return_value=False)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+
+    with pytest.raises(RuntimeError, match="failed"):
+        await client.get_all_ws_data()
+
+
+async def test_ws_url_http_to_ws(client):
+    """Lines 41-45: _ws_url converts http → ws, https → wss."""
+    c_http = HAClient(ha_url="http://ha.test", token=TOKEN)
+    assert c_http._ws_url == "ws://ha.test/api/websocket"
+    c_https = HAClient(ha_url="https://ha.test", token=TOKEN)
+    assert c_https._ws_url == "wss://ha.test/api/websocket"

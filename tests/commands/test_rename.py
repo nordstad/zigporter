@@ -1270,3 +1270,673 @@ def test_rename_device_cli_invokes_rename_device_command(mocker):
         new_name="Bedroom Lamp",
         apply=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# display_plan — line 350: spacing between 2+ YAML-mode dashboards
+# ---------------------------------------------------------------------------
+
+
+def test_display_plan_yaml_mode_spacing_between_multiple(mocker):
+    """Line 350: console.print() spacer between yaml-mode dashboard entries."""
+    from zigporter.commands.rename import display_plan  # noqa: PLC0415
+
+    plan = RenamePlan(
+        old_entity_id="switch.kitchen_plug",
+        new_entity_id="switch.bedroom_lamp",
+        locations=[
+            RenameLocation(
+                context="registry",
+                name="HA entity registry",
+                item_id="switch.kitchen_plug",
+                occurrences=1,
+            )
+        ],
+        yaml_mode_dashboard_names=["Dashboard A", "Dashboard B"],
+        yaml_mode_dashboard_paths=[None, "mobile"],
+    )
+    printed = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **kw: printed.append(a[0] if a else ""),
+    )
+    display_plan(plan)
+    # The spacer console.print() is called with no args — produces an empty-string entry
+    assert any(a == "" for a in printed)
+
+
+# ---------------------------------------------------------------------------
+# build_rename_plan_from_snapshot — script/scene/lovelace/config_entry matches
+# ---------------------------------------------------------------------------
+
+
+def _make_snapshot(
+    *,
+    scripts=None,
+    scenes=None,
+    lovelace_configs=None,
+    url_paths=None,
+    titles=None,
+    config_entries=None,
+):
+    from zigporter.commands.rename import HASnapshot  # noqa: PLC0415
+
+    return HASnapshot(
+        entity_registry=[
+            {"entity_id": "switch.kitchen_plug", "device_id": "dev1"},
+            {"entity_id": "switch.other", "device_id": "dev2"},
+        ],
+        automations=[],
+        scripts=scripts or [],
+        scenes=scenes or [],
+        url_paths=url_paths if url_paths is not None else [None],
+        titles=titles if titles is not None else {None: "Overview"},
+        lovelace_configs=lovelace_configs if lovelace_configs is not None else [None],
+        config_entries=config_entries or [],
+    )
+
+
+def test_build_rename_plan_from_snapshot_script_match():
+    """Lines 557-559: script with a matching entity ID."""
+    from zigporter.commands.rename import build_rename_plan_from_snapshot  # noqa: PLC0415
+
+    snap = _make_snapshot(
+        scripts=[{"id": "s1", "alias": "My Script", "entity_id": "switch.kitchen_plug"}]
+    )
+    plan = build_rename_plan_from_snapshot(snap, "switch.kitchen_plug", "switch.bedroom_lamp")
+    script_locs = [loc for loc in plan.locations if loc.context == "script"]
+    assert len(script_locs) == 1
+    assert script_locs[0].name == "My Script"
+
+
+def test_build_rename_plan_from_snapshot_scene_match():
+    """Lines 570-572: scene with a matching entity ID."""
+    from zigporter.commands.rename import build_rename_plan_from_snapshot  # noqa: PLC0415
+
+    snap = _make_snapshot(
+        scenes=[
+            {"id": "sc1", "name": "Evening", "entities": {"switch.kitchen_plug": {"state": "on"}}}
+        ]
+    )
+    plan = build_rename_plan_from_snapshot(snap, "switch.kitchen_plug", "switch.bedroom_lamp")
+    scene_locs = [loc for loc in plan.locations if loc.context == "scene"]
+    assert len(scene_locs) == 1
+    assert scene_locs[0].name == "Evening"
+
+
+def test_build_rename_plan_from_snapshot_lovelace_match():
+    """Lines 585-588: lovelace dashboard with a matching entity ID."""
+    from zigporter.commands.rename import build_rename_plan_from_snapshot  # noqa: PLC0415
+
+    lv_config = {"views": [{"cards": [{"entity": "switch.kitchen_plug"}]}]}
+    snap = _make_snapshot(
+        url_paths=[None],
+        titles={None: "Home"},
+        lovelace_configs=[lv_config],
+    )
+    plan = build_rename_plan_from_snapshot(snap, "switch.kitchen_plug", "switch.bedroom_lamp")
+    lv_locs = [loc for loc in plan.locations if loc.context == "lovelace"]
+    assert len(lv_locs) == 1
+    assert lv_locs[0].name == "Home"
+
+
+def test_build_rename_plan_from_snapshot_config_entry_match():
+    """Lines 599-602: config_entry whose options contain the entity ID."""
+    from zigporter.commands.rename import build_rename_plan_from_snapshot  # noqa: PLC0415
+
+    snap = _make_snapshot(
+        config_entries=[
+            {
+                "entry_id": "ce1",
+                "title": "My Helper",
+                "options": {"entity_id": "switch.kitchen_plug"},
+            }
+        ]
+    )
+    plan = build_rename_plan_from_snapshot(snap, "switch.kitchen_plug", "switch.bedroom_lamp")
+    ce_locs = [loc for loc in plan.locations if loc.context == "config_entry"]
+    assert len(ce_locs) == 1
+    assert ce_locs[0].name == "My Helper"
+    assert ce_locs[0].item_id == "ce1"
+
+
+# ---------------------------------------------------------------------------
+# find_device — lines 649-663: multiple partial matches → prompts user
+# ---------------------------------------------------------------------------
+
+
+async def test_find_device_multiple_partial_matches(mocker):
+    """Lines 649-663: questionary.select is called when multiple devices partially match."""
+    from zigporter.commands.rename import find_device  # noqa: PLC0415
+
+    devices = [
+        {"id": "d1", "name": "Kitchen Plug A", "name_by_user": None},
+        {"id": "d2", "name": "Kitchen Plug B", "name_by_user": None},
+    ]
+    mock_ha = MagicMock()
+    mock_ha.get_device_registry = AsyncMock(return_value=devices)
+
+    selected_device = devices[1]
+    mock_select = MagicMock()
+    mock_select.unsafe_ask_async = AsyncMock(return_value=selected_device)
+    mocker.patch("zigporter.commands.rename.questionary.select", return_value=mock_select)
+
+    result = await find_device(mock_ha, "Kitchen Plug")
+    assert result == selected_device
+    assert mock_select.unsafe_ask_async.called
+
+
+# ---------------------------------------------------------------------------
+# _suggest_entity_id — lines 702-705: empty orig_slug
+# ---------------------------------------------------------------------------
+
+
+def test_suggest_entity_id_empty_orig_slug():
+    """Lines 702-705: entity has no name/original_name → just domain.new_slug."""
+    from zigporter.commands.rename import _suggest_entity_id  # noqa: PLC0415
+
+    entity = {"entity_id": "switch.0x001234", "name": None, "original_name": None}
+    result = _suggest_entity_id(entity, "bedroom_lamp")
+    assert result == "switch.bedroom_lamp"
+
+
+def test_suggest_entity_id_with_orig_slug():
+    """When orig_name present → domain.new_slug_orig_slug."""
+    from zigporter.commands.rename import _suggest_entity_id  # noqa: PLC0415
+
+    entity = {"entity_id": "switch.kitchen_plug", "name": None, "original_name": "Power"}
+    result = _suggest_entity_id(entity, "bedroom_lamp")
+    assert result == "switch.bedroom_lamp_power"
+
+
+# ---------------------------------------------------------------------------
+# display_device_plan — lines 786-787, 791-795, 831: else-branch (no location_details)
+# ---------------------------------------------------------------------------
+
+
+def test_display_device_plan_no_location_details_with_scanned_and_energy(mocker):
+    """Lines 786-787, 791-795: else-branch shows scanned counts and energy note."""
+    from zigporter.commands.rename import DeviceRenamePlan, display_device_plan  # noqa: PLC0415
+
+    device_plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Bedroom Lamp",
+        plans=[
+            RenamePlan(
+                old_entity_id="switch.kitchen_plug",
+                new_entity_id="switch.bedroom_lamp",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="switch.kitchen_plug",
+                        occurrences=1,
+                    )
+                ],
+            )
+        ],
+        scanned_names={
+            "automations": ["Morning Routine"],
+            "dashboards": ["Home Dashboard"],
+        },
+    )
+    printed = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **kw: printed.append(str(a[0]) if a else ""),
+    )
+    display_device_plan(device_plan)
+    all_output = "\n".join(printed)
+    assert "Morning Routine" in all_output or "automations" in all_output
+    assert "Home Dashboard" in all_output
+    assert "energy" in all_output
+
+
+def test_display_device_plan_multiple_failed_dashboards_spacer(mocker):
+    """Line 831: spacer console.print() between 2+ failed dashboards."""
+    from zigporter.commands.rename import DeviceRenamePlan, display_device_plan  # noqa: PLC0415
+
+    device_plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Bedroom Lamp",
+        plans=[
+            RenamePlan(
+                old_entity_id="switch.kitchen_plug",
+                new_entity_id="switch.bedroom_lamp",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="switch.kitchen_plug",
+                        occurrences=1,
+                    )
+                ],
+            )
+        ],
+        failed_dashboards=["Dashboard A", "Dashboard B"],
+        failed_dashboard_paths=[None, "mobile"],
+    )
+    printed = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **kw: printed.append(a[0] if a else ""),
+    )
+    display_device_plan(device_plan)
+    assert any(a == "" for a in printed)
+
+
+# ---------------------------------------------------------------------------
+# execute_device_rename — lines 887-894: script/scene/lovelace/config_entry contexts
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_full_exec_client():
+    client = MagicMock()
+    client.rename_device_name = AsyncMock(return_value=None)
+    client.rename_entity_id = AsyncMock(return_value=None)
+    client.update_automation = AsyncMock(return_value=None)
+    client.update_script = AsyncMock(return_value=None)
+    client.update_scene = AsyncMock(return_value=None)
+    client.save_lovelace_config = AsyncMock(return_value=None)
+    client.update_config_entry_options = AsyncMock(return_value=None)
+    return client
+
+
+async def test_execute_device_rename_script_scene_lovelace_config_entry(mock_full_exec_client):
+    """Lines 887-894: script, scene, lovelace and config_entry branches are called."""
+    from zigporter.commands.rename import DeviceRenamePlan, execute_device_rename  # noqa: PLC0415
+
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Bedroom Lamp",
+        plans=[
+            RenamePlan(
+                old_entity_id="switch.kitchen_plug",
+                new_entity_id="switch.bedroom_lamp",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="switch.kitchen_plug",
+                        occurrences=1,
+                    ),
+                    RenameLocation(
+                        context="script",
+                        name="My Script",
+                        item_id="s1",
+                        occurrences=1,
+                        raw_config={"id": "s1", "entity_id": "switch.kitchen_plug"},
+                    ),
+                    RenameLocation(
+                        context="scene",
+                        name="Evening",
+                        item_id="sc1",
+                        occurrences=1,
+                        raw_config={"id": "sc1", "entities": {"switch.kitchen_plug": {}}},
+                    ),
+                    RenameLocation(
+                        context="lovelace",
+                        name="Home",
+                        item_id="",
+                        occurrences=1,
+                        raw_config={"views": [{"entity": "switch.kitchen_plug"}]},
+                    ),
+                    RenameLocation(
+                        context="config_entry",
+                        name="Helper",
+                        item_id="ce1",
+                        occurrences=1,
+                        raw_config={"entity_id": "switch.kitchen_plug"},
+                    ),
+                ],
+            )
+        ],
+    )
+    await execute_device_rename(mock_full_exec_client, plan)
+    mock_full_exec_client.update_script.assert_called_once()
+    mock_full_exec_client.update_scene.assert_called_once()
+    mock_full_exec_client.save_lovelace_config.assert_called_once()
+    mock_full_exec_client.update_config_entry_options.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# run_rename_device — various branches
+# ---------------------------------------------------------------------------
+
+
+def _make_snapshot_mock(entity_ids=None, automations=None, scripts=None, scenes=None):
+    """Build a MagicMock snapshot for run_rename_device tests."""
+    eids = entity_ids or ["switch.kitchen_plug"]
+    return MagicMock(
+        entity_registry=[{"entity_id": eid, "device_id": "dev1"} for eid in eids],
+        automations=automations or [],
+        scripts=scripts or [],
+        scenes=scenes or [],
+        url_paths=[None],
+        titles={None: "Overview"},
+        lovelace_configs=[None],
+        config_entries=[],
+    )
+
+
+async def test_run_rename_device_fuzzy_match_prints_info(mocker):
+    """Line 923: actual_name differs from query → prints fuzzy match info."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=[])
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    printed = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **kw: printed.append(str(a[0]) if a else ""),
+    )
+    # "kitchen" is a partial query that differs from "Kitchen Plug"
+    result = await run_rename_device("https://ha.test", "token", True, "kitchen", "New Name", True)
+    # Device found but no entities → returns True
+    assert result is True
+    all_output = "\n".join(printed)
+    assert "Kitchen Plug" in all_output
+
+
+async def test_run_rename_device_no_entities(mocker):
+    """Lines 931-932: no entities found → prints yellow warning, returns True."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=[])
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "New Name", True
+    )
+    assert result is True
+
+
+async def test_run_rename_device_odd_entities_no_tty(mocker):
+    """Lines 941-945: odd entities exist but no TTY → skips them."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    # Entity whose suffix doesn't contain "kitchen_plug" slug → goes to odd list
+    entities = [
+        {"entity_id": "switch.0xabcd1234", "name": None, "original_name": None, "device_id": "dev1"}
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+    mocker.patch("zigporter.commands.rename.sys").stdin.isatty.return_value = False
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    # No entity_pairs after skipping odds → returns True (no valid pairs)
+    assert result is True
+
+
+async def test_run_rename_device_odd_entities_interactive_suggested(mocker):
+    """Lines 963-970: interactive: user picks suggested."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    entities = [
+        {"entity_id": "switch.0xabcd", "name": None, "original_name": None, "device_id": "dev1"}
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    mock_sys = mocker.patch("zigporter.commands.rename.sys")
+    mock_sys.stdin.isatty.return_value = True
+
+    suggested_val = "switch.bedroom_lamp"
+    mock_select = MagicMock()
+    mock_select.unsafe_ask_async = AsyncMock(return_value=("suggested", suggested_val))
+    mocker.patch("zigporter.commands.rename.questionary.select", return_value=mock_select)
+
+    snap = _make_snapshot_mock(entity_ids=["switch.0xabcd"])
+    mocker.patch("zigporter.commands.rename.fetch_ha_snapshot", new=AsyncMock(return_value=snap))
+    mock_plan = RenamePlan(
+        old_entity_id="switch.0xabcd",
+        new_entity_id="switch.bedroom_lamp",
+        locations=[
+            RenameLocation(
+                context="registry",
+                name="HA entity registry",
+                item_id="switch.0xabcd",
+                occurrences=1,
+            )
+        ],
+    )
+    mocker.patch(
+        "zigporter.commands.rename.build_rename_plan_from_snapshot", return_value=mock_plan
+    )
+    mocker.patch("zigporter.commands.rename.execute_device_rename", new=AsyncMock())
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    assert result is True
+
+
+async def test_run_rename_device_odd_entities_interactive_custom(mocker):
+    """Lines 965-970: interactive: user picks custom entity ID."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    entities = [
+        {"entity_id": "switch.0xabcd", "name": None, "original_name": None, "device_id": "dev1"}
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    mock_sys = mocker.patch("zigporter.commands.rename.sys")
+    mock_sys.stdin.isatty.return_value = True
+
+    mock_select = MagicMock()
+    mock_select.unsafe_ask_async = AsyncMock(return_value=("custom", None))
+    mocker.patch("zigporter.commands.rename.questionary.select", return_value=mock_select)
+
+    mock_text = MagicMock()
+    mock_text.unsafe_ask_async = AsyncMock(return_value="switch.my_custom_id")
+    mocker.patch("zigporter.commands.rename.questionary.text", return_value=mock_text)
+
+    snap = _make_snapshot_mock(entity_ids=["switch.0xabcd"])
+    mocker.patch("zigporter.commands.rename.fetch_ha_snapshot", new=AsyncMock(return_value=snap))
+    mock_plan = RenamePlan(
+        old_entity_id="switch.0xabcd",
+        new_entity_id="switch.my_custom_id",
+        locations=[
+            RenameLocation(
+                context="registry",
+                name="HA entity registry",
+                item_id="switch.0xabcd",
+                occurrences=1,
+            )
+        ],
+    )
+    mocker.patch(
+        "zigporter.commands.rename.build_rename_plan_from_snapshot", return_value=mock_plan
+    )
+    mocker.patch("zigporter.commands.rename.execute_device_rename", new=AsyncMock())
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    assert result is True
+
+
+async def test_run_rename_device_entity_pairs_empty_after_odds(mocker):
+    """Lines 973-974: entity_pairs empty after resolving odds → returns True."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    entities = [
+        {"entity_id": "switch.0xabcd", "name": None, "original_name": None, "device_id": "dev1"}
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    mock_sys = mocker.patch("zigporter.commands.rename.sys")
+    mock_sys.stdin.isatty.return_value = True
+
+    # User picks "skip" → entity_pairs stays empty
+    mock_select = MagicMock()
+    mock_select.unsafe_ask_async = AsyncMock(return_value=("skip", None))
+    mocker.patch("zigporter.commands.rename.questionary.select", return_value=mock_select)
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    assert result is True
+
+
+async def test_run_rename_device_old_eid_not_in_registry_skipped(mocker):
+    """Lines 985-988: old_eid not in registry → skip warning."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    entities = [
+        {
+            "entity_id": "switch.kitchen_plug",
+            "name": None,
+            "original_name": None,
+            "device_id": "dev1",
+        }
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    # Snapshot without "switch.kitchen_plug" in entity_registry → triggers 985-988
+    snap = MagicMock(
+        entity_registry=[{"entity_id": "switch.other", "device_id": "dev2"}],
+        automations=[],
+        scripts=[],
+        scenes=[],
+        url_paths=[None],
+        titles={None: "Overview"},
+        lovelace_configs=[None],
+        config_entries=[],
+    )
+    mocker.patch("zigporter.commands.rename.fetch_ha_snapshot", new=AsyncMock(return_value=snap))
+
+    printed = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **kw: printed.append(str(a[0]) if a else ""),
+    )
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    assert result is False
+    assert any("not found" in p for p in printed)
+
+
+async def test_run_rename_device_new_eid_already_exists_skipped(mocker):
+    """Lines 990-991: new_eid already exists → skip warning, no valid plans → False."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    entities = [
+        {
+            "entity_id": "switch.kitchen_plug",
+            "name": None,
+            "original_name": None,
+            "device_id": "dev1",
+        }
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    # Both old and new already in registry → new_eid exists → skipped
+    snap = MagicMock(
+        entity_registry=[
+            {"entity_id": "switch.kitchen_plug", "device_id": "dev1"},
+            {"entity_id": "switch.bedroom_lamp", "device_id": "dev2"},
+        ],
+        automations=[],
+        scripts=[],
+        scenes=[],
+        url_paths=[None],
+        titles={None: "Overview"},
+        lovelace_configs=[None],
+        config_entries=[],
+    )
+    mocker.patch("zigporter.commands.rename.fetch_ha_snapshot", new=AsyncMock(return_value=snap))
+
+    printed = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **kw: printed.append(str(a[0]) if a else ""),
+    )
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    assert result is False
+    assert any("already exists" in p for p in printed)
+
+
+async def test_run_rename_device_no_valid_plans(mocker):
+    """Lines 995-996: no valid plans after filtering → returns False."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    entities = [
+        {
+            "entity_id": "switch.kitchen_plug",
+            "name": None,
+            "original_name": None,
+            "device_id": "dev1",
+        }
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename.find_device", new=AsyncMock(return_value=device))
+
+    # Snapshot has old_eid but also new_eid → all pairs skipped → plans empty
+    snap = MagicMock(
+        entity_registry=[
+            {"entity_id": "switch.kitchen_plug", "device_id": "dev1"},
+            {"entity_id": "switch.bedroom_lamp", "device_id": "dev2"},
+        ],
+        automations=[],
+        scripts=[],
+        scenes=[],
+        url_paths=[None],
+        titles={None: "Overview"},
+        lovelace_configs=[None],
+        config_entries=[],
+    )
+    mocker.patch("zigporter.commands.rename.fetch_ha_snapshot", new=AsyncMock(return_value=snap))
+    # build_rename_plan_from_snapshot raises because new_eid already exists → skip
+    mocker.patch(
+        "zigporter.commands.rename.build_rename_plan_from_snapshot",
+        side_effect=ValueError("already exists"),
+    )
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    assert result is False
