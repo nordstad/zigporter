@@ -627,7 +627,6 @@ class DeviceRenamePlan:
     old_device_name: str
     new_device_name: str
     plans: list[RenamePlan]
-    scan_summary: dict[str, int] = field(default_factory=dict)
     scanned_names: dict[str, list[str]] = field(default_factory=dict)
     failed_dashboards: list[str] = field(default_factory=list)
     failed_dashboard_paths: list[str | None] = field(default_factory=list)
@@ -786,8 +785,6 @@ def display_device_plan(device_plan: DeviceRenamePlan) -> None:
         for kind, names in scanned.items():
             if kind != "dashboards" and names:
                 other_counts.append(f"{len(names)} {kind}")
-        if not scanned and device_plan.scan_summary:
-            other_counts = [f"{v} {k}" for k, v in device_plan.scan_summary.items()]
         scanned_dashboards = scanned.get("dashboards", [])
         console.print(f"\n  [dim]{len(device_plan.plans)} entities to rename[/dim]")
         if other_counts or scanned_dashboards:
@@ -796,6 +793,11 @@ def display_device_plan(device_plan: DeviceRenamePlan) -> None:
                 console.print(f"    [dim]{', '.join(other_counts)}[/dim]")
             for db_name in scanned_dashboards:
                 console.print(f"    [dim]dashboard:  {db_name}[/dim]")
+
+    console.print(
+        f"  [dim]–[/dim]  [dim]{'energy':12}[/dim]"
+        f"  [dim](auto-updated by HA on entity rename)[/dim]"
+    )
 
     # --- Manual steps for YAML-mode / inaccessible dashboards ---
     if device_plan.failed_dashboards:
