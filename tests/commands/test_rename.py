@@ -275,6 +275,29 @@ async def test_build_rename_plan_skips_null_lovelace(mock_ha_client):
     assert len(lv_locs) == 0
 
 
+async def test_build_rename_plan_tracks_scanned_dashboards(mock_ha_client):
+    """Non-YAML dashboards that were fetched should appear in scanned_dashboard_names."""
+    plan = await build_rename_plan(mock_ha_client, "switch.kitchen_plug", "switch.new_plug")
+    # The default fixture has empty panels → url_paths=[None] titled "Overview"
+    # and lovelace_config returns a real dict, so "Overview" should be scanned
+    assert "Overview" in plan.scanned_dashboard_names
+    assert plan.yaml_mode_dashboard_names == []
+    assert plan.yaml_mode_dashboard_paths == []
+
+
+async def test_build_rename_plan_tracks_yaml_mode_dashboards(mock_ha_client):
+    """YAML-mode dashboards should populate yaml_mode_dashboard_names and not be scanned."""
+    from zigporter.ha_client import YAML_MODE  # noqa: PLC0415
+
+    mock_ha_client.get_lovelace_config = AsyncMock(return_value=YAML_MODE)
+    plan = await build_rename_plan(mock_ha_client, "switch.kitchen_plug", "switch.new_plug")
+    assert "Overview" in plan.yaml_mode_dashboard_names
+    assert None in plan.yaml_mode_dashboard_paths
+    assert plan.scanned_dashboard_names == []
+    lv_locs = [loc for loc in plan.locations if loc.context == "lovelace"]
+    assert len(lv_locs) == 0
+
+
 # ---------------------------------------------------------------------------
 # execute_rename
 # ---------------------------------------------------------------------------
@@ -431,6 +454,134 @@ def test_rename_plan_total_occurrences():
     assert plan.total_occurrences == 6
 
 
+def test_display_plan_always_shows_energy_note(mocker):
+    """Energy config auto-update note should always appear in the footer."""
+    printed: list[str] = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **k: printed.append(" ".join(str(x) for x in a)),
+    )
+
+    plan = RenamePlan(
+        old_entity_id="switch.old",
+        new_entity_id="switch.new",
+        locations=[
+            RenameLocation(
+                context="registry", name="HA entity registry", item_id="switch.old", occurrences=1
+            ),
+        ],
+    )
+    display_plan(plan)
+    all_output = "\n".join(printed)
+    assert "energy" in all_output
+    assert "auto-updated" in all_output
+
+
+def test_display_plan_shows_zero_ref_scanned_dashboards(mocker):
+    """Scanned dashboards with 0 references should appear in the footer."""
+    printed: list[str] = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **k: printed.append(" ".join(str(x) for x in a)),
+    )
+
+    plan = RenamePlan(
+        old_entity_id="switch.old",
+        new_entity_id="switch.new",
+        locations=[
+            RenameLocation(
+                context="registry", name="HA entity registry", item_id="switch.old", occurrences=1
+            ),
+        ],
+        scanned_dashboard_names=["Overview", "Mushroom"],
+    )
+    display_plan(plan)
+    all_output = "\n".join(printed)
+    assert "Overview" in all_output
+    assert "Mushroom" in all_output
+    assert "0 references" in all_output
+
+
+def test_display_plan_omits_auto_updated_from_zero_ref_footer(mocker):
+    """Dashboards that have lovelace location entries should NOT appear in the 0-ref footer."""
+    printed: list[str] = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **k: printed.append(" ".join(str(x) for x in a)),
+    )
+
+    plan = RenamePlan(
+        old_entity_id="switch.old",
+        new_entity_id="switch.new",
+        locations=[
+            RenameLocation(context="lovelace", name="Home", item_id="", occurrences=1),
+        ],
+        scanned_dashboard_names=["Home", "Mushroom"],
+    )
+    display_plan(plan)
+    # "Home" has a match so it's in the table, not the 0-ref footer
+    # "Mushroom" has no match so it should appear in the footer
+    footer_lines = [p for p in printed if "0 references" in p]
+    assert any("Mushroom" in line for line in footer_lines)
+    assert not any("Home" in line for line in footer_lines)
+
+
+def test_display_plan_shows_yaml_mode_dashboards_inline(mocker):
+    """YAML-mode dashboards should appear in the footer with a YAML warning."""
+    printed: list[str] = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **k: printed.append(" ".join(str(x) for x in a)),
+    )
+
+    plan = RenamePlan(
+        old_entity_id="switch.old",
+        new_entity_id="switch.new",
+        locations=[
+            RenameLocation(
+                context="registry", name="HA entity registry", item_id="switch.old", occurrences=1
+            ),
+        ],
+        yaml_mode_dashboard_names=["Overview"],
+        yaml_mode_dashboard_paths=[None],
+    )
+    display_plan(plan)
+    all_output = "\n".join(printed)
+    assert "Overview" in all_output
+    assert "YAML mode" in all_output
+
+
+def test_display_plan_shows_yaml_mode_manual_steps(mocker):
+    """YAML-mode dashboards should trigger the manual-steps block with grep hint and find/replace table."""
+    printed: list[str] = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **k: printed.append(" ".join(str(x) for x in a)),
+    )
+
+    plan = RenamePlan(
+        old_entity_id="sensor.kontor_temp",
+        new_entity_id="sensor.office_climate",
+        locations=[
+            RenameLocation(
+                context="registry",
+                name="HA entity registry",
+                item_id="sensor.kontor_temp",
+                occurrences=1,
+            ),
+        ],
+        yaml_mode_dashboard_names=["Overview"],
+        yaml_mode_dashboard_paths=[None],
+    )
+    display_plan(plan)
+    all_output = "\n".join(printed)
+    # grep hint uses the full entity ID as the search term
+    assert "sensor.kontor_temp" in all_output
+    assert "grep" in all_output
+    # find/replace table content
+    assert "sensor.office_climate" in all_output
+
+
 # ---------------------------------------------------------------------------
 # run_rename
 # ---------------------------------------------------------------------------
@@ -516,7 +667,7 @@ async def test_run_rename_aborted(mocker):
 
 
 def test_rename_command_success(mocker):
-    mocker.patch("zigporter.commands.rename.asyncio.run", return_value=True)
+    mocker.patch("zigporter.commands.rename.run_rename", new=AsyncMock(return_value=True))
 
     from zigporter.commands.rename import rename_command  # noqa: PLC0415
 
@@ -526,7 +677,7 @@ def test_rename_command_success(mocker):
 def test_rename_command_failure(mocker):
     import typer  # noqa: PLC0415
 
-    mocker.patch("zigporter.commands.rename.asyncio.run", return_value=False)
+    mocker.patch("zigporter.commands.rename.run_rename", new=AsyncMock(return_value=False))
 
     from zigporter.commands.rename import rename_command  # noqa: PLC0415
 
@@ -548,7 +699,7 @@ def test_rename_cli_invokes_rename_command(mocker):
     from zigporter.main import app  # noqa: PLC0415
 
     runner = CliRunner()
-    result = runner.invoke(app, ["rename", "switch.old", "switch.new", "--apply"])
+    result = runner.invoke(app, ["rename-entity", "switch.old", "switch.new", "--apply"])
     assert result.exit_code == 0
     mock_cmd.assert_called_once_with(
         ha_url="https://ha.test",
@@ -1075,7 +1226,7 @@ async def test_run_rename_device_no_tty_no_apply(mocker):
 
 
 def test_rename_device_command_success(mocker):
-    mocker.patch("zigporter.commands.rename.asyncio.run", return_value=True)
+    mocker.patch("zigporter.commands.rename.run_rename_device", new=AsyncMock(return_value=True))
 
     from zigporter.commands.rename import rename_device_command  # noqa: PLC0415
 
@@ -1085,7 +1236,7 @@ def test_rename_device_command_success(mocker):
 def test_rename_device_command_failure(mocker):
     import typer  # noqa: PLC0415
 
-    mocker.patch("zigporter.commands.rename.asyncio.run", return_value=False)
+    mocker.patch("zigporter.commands.rename.run_rename_device", new=AsyncMock(return_value=False))
 
     from zigporter.commands.rename import rename_device_command  # noqa: PLC0415
 

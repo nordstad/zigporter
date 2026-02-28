@@ -50,6 +50,9 @@ class RenamePlan:
     old_entity_id: str
     new_entity_id: str
     locations: list[RenameLocation]
+    scanned_dashboard_names: list[str] = field(default_factory=list)
+    yaml_mode_dashboard_names: list[str] = field(default_factory=list)
+    yaml_mode_dashboard_paths: list[str | None] = field(default_factory=list)
 
     @property
     def total_occurrences(self) -> int:
@@ -226,12 +229,21 @@ async def build_rename_plan(
                 )
             )
 
+    scanned_dashboard_names: list[str] = []
+    yaml_mode_dashboard_names: list[str] = []
+    yaml_mode_dashboard_paths: list[str | None] = []
+
     for url_path, config in zip(url_paths, lovelace_configs, strict=True):
-        if config is None or is_yaml_mode(config):
+        if config is None:
+            continue  # not a lovelace panel — silently drop
+        title = titles.get(url_path, url_path or "Overview")
+        if is_yaml_mode(config):
+            yaml_mode_dashboard_names.append(title)
+            yaml_mode_dashboard_paths.append(url_path)
             continue
+        scanned_dashboard_names.append(title)
         count = _count_occurrences(config, old_entity_id)
         if count:
-            title = titles.get(url_path, url_path or "Default")
             locations.append(
                 RenameLocation(
                     context="lovelace",
@@ -246,6 +258,9 @@ async def build_rename_plan(
         old_entity_id=old_entity_id,
         new_entity_id=new_entity_id,
         locations=locations,
+        scanned_dashboard_names=scanned_dashboard_names,
+        yaml_mode_dashboard_names=yaml_mode_dashboard_names,
+        yaml_mode_dashboard_paths=yaml_mode_dashboard_paths,
     )
 
 
@@ -282,11 +297,57 @@ def display_plan(plan: RenamePlan) -> None:
 
     console.print(table)
 
+    # Dashboard scan footer — 0-ref scanned dashboards and YAML-mode dashboards
+    auto_dashboard_names = {loc.name for loc in plan.locations if loc.context == "lovelace"}
+    for db_name in plan.scanned_dashboard_names:
+        if db_name not in auto_dashboard_names:
+            console.print(
+                f"  [dim]–[/dim]  [dim]{'dashboard':12}[/dim]"
+                f"  {db_name}  [dim](0 references — scanned, no matches)[/dim]"
+            )
+    for db_name in plan.yaml_mode_dashboard_names:
+        console.print(
+            f"  [dim]–[/dim]  [dim]{'dashboard':12}[/dim]"
+            f"  {db_name}  [yellow]⚠ YAML mode — see manual steps below[/yellow]"
+        )
+    console.print(
+        f"  [dim]–[/dim]  [dim]{'energy':12}[/dim]"
+        f"  [dim](auto-updated by HA on entity rename)[/dim]"
+    )
+
     non_registry = [loc for loc in plan.locations if loc.context != "registry"]
     total_refs = sum(loc.occurrences for loc in non_registry)
     console.print(
         f"\n  [dim]{len(non_registry)} location(s) · {total_refs} reference(s) to update[/dim]"
     )
+
+    # Manual steps for YAML-mode dashboards
+    if plan.yaml_mode_dashboard_names:
+        n = len(plan.yaml_mode_dashboard_names)
+        s = "s" if n != 1 else ""
+        console.print(
+            f"\n  [yellow bold]⚠  {n} dashboard{s} stored in YAML — cannot be updated automatically[/yellow bold]\n"
+        )
+        console.print(
+            f"  [dim]Search your HA config files for [bold]{plan.old_entity_id}[/bold]:[/dim]\n"
+            f"  [dim]• Studio Code Server add-on → [bold]Ctrl+Shift+F[/bold][/dim]\n"
+            f'  [dim]• SSH/terminal → [bold]grep -rn "{plan.old_entity_id}" /config/ --include="*.yaml"[/bold][/dim]\n'
+        )
+        paths = plan.yaml_mode_dashboard_paths or [None] * len(plan.yaml_mode_dashboard_names)
+        for i, (name, url_path) in enumerate(zip(plan.yaml_mode_dashboard_names, paths), 1):
+            url = f"/lovelace/{url_path}" if url_path else "/lovelace"
+            console.print(f"  [yellow][ ] {i}.[/yellow]  [bold]{name}[/bold]  [dim]{url}[/dim]")
+            console.print("\n  [dim]Find and replace:[/dim]\n")
+            replace_table = Table(
+                show_header=True, header_style="bold dim", box=None, padding=(0, 2)
+            )
+            replace_table.add_column("Find", style="dim")
+            replace_table.add_column("")
+            replace_table.add_column("Replace with", style="cyan")
+            replace_table.add_row(plan.old_entity_id, "→", plan.new_entity_id)
+            console.print(replace_table)
+            if i < len(plan.yaml_mode_dashboard_names):
+                console.print()
 
 
 # ---------------------------------------------------------------------------

@@ -24,3 +24,4 @@ site/
 # Local data files
 zha-export-*.json
 zha-migration-state.json
+progress.md

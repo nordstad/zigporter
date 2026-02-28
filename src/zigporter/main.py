@@ -304,7 +304,7 @@ def inspect(
 
 
 @app.command()
-def rename(
+def rename_entity(
     old_entity_id: str = typer.Argument(..., help="Current entity ID to rename."),
     new_entity_id: str = typer.Argument(..., help="New entity ID to assign."),
     apply: bool = typer.Option(
@@ -330,6 +330,40 @@ def rename(
         verify_ssl=verify_ssl,
         old_entity_id=old_entity_id,
         new_entity_id=new_entity_id,
+        apply=apply,
+    )
+
+
+@app.command()
+def rename_device(
+    old_name: str = typer.Argument(..., help="Current device name (or partial match)."),
+    new_name: str = typer.Argument(..., help="New friendly name for the device."),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Apply the rename. Without this flag the command runs as a dry run.",
+    ),
+) -> None:
+    """Rename a device and cascade the change to all its entities, automations, scripts, scenes, and dashboards.
+
+    Finds the device by name (partial match supported), computes new entity IDs by
+    replacing the old device name slug in each entity ID, and interactively prompts for
+    any entities whose IDs don't follow the device name pattern.
+
+    Defaults to a dry run. Pass --apply or confirm the prompt to write changes.
+
+    Note: Jinja2 template strings (e.g. {{ states('old.id') }}) are not patched
+    automatically — review them manually after renaming.
+    """
+    from zigporter.commands.rename import rename_device_command  # noqa: PLC0415
+
+    ha_url, token, verify_ssl = _get_config()
+    rename_device_command(
+        ha_url=ha_url,
+        token=token,
+        verify_ssl=verify_ssl,
+        old_name=old_name,
+        new_name=new_name,
         apply=apply,
     )
 
