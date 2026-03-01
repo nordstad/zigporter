@@ -725,22 +725,12 @@ def _suggest_entity_id(entity: dict[str, Any], new_slug: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def display_device_plan(
-    device_plan: DeviceRenamePlan,
-    *,
-    z2m_friendly_name: str | None = None,
-) -> None:
+def display_device_plan(device_plan: DeviceRenamePlan) -> None:
     console.print(
         f"\n  Device [bold]{device_plan.old_device_name}[/bold]"
         f"  [dim]→[/dim]  "
         f"[bold cyan]{device_plan.new_device_name}[/bold cyan]\n"
     )
-    if z2m_friendly_name is not None:
-        console.print(
-            f"  [dim]Z2M:[/dim]  rename friendly name"
-            f"  [dim]{z2m_friendly_name!r}[/dim]"
-            f"  [dim]→[/dim]  [cyan]{device_plan.new_device_name!r}[/cyan]"
-        )
 
     # Entity renames table
     entity_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
@@ -1086,9 +1076,9 @@ async def run_rename_device(
             pass  # Z2M not configured or unreachable — skip silently
 
     # 6. Display plan
-    display_device_plan(device_plan, z2m_friendly_name=z2m_friendly_name)
+    display_device_plan(device_plan)
 
-    # 7. Confirm and apply
+    # 7. Confirm HA changes
     if not apply:
         if not sys.stdin.isatty():
             console.print(
@@ -1102,6 +1092,21 @@ async def run_rename_device(
         if not confirmed:
             console.print("[dim]Aborted.[/dim]")
             return True
+
+        # 7b. Separately ask about Z2M sync
+        if z2m_client and z2m_friendly_name:
+            rename_z2m = await questionary.confirm(
+                f"Also rename in Z2M? (current friendly name: '{z2m_friendly_name}')",
+                default=True,
+                style=_STYLE,
+            ).unsafe_ask_async()
+            if not rename_z2m:
+                z2m_client = None
+                z2m_friendly_name = None
+    else:
+        # --apply mode: skip Z2M (cannot prompt)
+        z2m_client = None
+        z2m_friendly_name = None
 
     console.print()
     await execute_device_rename(
