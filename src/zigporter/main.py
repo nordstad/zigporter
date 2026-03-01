@@ -1,4 +1,5 @@
 import json
+import os
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
@@ -65,6 +66,8 @@ def _app_options(
 
 def _ensure_config() -> None:
     """Auto-run the setup wizard if no config file exists anywhere."""
+    if os.environ.get("ZIGPORTER_DEMO"):
+        return
     from zigporter.config import config_dir
 
     if not (config_dir() / ".env").exists() and not (Path.cwd() / ".env").exists():
@@ -74,6 +77,8 @@ def _ensure_config() -> None:
 
 
 def _get_config() -> tuple[str, str, bool]:
+    if os.environ.get("ZIGPORTER_DEMO"):
+        return ("", "", True)
     _ensure_config()
     try:
         return load_config()
@@ -84,6 +89,8 @@ def _get_config() -> tuple[str, str, bool]:
 
 
 def _get_z2m_config() -> tuple[str, str]:
+    if os.environ.get("ZIGPORTER_DEMO"):
+        return ("", "zigbee2mqtt")
     try:
         return load_z2m_config()
     except ValueError as exc:
@@ -261,6 +268,12 @@ def migrate(
     On first run the tool will check your setup, prompt for a backup, and fetch a
     ZHA export automatically if one is not found.
     """
+    if os.environ.get("ZIGPORTER_DEMO"):
+        from zigporter.demo import demo_migrate_status  # noqa: PLC0415
+
+        demo_migrate_status()
+        return
+
     ha_url, token, verify_ssl = _get_config()
     z2m_url, mqtt_topic = _get_z2m_config()
 
@@ -367,6 +380,21 @@ def rename_device(
         new_name=new_name,
         apply=apply,
     )
+
+
+@app.command(name="fix-device")
+def fix_device() -> None:
+    """Remove stale ZHA device entries left behind after migration to Zigbee2MQTT.
+
+    Scans HA for devices that have both a stale ZHA entry and an active Z2M entry,
+    lets you pick one, deletes the stale ZHA entities, removes the ZHA device from
+    the registry, and renames any Z2M entities that got a numeric suffix (e.g. _2)
+    back to their original names so dashboard cards work again.
+    """
+    from zigporter.commands.fix_device import fix_device_command as _fix  # noqa: PLC0415
+
+    ha_url, token, verify_ssl = _get_config()
+    _fix(ha_url=ha_url, token=token, verify_ssl=verify_ssl)
 
 
 if __name__ == "__main__":

@@ -280,6 +280,18 @@ class HAClient:
             }
         )
 
+    async def delete_entity(self, entity_id: str) -> None:
+        """Remove an entity from the HA entity registry."""
+        await self._ws_command({"type": "config/entity_registry/remove", "entity_id": entity_id})
+
+    async def remove_device(self, device_id: str) -> None:
+        """Remove a device entry from the HA device registry."""
+        await self._ws_command({"type": "config/device_registry/remove", "device_id": device_id})
+
+    async def reload_config_entry(self, entry_id: str) -> None:
+        """Reload a config entry by its ID."""
+        await self._ws_command({"type": "config_entries/reload", "entry_id": entry_id})
+
     async def save_lovelace_config(
         self, config: dict[str, Any], url_path: str | None = None
     ) -> None:
