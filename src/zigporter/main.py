@@ -25,6 +25,14 @@ app = typer.Typer(
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+
+z2m_app = typer.Typer(
+    name="z2m",
+    help="Zigbee2MQTT network utilities.",
+    no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+app.add_typer(z2m_app, name="z2m")
 console = Console()
 
 _STYLE = questionary.Style(
@@ -367,6 +375,82 @@ def rename_device(
         new_name=new_name,
         apply=apply,
     )
+
+
+z2m_app = typer.Typer(
+    name="z2m",
+    help="Zigbee2MQTT network utilities.",
+    no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+app.add_typer(z2m_app, name="z2m")
+
+
+@z2m_app.command("health")
+def z2m_health(
+    sort: str = typer.Option(
+        None,
+        "--sort",
+        help="Sort field: lqi, battery, last-seen (default: offline first, then LQI ascending).",
+    ),
+    warn_battery: int = typer.Option(
+        10,
+        "--warn-battery",
+        help="Battery percentage below which a device is flagged as WARN.",
+    ),
+    warn_lqi: int = typer.Option(
+        50,
+        "--warn-lqi",
+        help="LQI value below which a device is flagged as WARN.",
+    ),
+    offline_after: int = typer.Option(
+        60,
+        "--offline-after",
+        help="Minutes since last-seen after which a device is considered OFFLINE.",
+    ),
+    output_format: str = typer.Option(
+        "table",
+        "--format",
+        help="Output format: table, json.",
+    ),
+) -> None:
+    """Show LQI, battery, and last-seen for all Z2M devices and flag unhealthy ones.
+
+    Exits with a non-zero status code when any device is OFFLINE or WARN,
+    making it suitable for use in monitoring scripts.
+    """
+    from zigporter.commands.z2m_health import SortField, z2m_health_command  # noqa: PLC0415
+
+    ha_url, token, verify_ssl = _get_config()
+    z2m_url, mqtt_topic = _get_z2m_config()
+
+    sort_field: SortField | None = None
+    if sort is not None:
+        try:
+            sort_field = SortField(sort)
+        except ValueError:
+            valid = ", ".join(f.value for f in SortField)
+            console.print(f"[red]Invalid --sort value '{sort}'. Choose from: {valid}[/red]")
+            raise typer.Exit(code=1)
+
+    if output_format not in ("table", "json"):
+        console.print("[red]Invalid --format value. Choose from: table, json[/red]")
+        raise typer.Exit(code=1)
+
+    healthy = z2m_health_command(
+        ha_url=ha_url,
+        token=token,
+        z2m_url=z2m_url,
+        verify_ssl=verify_ssl,
+        mqtt_topic=mqtt_topic,
+        sort=sort_field,
+        warn_battery=warn_battery,
+        warn_lqi=warn_lqi,
+        offline_after=offline_after,
+        output_format=output_format,
+    )
+    if not healthy:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
