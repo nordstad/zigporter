@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.2.0] - 2026-03-01
+
+### Added
+
+- feat: fix _2 entity suffix conflicts and add fix-device command (#23)
+
+### Changed
+
+- feat: rename-entity and rename-device commands — cascade entity ID changes across HA config (#19)
+- feat: sync Z2M friendly name in rename-device (#22)
+
+### Fixed
+
+- docs: fix table wrapping and docs accuracy (#20)
+
 ## [0.2.0] - 2026-03-01
 
 ### Added
@@ -102,6 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nordstad/zigporter/compare/v0.2.0...v0.2.0
 [0.2.0]: https://github.com/nordstad/zigporter/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/nordstad/zigporter/compare/v0.1.5...v0.1.5
 [0.1.5]: https://github.com/nordstad/zigporter/compare/v0.1.4...v0.1.5
