@@ -11,7 +11,9 @@ import questionary
 from rich.console import Console
 from rich.table import Table
 
+from zigporter.config import load_z2m_config
 from zigporter.ha_client import HAClient, is_yaml_mode
+from zigporter.z2m_client import Z2MClient
 
 console = Console()
 
@@ -641,6 +643,19 @@ def _device_display_name(device: dict[str, Any]) -> str:
     return device.get("name_by_user") or device.get("name") or device["id"]
 
 
+def _ieee_from_ha_device(device: dict[str, Any]) -> str | None:
+    """Extract IEEE address from an HA device dict's identifiers list.
+
+    Looks for an ("mqtt", "zigbee2mqtt_0x...") identifier pair.
+    """
+    for pair in device.get("identifiers", []):
+        if len(pair) == 2 and pair[0] == "mqtt":
+            ident: str = pair[1].lower()
+            if ident.startswith("zigbee2mqtt_"):
+                return ident[len("zigbee2mqtt_") :]
+    return None
+
+
 async def find_device(
     ha_client: HAClient,
     name: str,
@@ -710,12 +725,22 @@ def _suggest_entity_id(entity: dict[str, Any], new_slug: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def display_device_plan(device_plan: DeviceRenamePlan) -> None:
+def display_device_plan(
+    device_plan: DeviceRenamePlan,
+    *,
+    z2m_friendly_name: str | None = None,
+) -> None:
     console.print(
         f"\n  Device [bold]{device_plan.old_device_name}[/bold]"
         f"  [dim]→[/dim]  "
         f"[bold cyan]{device_plan.new_device_name}[/bold cyan]\n"
     )
+    if z2m_friendly_name is not None:
+        console.print(
+            f"  [dim]Z2M:[/dim]  rename friendly name"
+            f"  [dim]{z2m_friendly_name!r}[/dim]"
+            f"  [dim]→[/dim]  [cyan]{device_plan.new_device_name!r}[/cyan]"
+        )
 
     # Entity renames table
     entity_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
@@ -836,7 +861,13 @@ def display_device_plan(device_plan: DeviceRenamePlan) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def execute_device_rename(ha_client: HAClient, device_plan: DeviceRenamePlan) -> None:
+async def execute_device_rename(
+    ha_client: HAClient,
+    device_plan: DeviceRenamePlan,
+    *,
+    z2m_client: Z2MClient | None = None,
+    z2m_friendly_name: str | None = None,
+) -> None:
     """Apply all changes from a device rename plan.
 
     Renames the device, all entities in the registry, then updates each affected
@@ -894,6 +925,14 @@ async def execute_device_rename(ha_client: HAClient, device_plan: DeviceRenamePl
             await ha_client.update_config_entry_options(item_id, config)
 
         console.print("[green]✓[/green]")
+
+    if z2m_client and z2m_friendly_name:
+        console.print("  Renaming device in Z2M...", end=" ")
+        try:
+            await z2m_client.rename_device(z2m_friendly_name, device_plan.new_device_name)
+            console.print("[green]✓[/green]")
+        except Exception as exc:
+            console.print(f"[yellow]⚠ skipped ({exc})[/yellow]")
 
 
 # ---------------------------------------------------------------------------
@@ -1032,8 +1071,22 @@ async def run_rename_device(
         failed_dashboard_paths=failed_dashboard_paths,
     )
 
+    # Optional Z2M sync — best-effort, skipped silently if Z2M is not configured
+    z2m_client: Z2MClient | None = None
+    z2m_friendly_name: str | None = None
+    ieee = _ieee_from_ha_device(device)
+    if ieee:
+        try:
+            z2m_url, mqtt_topic = load_z2m_config()
+            z2m_client = Z2MClient(ha_url, token, z2m_url, verify_ssl, mqtt_topic)
+            z2m_dev = await z2m_client.get_device_by_ieee(ieee)
+            if z2m_dev:
+                z2m_friendly_name = z2m_dev.get("friendly_name")
+        except Exception:
+            pass  # Z2M not configured or unreachable — skip silently
+
     # 6. Display plan
-    display_device_plan(device_plan)
+    display_device_plan(device_plan, z2m_friendly_name=z2m_friendly_name)
 
     # 7. Confirm and apply
     if not apply:
@@ -1051,7 +1104,12 @@ async def run_rename_device(
             return True
 
     console.print()
-    await execute_device_rename(ha_client, device_plan)
+    await execute_device_rename(
+        ha_client,
+        device_plan,
+        z2m_client=z2m_client,
+        z2m_friendly_name=z2m_friendly_name,
+    )
     console.print(
         f"\n[green]✓[/green] Renamed device [bold]{actual_name}[/bold]"
         f" → [bold cyan]{new_name}[/bold cyan]"
