@@ -33,6 +33,7 @@ build-backend = "uv_build"
 [dependency-groups]
 docs = [
     "zensical",
+    "mkdocstrings[python]",
 ]
 dev = [
     "pytest>=8",
