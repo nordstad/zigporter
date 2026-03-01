@@ -412,6 +412,7 @@ async def step_rename(
 
 
 _IEEE_PATTERN = re.compile(r"0x[0-9a-fA-F]{16}")
+_NUMERIC_SUFFIX_PAT = re.compile(r"^(.+)_\d+$")
 
 
 async def _wait_for_z2m_device_in_ha(
@@ -511,7 +512,23 @@ async def step_reconcile_entity_ids(device: ZHADevice, ha_client: HAClient) -> N
         else:
             renames.append((current_id, target_id))
 
-    if not renames and not conflicts:
+    # --- Second pass: numeric-suffix conflicts ---
+    # These arise when Z2M already has a friendly name but stale ZHA registry entries still
+    # occupy the original entity IDs, so HA appends _2/_3/etc. to the new Z2M entities.
+    suffix_resolvable: list[tuple[str, str]] = []  # (z2m_id_with_suffix, base_id)
+    for entry in z2m_entities:
+        current_id = entry["entity_id"]
+        if _is_ieee_entity(current_id):
+            continue
+        m = _NUMERIC_SUFFIX_PAT.match(current_id)
+        if not m:
+            continue
+        base_id = m.group(1)
+        stale = registry_by_id.get(base_id)
+        if stale and stale.get("device_id") != z2m_device_id:
+            suffix_resolvable.append((current_id, base_id))
+
+    if not renames and not conflicts and not suffix_resolvable:
         console.print("[green]✓ Entity IDs already use friendly names[/green]")
         return
 
@@ -535,35 +552,92 @@ async def step_reconcile_entity_ids(device: ZHADevice, ha_client: HAClient) -> N
 
     if not renames:
         console.print()
+    else:
+        console.print()
+
+        confirmed = await questionary.confirm(
+            "Apply entity ID renames?", default=True, style=_STYLE
+        ).unsafe_ask_async()
+        if not confirmed:
+            console.print("[yellow]Entity ID restore skipped.[/yellow]")
+        else:
+            # Re-fetch right before applying: HA may have auto-renamed entities when Z2M renamed
+            # the device.  Any IEEE-named entity that's already gone was handled by HA — skip.
+            refreshed = await ha_client.get_entity_registry()
+            still_ieee = {
+                e["entity_id"]
+                for e in refreshed
+                if e.get("device_id") == z2m_device_id and _is_ieee_entity(e["entity_id"])
+            }
+
+            for current_id, target_id in renames:
+                if current_id not in still_ieee:
+                    console.print(f"[green]✓[/green] {current_id} → (already renamed by HA)")
+                    continue
+                try:
+                    await ha_client.rename_entity_id(current_id, target_id)
+                    console.print(f"[green]✓[/green] {current_id} → {target_id}")
+                except Exception as exc:
+                    console.print(f"[yellow]Warning:[/yellow] Could not rename {current_id}: {exc}")
+
+    # --- Resolve numeric-suffix conflicts ---
+    if suffix_resolvable:
+        console.print(
+            "\n  [yellow]Z2M entities have a numeric suffix because stale ZHA entities still "
+            "occupy the original IDs.[/yellow]\n"
+            "  Deleting the stale entries restores original entity IDs and fixes your dashboards:\n"
+        )
+        for z2m_id, base_id in suffix_resolvable:
+            console.print(f"  [dim]{z2m_id}[/dim]")
+            console.print(
+                f"    → [bold]{base_id}[/bold]  [dim](stale ZHA entity will be deleted)[/dim]"
+            )
+        console.print()
+
+        confirmed = await questionary.confirm(
+            "Delete stale ZHA entities and restore original entity IDs?",
+            default=True,
+            style=_STYLE,
+        ).unsafe_ask_async()
+        if not confirmed:
+            console.print("[yellow]Suffix conflict resolution skipped.[/yellow]")
+        else:
+            for z2m_id, base_id in suffix_resolvable:
+                try:
+                    await ha_client.delete_entity(base_id)
+                except Exception as exc:
+                    console.print(
+                        f"[yellow]Warning:[/yellow] Could not delete stale {base_id}: {exc}"
+                    )
+                    continue
+                try:
+                    await ha_client.rename_entity_id(z2m_id, base_id)
+                    console.print(f"[green]✓[/green] {z2m_id} → {base_id}")
+                except Exception as exc:
+                    console.print(f"[yellow]Warning:[/yellow] Could not rename {z2m_id}: {exc}")
+
+
+async def _reload_z2m_integration(ha_client: HAClient, z2m_device_id: str) -> None:
+    """Reload the HA config entries that manage the Z2M device."""
+    registry = await ha_client.get_device_registry()
+    device_entry = next((d for d in registry if d["id"] == z2m_device_id), None)
+    if not device_entry:
+        console.print("[yellow]  Could not find Z2M device in HA registry.[/yellow]")
         return
 
-    console.print()
-
-    confirmed = await questionary.confirm(
-        "Apply entity ID renames?", default=True, style=_STYLE
-    ).unsafe_ask_async()
-    if not confirmed:
-        console.print("[yellow]Entity ID restore skipped.[/yellow]")
+    entry_ids: list[str] = device_entry.get("config_entries", [])
+    if not entry_ids:
+        console.print("[yellow]  No config entries found for Z2M device.[/yellow]")
         return
 
-    # Re-fetch right before applying: HA may have auto-renamed entities when Z2M renamed the
-    # device.  Any IEEE-named entity that's already gone was handled by HA — skip it silently.
-    refreshed = await ha_client.get_entity_registry()
-    still_ieee = {
-        e["entity_id"]
-        for e in refreshed
-        if e.get("device_id") == z2m_device_id and _is_ieee_entity(e["entity_id"])
-    }
-
-    for current_id, target_id in renames:
-        if current_id not in still_ieee:
-            console.print(f"[green]✓[/green] {current_id} → (already renamed by HA)")
-            continue
+    for entry_id in entry_ids:
         try:
-            await ha_client.rename_entity_id(current_id, target_id)
-            console.print(f"[green]✓[/green] {current_id} → {target_id}")
+            await ha_client.reload_config_entry(entry_id)
+            console.print(f"[green]✓[/green] Reloaded Z2M integration ({entry_id})")
         except Exception as exc:
-            console.print(f"[yellow]Warning:[/yellow] Could not rename {current_id}: {exc}")
+            console.print(
+                f"[yellow]Warning:[/yellow] Could not reload config entry {entry_id}: {exc}"
+            )
 
 
 async def step_validate(device: ZHADevice, ha_client: HAClient, retries: int = 10) -> bool:
@@ -666,6 +740,7 @@ async def step_validate(device: ZHADevice, ha_client: HAClient, retries: int = 1
             prompt,
             choices=[
                 questionary.Choice("Retry — poll again", value="retry"),
+                questionary.Choice("Reload Z2M integration in HA, then retry", value="reload"),
                 questionary.Choice(
                     "Accept — entities exist in HA, state will update soon", value="accept"
                 ),
@@ -674,7 +749,9 @@ async def step_validate(device: ZHADevice, ha_client: HAClient, retries: int = 1
             style=_STYLE,
         ).unsafe_ask_async()
 
-        if choice == "retry":
+        if choice in ("retry", "reload"):
+            if choice == "reload":
+                await _reload_z2m_integration(ha_client, z2m_device_id)
             continue
         return choice == "accept"
 

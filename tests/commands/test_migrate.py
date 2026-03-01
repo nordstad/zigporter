@@ -42,7 +42,9 @@ def sample_device() -> ZHADevice:
 def mock_ha_client():
     client = MagicMock()
     client.remove_zha_device = AsyncMock(return_value=None)
-    client.get_device_registry = AsyncMock(return_value=[])
+    client.get_device_registry = AsyncMock(
+        return_value=[{"id": "z2m-device-id", "config_entries": ["entry-abc"], "identifiers": []}]
+    )
     client.get_states = AsyncMock(
         return_value=[
             {
@@ -56,6 +58,8 @@ def mock_ha_client():
     client.update_device_area = AsyncMock(return_value=None)
     client.get_z2m_device_id = AsyncMock(return_value="z2m-device-id")
     client.rename_entity_id = AsyncMock(return_value=None)
+    client.delete_entity = AsyncMock(return_value=None)
+    client.reload_config_entry = AsyncMock(return_value=None)
     client.get_entity_registry = AsyncMock(
         return_value=[
             {"entity_id": "switch.kitchen_plug", "device_id": "z2m-device-id", "disabled_by": None}
@@ -269,6 +273,26 @@ async def test_step_validate_unknown_state_prompts_with_context(sample_device, m
     # The prompt should reflect "haven't reported state yet" context
     call_args = mock_select.call_args
     assert "reported" in call_args[0][0] or "reported" in call_args[1].get("message", "")
+    assert result is True
+
+
+async def test_step_validate_reload_triggers_config_entry_reload(sample_device, mock_ha_client):
+    """Selecting 'reload' reloads Z2M config entries then polls again until entities are online."""
+    mock_ha_client.get_states = AsyncMock(
+        side_effect=[
+            # First poll: entity has unknown state → prompt appears
+            [{"entity_id": "switch.kitchen_plug", "state": "unknown", "attributes": {}}],
+            # After reload, second poll: entity is online
+            [{"entity_id": "switch.kitchen_plug", "state": "on", "attributes": {}}],
+        ]
+    )
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="reload")
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await step_validate(sample_device, mock_ha_client, retries=1)
+
+    mock_ha_client.reload_config_entry.assert_called_once_with("entry-abc")
     assert result is True
 
 
@@ -619,6 +643,59 @@ async def test_step_reconcile_no_zha_match(mock_ha_client):
         await step_reconcile_entity_ids(_KONTOR_DEVICE, mock_ha_client)
         mock_confirm.assert_not_called()
 
+    mock_ha_client.rename_entity_id.assert_not_called()
+
+
+async def test_step_reconcile_resolves_suffix_conflicts(mock_ha_client):
+    """When Z2M entity has _2 suffix and a stale ZHA entity holds the base name, fix it."""
+    mock_ha_client.get_entity_registry = AsyncMock(
+        return_value=[
+            {
+                "entity_id": "sensor.kontor_temp_sensor_temperature_2",
+                "device_id": "z2m-device-id",
+                "disabled_by": None,
+            },
+            {
+                "entity_id": "sensor.kontor_temp_sensor_temperature",
+                "device_id": "stale-zha-device-id",
+                "disabled_by": None,
+            },
+        ]
+    )
+
+    with patch("questionary.confirm") as mock_confirm:
+        mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=True)
+        await step_reconcile_entity_ids(_KONTOR_DEVICE, mock_ha_client)
+
+    mock_ha_client.delete_entity.assert_called_once_with("sensor.kontor_temp_sensor_temperature")
+    mock_ha_client.rename_entity_id.assert_called_once_with(
+        "sensor.kontor_temp_sensor_temperature_2",
+        "sensor.kontor_temp_sensor_temperature",
+    )
+
+
+async def test_step_reconcile_suffix_conflict_skips_on_cancel(mock_ha_client):
+    """When user declines suffix conflict resolution, no entities are deleted or renamed."""
+    mock_ha_client.get_entity_registry = AsyncMock(
+        return_value=[
+            {
+                "entity_id": "sensor.kontor_temp_sensor_temperature_2",
+                "device_id": "z2m-device-id",
+                "disabled_by": None,
+            },
+            {
+                "entity_id": "sensor.kontor_temp_sensor_temperature",
+                "device_id": "stale-zha-device-id",
+                "disabled_by": None,
+            },
+        ]
+    )
+
+    with patch("questionary.confirm") as mock_confirm:
+        mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=False)
+        await step_reconcile_entity_ids(_KONTOR_DEVICE, mock_ha_client)
+
+    mock_ha_client.delete_entity.assert_not_called()
     mock_ha_client.rename_entity_id.assert_not_called()
 
 
