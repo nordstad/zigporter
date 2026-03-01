@@ -56,8 +56,9 @@ def _write_env(
         f"HA_URL={ha_url}",
         f"HA_TOKEN={ha_token}",
         f"HA_VERIFY_SSL={'true' if verify_ssl else 'false'}",
-        f"Z2M_URL={z2m_url}",
     ]
+    if z2m_url:
+        lines.append(f"Z2M_URL={z2m_url}")
     if mqtt_topic != "zigbee2mqtt":
         lines.append(f"Z2M_MQTT_TOPIC={mqtt_topic}")
     path.write_text("\n".join(lines) + "\n")
@@ -89,15 +90,20 @@ async def _test_connections(ha_url: str, ha_token: str, verify_ssl: bool, z2m_ur
     except Exception as exc:
         console.print(f"  [red]✗[/red]  HA not reachable: {exc}")
 
-    try:
-        async with httpx.AsyncClient(headers=headers, verify=ssl_ctx, timeout=10) as client:
-            resp = await client.get(f"{z2m_url}/api/devices")
-            if resp.status_code < 500:
-                console.print("  [green]✓[/green]  Z2M reachable")
-            else:
-                console.print(f"  [red]✗[/red]  Z2M returned {resp.status_code} — check Z2M_URL")
-    except Exception as exc:
-        console.print(f"  [red]✗[/red]  Z2M not reachable: {exc}")
+    if z2m_url:
+        try:
+            async with httpx.AsyncClient(headers=headers, verify=ssl_ctx, timeout=10) as client:
+                resp = await client.get(f"{z2m_url}/api/devices")
+                if resp.status_code < 500:
+                    console.print("  [green]✓[/green]  Z2M reachable")
+                else:
+                    console.print(
+                        f"  [red]✗[/red]  Z2M returned {resp.status_code} — check Z2M_URL"
+                    )
+        except Exception as exc:
+            console.print(f"  [red]✗[/red]  Z2M not reachable: {exc}")
+    else:
+        console.print("  [dim]–[/dim]  Z2M skipped (not configured)")
 
 
 async def run_setup() -> bool:
@@ -115,7 +121,8 @@ async def run_setup() -> bool:
             "  [bold]HA token[/bold]:   "
             "Settings → People → your user → Long-Lived Access Tokens\n"
             "  [bold]Z2M URL[/bold]:    "
-            "Open the Z2M add-on in HA and copy the URL from your browser\n"
+            "Open the Z2M add-on in HA and copy the URL from your browser "
+            "(only needed for migrate and list-z2m)\n"
         )
 
     # HA URL
@@ -156,28 +163,41 @@ async def run_setup() -> bool:
     if verify_ssl is None:
         return False
 
-    # Z2M URL
-    z2m_url = await questionary.text(
-        "Zigbee2MQTT ingress URL",
-        default=current.get("Z2M_URL", ""),
-        validate=lambda v: (
-            True if v.startswith("http") else "Enter a URL starting with http:// or https://"
-        ),
+    # Z2M opt-in
+    use_z2m = await questionary.confirm(
+        "Set up Zigbee2MQTT? (required for migrate and list-z2m)",
+        default=bool(current.get("Z2M_URL")),
         style=_STYLE,
     ).unsafe_ask_async()
-    if z2m_url is None:
+    if use_z2m is None:
         return False
-    z2m_url = z2m_url.rstrip("/")
 
-    # MQTT topic (optional, only show if non-default already set)
-    current_topic = current.get("Z2M_MQTT_TOPIC", "zigbee2mqtt")
-    mqtt_topic = await questionary.text(
-        "MQTT base topic",
-        default=current_topic,
-        style=_STYLE,
-    ).unsafe_ask_async()
-    if mqtt_topic is None:
-        return False
+    if use_z2m:
+        # Z2M URL
+        z2m_url = await questionary.text(
+            "Zigbee2MQTT ingress URL",
+            default=current.get("Z2M_URL", ""),
+            validate=lambda v: (
+                True if v.startswith("http") else "Enter a URL starting with http:// or https://"
+            ),
+            style=_STYLE,
+        ).unsafe_ask_async()
+        if z2m_url is None:
+            return False
+        z2m_url = z2m_url.rstrip("/")
+
+        # MQTT topic (optional, only show if non-default already set)
+        current_topic = current.get("Z2M_MQTT_TOPIC", "zigbee2mqtt")
+        mqtt_topic = await questionary.text(
+            "MQTT base topic",
+            default=current_topic,
+            style=_STYLE,
+        ).unsafe_ask_async()
+        if mqtt_topic is None:
+            return False
+    else:
+        z2m_url = ""
+        mqtt_topic = "zigbee2mqtt"
 
     # Save config
     _write_env(env_path, ha_url, ha_token, verify_ssl, z2m_url, mqtt_topic)

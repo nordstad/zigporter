@@ -111,7 +111,8 @@ def _get_z2m_config_optional() -> tuple[str, str]:
 def setup() -> None:
     """Create or update the configuration file in the zigporter config directory.
 
-    Prompts for Home Assistant URL, token, and Zigbee2MQTT ingress URL, then
+    Prompts for Home Assistant URL and token (required), and optionally for
+    Zigbee2MQTT ingress URL (needed only for migrate and list-z2m), then
     writes them to the user config directory and tests the connection.
     """
     if not setup_command():

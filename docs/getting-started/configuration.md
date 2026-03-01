@@ -45,7 +45,7 @@ Z2M_URL=http://homeassistant.local:8123/api/hassio_ingress/abc123_zigbee2mqtt
 | `HA_URL` | Yes | Home Assistant base URL, e.g. `https://homeassistant.local` |
 | `HA_TOKEN` | Yes | Long-Lived Access Token from your HA profile |
 | `HA_VERIFY_SSL` | No | `true` (default) or `false` for self-signed certificates |
-| `Z2M_URL` | Yes | Zigbee2MQTT ingress URL, e.g. `https://homeassistant.local/abc123_zigbee2mqtt` |
+| `Z2M_URL` | For `migrate` / `list-z2m` | Zigbee2MQTT ingress URL, e.g. `https://homeassistant.local/abc123_zigbee2mqtt` |
 | `Z2M_MQTT_TOPIC` | No | Z2M base MQTT topic (default: `zigbee2mqtt`) |
 
 ## Getting a Long-Lived Access Token

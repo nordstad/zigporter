@@ -66,7 +66,7 @@ You can also set environment variables directly or create the file manually:
 | `HA_URL` | Yes | Home Assistant base URL |
 | `HA_TOKEN` | Yes | [Long-Lived Access Token](https://www.home-assistant.io/docs/authentication/#your-account-profile) |
 | `HA_VERIFY_SSL` | No | `true` (default) or `false` for self-signed certificates |
-| `Z2M_URL` | Yes | Zigbee2MQTT ingress URL |
+| `Z2M_URL` | For `migrate` / `list-z2m` | Zigbee2MQTT ingress URL |
 | `Z2M_MQTT_TOPIC` | No | Z2M base MQTT topic (default: `zigbee2mqtt`) |
 
 See [Configuration](https://nordstad.github.io/zigporter/getting-started/configuration/) for full details.
