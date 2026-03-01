@@ -72,12 +72,31 @@ zigporter rename-device "Living Room 1" "Living Room Ceiling" --apply
 
 ### What gets updated
 
-1. Z2M device friendly name (via the Z2M rename API)
-2. All entity IDs that follow the device name slug pattern
-3. All references to those entities (same scope as `rename-entity`)
+1. **HA device name** — updated in the device registry
+2. **Entity IDs** — all entities that follow the device name slug pattern
+3. **References** — same scope as `rename-entity` (automations, scripts, scenes, dashboards)
 
-For entities whose IDs don't follow the device name pattern, the command prompts you to
+For entities whose IDs don't follow the device name pattern the command prompts you to
 provide the new entity ID manually rather than guessing.
+
+### Optional Zigbee2MQTT sync
+
+If `Z2M_URL` is configured and the device is a Zigbee2MQTT device, the command asks a
+separate question after confirming the HA changes:
+
+```
+? Also rename in Z2M? (current friendly name: 'Old Device Name') (Y/n)
+```
+
+Answering **Y** renames the Z2M friendly name to match the new HA device name.
+Answering **N** leaves Z2M unchanged — useful when you intentionally use different naming
+schemes in Z2M and HA.
+
+The Z2M step is skipped silently when:
+
+- `Z2M_URL` is not set
+- The device has no Zigbee2MQTT identifier in HA
+- `--apply` is used (non-interactive — cannot prompt)
 
 ### Limitations
 

@@ -66,7 +66,7 @@ You can also set environment variables directly or create the file manually:
 | `HA_URL` | Yes | Home Assistant base URL |
 | `HA_TOKEN` | Yes | [Long-Lived Access Token](https://www.home-assistant.io/docs/authentication/#your-account-profile) |
 | `HA_VERIFY_SSL` | No | `true` (default) or `false` for self-signed certificates |
-| `Z2M_URL` | For `migrate` / `list-z2m` | Zigbee2MQTT ingress URL |
+| `Z2M_URL` | For `migrate` / `list-z2m` / `rename-device` | Zigbee2MQTT ingress URL |
 | `Z2M_MQTT_TOPIC` | No | Z2M base MQTT topic (default: `zigbee2mqtt`) |
 
 See [Configuration](https://nordstad.github.io/zigporter/getting-started/configuration/) for full details.
@@ -132,6 +132,10 @@ zigporter rename-device "Living Room 1" "Living Room Ceiling"
 # Apply the rename
 zigporter rename-device "Living Room 1" "Living Room Ceiling" --apply
 ```
+
+If `Z2M_URL` is configured and the device is managed by Zigbee2MQTT, the command also
+offers to rename the Z2M friendly name in a separate prompt — so you stay in control of
+whether HA and Z2M names are kept in sync.
 
 ## Development
 
