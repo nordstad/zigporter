@@ -6,7 +6,7 @@ The wizard migrates one device at a time. Run it with:
 zigporter migrate [ZHA_EXPORT]
 ```
 
-`ZHA_EXPORT` defaults to the most recent `zha-export-*.json` in the current directory.
+`ZHA_EXPORT` defaults to `~/.config/zigporter/zha-export.json` (auto-created by `zigporter export`).
 Check progress without entering the wizard:
 
 ```bash

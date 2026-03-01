@@ -8,19 +8,9 @@ zigporter setup
 
 Prompts for all values and saves to `~/.config/zigporter/.env`.
 
-## Option 2 — Manual config file
+## Option 2 — Environment variables
 
-Create `~/.config/zigporter/.env` using `.env.example` as a template:
-
-```bash
-mkdir -p ~/.config/zigporter
-cp .env.example ~/.config/zigporter/.env
-# edit the file with your values
-```
-
-## Option 3 — Environment variables
-
-Export directly in your shell or add to `~/.zshenv` / `~/.bashrc`:
+Export directly in your shell, add to `~/.zshenv` / `~/.bashrc`, or inject via CI/CD secrets:
 
 ```bash
 export HA_URL=https://your-ha-instance.local
@@ -28,7 +18,25 @@ export HA_TOKEN=your_token
 export Z2M_URL=https://your-ha-instance.local/abc123_zigbee2mqtt
 ```
 
-Environment variables always override file values.
+Shell/OS environment variables always override any `.env` file value.
+
+## Option 3 — CWD `.env` (dev/project override)
+
+A `.env` in your current working directory is loaded first and takes precedence over the
+global `~/.config/zigporter/.env`. Useful when running `uv run zigporter` from a project
+directory during development.
+
+```bash
+# .env (in your project root)
+HA_URL=http://homeassistant.local:8123
+HA_TOKEN=your_dev_token
+Z2M_URL=http://homeassistant.local:8123/api/hassio_ingress/abc123_zigbee2mqtt
+```
+
+> **Load order (high → low precedence):**
+> 1. Shell/OS environment variables — always win
+> 2. CWD `.env` — loaded if present (project/dev override)
+> 3. `~/.config/zigporter/.env` — fallback (where `zigporter setup` saves)
 
 ## Variables
 
@@ -60,6 +68,3 @@ HA_VERIFY_SSL=true
 Z2M_URL=https://homeassistant.local/45df7312_zigbee2mqtt
 Z2M_MQTT_TOPIC=zigbee2mqtt
 ```
-
-> **Note for `uv run` development:** a `.env` in the current working directory is also loaded
-> automatically and takes precedence over the global config file.
