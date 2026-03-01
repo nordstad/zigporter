@@ -1065,7 +1065,7 @@ async def run_rename_device(
     z2m_client: Z2MClient | None = None
     z2m_friendly_name: str | None = None
     ieee = _ieee_from_ha_device(device)
-    if ieee:
+    if ieee and not apply:
         try:
             z2m_url, mqtt_topic = load_z2m_config()
             z2m_client = Z2MClient(ha_url, token, z2m_url, verify_ssl, mqtt_topic)
@@ -1103,10 +1103,6 @@ async def run_rename_device(
             if not rename_z2m:
                 z2m_client = None
                 z2m_friendly_name = None
-    else:
-        # --apply mode: skip Z2M (cannot prompt)
-        z2m_client = None
-        z2m_friendly_name = None
 
     console.print()
     await execute_device_rename(

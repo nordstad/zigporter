@@ -2425,20 +2425,14 @@ async def test_run_rename_device_z2m_user_declines(mocker):
 
 
 async def test_run_rename_device_z2m_apply_mode_skips_z2m(mocker):
-    """--apply mode: Z2M is always skipped (cannot prompt)."""
+    """--apply mode: Z2M lookup is never attempted (no network call, no prompt)."""
     from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
 
     device = _make_z2m_test_device("0x001234567890abcd")
     exec_mock = _make_z2m_run_mocks(mocker, device)
 
-    mock_z2m_instance = MagicMock()
-    mock_z2m_instance.get_device_by_ieee = AsyncMock(
-        return_value={"friendly_name": "KitchenPlug", "ieee_address": "0x001234567890abcd"}
-    )
-    mocker.patch("zigporter.commands.rename.Z2MClient", return_value=mock_z2m_instance)
-    mocker.patch(
-        "zigporter.commands.rename.load_z2m_config", return_value=("http://z2m.test", "zigbee2mqtt")
-    )
+    mock_z2m_cls = mocker.patch("zigporter.commands.rename.Z2MClient")
+    mock_load_z2m = mocker.patch("zigporter.commands.rename.load_z2m_config")
 
     result = await run_rename_device(
         "https://ha.test",
@@ -2450,6 +2444,8 @@ async def test_run_rename_device_z2m_apply_mode_skips_z2m(mocker):
     )
 
     assert result is True
+    mock_load_z2m.assert_not_called()
+    mock_z2m_cls.assert_not_called()
     _, kwargs = exec_mock.call_args
     assert kwargs["z2m_client"] is None
     assert kwargs["z2m_friendly_name"] is None

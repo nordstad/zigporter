@@ -121,3 +121,26 @@ Total: 6 occurrences across 3 locations
 ```
 
 You are then prompted to apply or cancel before any changes are written.
+
+---
+
+## Troubleshooting
+
+### Z2M device shows correct name but HA entities are Unknown / no activity
+
+**Symptom:** The Z2M friendly name matches the HA device name and Z2M is receiving sensor
+values, but HA shows `Unknown` state and no recent activity for the device's entities.
+
+**Cause:** When a Z2M device is renamed, Z2M updates the MQTT state topic but does not always
+immediately republish the MQTT discovery messages that HA uses to subscribe to the new topic.
+HA keeps listening on the old topic and receives nothing.
+
+**Fix:** Restart the Zigbee2MQTT add-on:
+
+> **Settings → Add-ons → Zigbee2MQTT → Restart**
+
+On restart Z2M republishes all MQTT discovery configs with the current friendly names and HA
+re-subscribes to the correct topics. Data starts flowing immediately after the bridge reconnects.
+
+Alternatively, open the device in the Z2M frontend → **Dev console** tab → click **Interview**
+to force the device to re-report its state without a full restart.
