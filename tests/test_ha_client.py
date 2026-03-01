@@ -566,6 +566,33 @@ async def test_get_lovelace_config_rest_fallback_with_url_path(client, mocker):
     assert result == lv_config
 
 
+async def test_delete_entity(client, mocker):
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.delete_entity("switch.plug")
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "config/entity_registry/remove"
+    assert sent["entity_id"] == "switch.plug"
+
+
+async def test_remove_device(client, mocker):
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.remove_device("dev-abc")
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "config/device_registry/remove"
+    assert sent["device_id"] == "dev-abc"
+
+
+async def test_reload_config_entry(client, mocker):
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.reload_config_entry("entry-123")
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "config_entries/reload"
+    assert sent["entry_id"] == "entry-123"
+
+
 async def test_get_z2m_device_id_skips_non_mqtt_platform(client, mocker):
     """Line 229: non-mqtt platform identifiers are skipped."""
     registry = [

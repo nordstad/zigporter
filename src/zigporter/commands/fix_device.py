@@ -246,13 +246,14 @@ async def run_fix_device(ha_url: str, token: str, verify_ssl: bool) -> None:
     if len(pairs) == 1:
         pair = pairs[0]
     else:
-        choices = [questionary.Choice(f"{p.name}  [dim]{p.ieee}[/dim]", value=p) for p in pairs]
-        pair = await questionary.select(
-            f"Found {len(pairs)} devices with stale ZHA entries. Which would you like to fix?",
-            choices=choices,
-            style=_STYLE,
-        ).unsafe_ask_async()
-        if pair is None:
+        choices = [questionary.Choice(f"{p.name}  ({p.ieee})", value=p) for p in pairs]
+        try:
+            pair = await questionary.select(
+                f"Found {len(pairs)} devices with stale ZHA entries. Which would you like to fix?",
+                choices=choices,
+                style=_STYLE,
+            ).unsafe_ask_async()
+        except KeyboardInterrupt:
             return
 
     _show_plan(pair)
