@@ -72,12 +72,31 @@ zigporter rename-device "Living Room 1" "Living Room Ceiling" --apply
 
 ### What gets updated
 
-1. Z2M device friendly name (via the Z2M rename API)
-2. All entity IDs that follow the device name slug pattern
-3. All references to those entities (same scope as `rename-entity`)
+1. **HA device name** — updated in the device registry
+2. **Entity IDs** — all entities that follow the device name slug pattern
+3. **References** — same scope as `rename-entity` (automations, scripts, scenes, dashboards)
 
-For entities whose IDs don't follow the device name pattern, the command prompts you to
+For entities whose IDs don't follow the device name pattern the command prompts you to
 provide the new entity ID manually rather than guessing.
+
+### Optional Zigbee2MQTT sync
+
+If `Z2M_URL` is configured and the device is a Zigbee2MQTT device, the command asks a
+separate question after confirming the HA changes:
+
+```
+? Also rename in Z2M? (current friendly name: 'Old Device Name') (Y/n)
+```
+
+Answering **Y** renames the Z2M friendly name to match the new HA device name.
+Answering **N** leaves Z2M unchanged — useful when you intentionally use different naming
+schemes in Z2M and HA.
+
+The Z2M step is skipped silently when:
+
+- `Z2M_URL` is not set
+- The device has no Zigbee2MQTT identifier in HA
+- `--apply` is used (non-interactive — cannot prompt)
 
 ### Limitations
 
@@ -102,3 +121,26 @@ Total: 6 occurrences across 3 locations
 ```
 
 You are then prompted to apply or cancel before any changes are written.
+
+---
+
+## Troubleshooting
+
+### Z2M device shows correct name but HA entities are Unknown / no activity
+
+**Symptom:** The Z2M friendly name matches the HA device name and Z2M is receiving sensor
+values, but HA shows `Unknown` state and no recent activity for the device's entities.
+
+**Cause:** When a Z2M device is renamed, Z2M updates the MQTT state topic but does not always
+immediately republish the MQTT discovery messages that HA uses to subscribe to the new topic.
+HA keeps listening on the old topic and receives nothing.
+
+**Fix:** Restart the Zigbee2MQTT add-on:
+
+> **Settings → Add-ons → Zigbee2MQTT → Restart**
+
+On restart Z2M republishes all MQTT discovery configs with the current friendly names and HA
+re-subscribes to the correct topics. Data starts flowing immediately after the bridge reconnects.
+
+Alternatively, open the device in the Z2M frontend → **Dev console** tab → click **Interview**
+to force the device to re-report its state without a full restart.
