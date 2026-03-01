@@ -406,6 +406,29 @@ async def test_get_config_entries_returns_empty_when_none(client, mocker):
     assert result == []
 
 
+async def test_get_z2m_config_entry_id_found(client, mocker):
+    """Returns entry_id when a matching mqtt/zigbee2mqtt entry exists."""
+    entries = [
+        {"entry_id": "other-1", "domain": "zha", "title": "Zigbee Home Automation"},
+        {"entry_id": "z2m-1", "domain": "mqtt", "title": "Zigbee2MQTT"},
+    ]
+    mock_ws = _make_ws(mocker, entries)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_z2m_config_entry_id()
+    assert result == "z2m-1"
+
+
+async def test_get_z2m_config_entry_id_not_found(client, mocker):
+    """Returns None when no matching entry exists."""
+    entries = [
+        {"entry_id": "other-1", "domain": "zha", "title": "Zigbee Home Automation"},
+    ]
+    mock_ws = _make_ws(mocker, entries)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_z2m_config_entry_id()
+    assert result is None
+
+
 async def test_update_config_entry_options(client, mocker):
     """Lines 172-180: update_config_entry_options sends correct WS command."""
     mock_ws = _make_ws(mocker, None)

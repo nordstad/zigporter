@@ -314,6 +314,18 @@ class HAClient:
         """Reload a config entry by its ID."""
         await self._ws_command({"type": "config_entries/reload", "entry_id": entry_id})
 
+    async def get_z2m_config_entry_id(self) -> str | None:
+        """Find the config entry ID for the Zigbee2MQTT integration.
+
+        Looks for an entry with domain 'mqtt' whose title contains 'zigbee2mqtt'
+        (case-insensitive). Returns the entry_id, or None if not found.
+        """
+        entries = await self.get_config_entries()
+        for entry in entries:
+            if entry.get("domain") == "mqtt" and "zigbee2mqtt" in entry.get("title", "").lower():
+                return entry.get("entry_id")
+        return None
+
     async def save_lovelace_config(
         self, config: dict[str, Any], url_path: str | None = None
     ) -> None:

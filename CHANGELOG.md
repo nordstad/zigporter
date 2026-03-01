@@ -7,21 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-
-## [0.2.0] - 2026-03-01
-
-### Added
-
-- feat: fix _2 entity suffix conflicts and add fix-device command (#23)
-
-### Changed
-
-- feat: rename-entity and rename-device commands — cascade entity ID changes across HA config (#19)
-- feat: sync Z2M friendly name in rename-device (#22)
+## [0.2.1] - 2026-03-01
 
 ### Fixed
 
-- docs: fix table wrapping and docs accuracy (#20)
+- Reload the Zigbee2MQTT integration after `rename-device` so HA re-subscribes to the
+  new MQTT topic, fixing entities showing as Unknown after a rename (#24)
 
 ## [0.2.0] - 2026-03-01
 
@@ -117,8 +108,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump codecov/codecov-action from 4 to 5 (#3)
 - Bump actions/github-script from 7 to 8 (#2)
 
-[Unreleased]: https://github.com/nordstad/zigporter/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/nordstad/zigporter/compare/v0.2.0...v0.2.0
+[Unreleased]: https://github.com/nordstad/zigporter/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/nordstad/zigporter/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/nordstad/zigporter/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/nordstad/zigporter/compare/v0.1.5...v0.1.5
 [0.1.5]: https://github.com/nordstad/zigporter/compare/v0.1.4...v0.1.5

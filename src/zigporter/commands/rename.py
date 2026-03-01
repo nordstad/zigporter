@@ -920,9 +920,20 @@ async def execute_device_rename(
         console.print("  Renaming device in Z2M...", end=" ")
         try:
             await z2m_client.rename_device(z2m_friendly_name, device_plan.new_device_name)
-            console.print("[green]✓[/green]")
         except Exception as exc:
             console.print(f"[yellow]⚠ skipped ({exc})[/yellow]")
+        else:
+            console.print("[green]✓[/green]")
+            console.print("  Reloading Zigbee2MQTT integration in HA...", end=" ")
+            try:
+                entry_id = await ha_client.get_z2m_config_entry_id()
+                if entry_id:
+                    await ha_client.reload_config_entry(entry_id)
+                    console.print("[green]✓[/green]")
+                else:
+                    console.print("[yellow]⚠ skipped (Z2M config entry not found)[/yellow]")
+            except Exception as exc:
+                console.print(f"[yellow]⚠ skipped ({exc})[/yellow]")
 
 
 # ---------------------------------------------------------------------------

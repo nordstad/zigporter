@@ -895,6 +895,8 @@ def mock_device_exec_client():
     client.update_script = AsyncMock(return_value=None)
     client.update_scene = AsyncMock(return_value=None)
     client.save_lovelace_config = AsyncMock(return_value=None)
+    client.get_z2m_config_entry_id = AsyncMock(return_value="z2m-entry-1")
+    client.reload_config_entry = AsyncMock(return_value=None)
     return client
 
 
@@ -2304,6 +2306,108 @@ async def test_execute_device_rename_no_z2m_params_skips(mock_device_exec_client
         mock_device_exec_client, plan, z2m_client=mock_z2m, z2m_friendly_name=None
     )
     mock_z2m.rename_device.assert_not_called()
+
+
+async def test_execute_device_rename_reloads_z2m_integration_after_rename(mock_device_exec_client):
+    """After a successful Z2M rename, the Z2M config entry is reloaded in HA."""
+    from zigporter.commands.rename import DeviceRenamePlan, RenameLocation, RenamePlan  # noqa: PLC0415
+    from zigporter.commands.rename import execute_device_rename  # noqa: PLC0415
+
+    mock_z2m = MagicMock()
+    mock_z2m.rename_device = AsyncMock(return_value=None)
+
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Window Left Plug",
+        plans=[
+            RenamePlan(
+                old_entity_id="switch.kitchen_plug",
+                new_entity_id="switch.window_left_plug",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="switch.kitchen_plug",
+                        occurrences=1,
+                    )
+                ],
+            )
+        ],
+    )
+    await execute_device_rename(
+        mock_device_exec_client, plan, z2m_client=mock_z2m, z2m_friendly_name="KitchenPlug"
+    )
+    mock_device_exec_client.get_z2m_config_entry_id.assert_called_once()
+    mock_device_exec_client.reload_config_entry.assert_called_once_with("z2m-entry-1")
+
+
+async def test_execute_device_rename_reload_skipped_when_entry_not_found(mock_device_exec_client):
+    """When get_z2m_config_entry_id returns None, reload is silently skipped."""
+    from zigporter.commands.rename import DeviceRenamePlan, RenameLocation, RenamePlan  # noqa: PLC0415
+    from zigporter.commands.rename import execute_device_rename  # noqa: PLC0415
+
+    mock_device_exec_client.get_z2m_config_entry_id = AsyncMock(return_value=None)
+    mock_z2m = MagicMock()
+    mock_z2m.rename_device = AsyncMock(return_value=None)
+
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Window Left Plug",
+        plans=[
+            RenamePlan(
+                old_entity_id="switch.kitchen_plug",
+                new_entity_id="switch.window_left_plug",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="switch.kitchen_plug",
+                        occurrences=1,
+                    )
+                ],
+            )
+        ],
+    )
+    await execute_device_rename(
+        mock_device_exec_client, plan, z2m_client=mock_z2m, z2m_friendly_name="KitchenPlug"
+    )
+    mock_device_exec_client.reload_config_entry.assert_not_called()
+
+
+async def test_execute_device_rename_reload_skipped_on_z2m_failure(mock_device_exec_client):
+    """When the Z2M rename fails, the HA integration reload is not attempted."""
+    from zigporter.commands.rename import DeviceRenamePlan, RenameLocation, RenamePlan  # noqa: PLC0415
+    from zigporter.commands.rename import execute_device_rename  # noqa: PLC0415
+
+    mock_z2m = MagicMock()
+    mock_z2m.rename_device = AsyncMock(side_effect=RuntimeError("Z2M unreachable"))
+
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Window Left Plug",
+        plans=[
+            RenamePlan(
+                old_entity_id="switch.kitchen_plug",
+                new_entity_id="switch.window_left_plug",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="switch.kitchen_plug",
+                        occurrences=1,
+                    )
+                ],
+            )
+        ],
+    )
+    await execute_device_rename(
+        mock_device_exec_client, plan, z2m_client=mock_z2m, z2m_friendly_name="KitchenPlug"
+    )
+    mock_device_exec_client.get_z2m_config_entry_id.assert_not_called()
+    mock_device_exec_client.reload_config_entry.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
