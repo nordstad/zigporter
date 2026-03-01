@@ -1,7 +1,7 @@
 [project]
 name = "zigporter"
-version = "0.1.5"
-description = "CLI tool to migrate Zigbee devices from ZHA to Zigbee2MQTT in Home Assistant"
+version = "0.2.0"
+description = "CLI toolkit for Zigbee device management in Home Assistant: migrate from ZHA to Zigbee2MQTT, rename entities, and fix stale registry entries"
 readme = "README.md"
 authors = [
     { name = "Even Nordstad", email = "even.nordstad@gmail.com" }
@@ -21,7 +21,9 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/nordstad/zigporter"
 Repository = "https://github.com/nordstad/zigporter"
-Issues = "https://github.com/nordstad/zigporter/issues"
+Documentation = "https://github.com/nordstad/zigporter#readme"
+"Bug Tracker" = "https://github.com/nordstad/zigporter/issues"
+Changelog = "https://github.com/nordstad/zigporter/blob/main/CHANGELOG.md"
 
 [project.scripts]
 zigporter = "zigporter.main:app"

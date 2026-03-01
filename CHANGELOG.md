@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-01
 
+### Added
+
+- `rename-entity` and `rename-device` commands: cascade entity ID changes across HA config files, dashboards, and automations (#19)
+- `fix-device` command: post-migration cleanup for stale ZHA registry entries — renames suffixed entities (e.g. `sensor.light_2`) back to their originals (#23)
+- `rename-device` now syncs the Z2M friendly name in addition to updating HA entity IDs (#22)
 
 ## [0.1.5] - 2026-02-27
 
@@ -95,7 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump codecov/codecov-action from 4 to 5 (#3)
 - Bump actions/github-script from 7 to 8 (#2)
 
-[Unreleased]: https://github.com/nordstad/zigporter/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/nordstad/zigporter/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nordstad/zigporter/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/nordstad/zigporter/compare/v0.1.5...v0.1.5
 [0.1.5]: https://github.com/nordstad/zigporter/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/nordstad/zigporter/compare/v0.1.4...v0.1.4
