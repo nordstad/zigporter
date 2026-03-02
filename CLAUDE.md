@@ -41,7 +41,7 @@ uv run ruff format .
 
 The codebase follows a layered architecture:
 
-```
+```text
 CLI Layer       main.py (Typer app, registers commands)
     ↓
 Command Layer   commands/{check,export,fix_device,inspect,list_z2m,migrate,rename,setup}.py
@@ -52,6 +52,7 @@ Data Layer      models.py (Pydantic), migration_state.py (persistent JSON)
 ```
 
 **API communication:**
+
 - `HAClient` uses WebSocket for ZHA device registry queries (HA 2025+ dropped the REST ZHA endpoint) and REST for entity states.
 - `Z2MClient` uses a three-tier auth fallback: (1) Bearer token directly on `Z2M_URL`, (2) ingress session cookie via `/api/hassio/ingress/session`, (3) HA-native fallback using `HAClient.call_service()` for `mqtt.publish` when Supervisor is unavailable.
 
@@ -95,6 +96,31 @@ Z2M_MQTT_TOPIC=zigbee2mqtt  # Default; change if customised
 - When adding async methods to `HAClient`, update the `mock_ha_client` fixture in `tests/commands/test_migrate.py` with `AsyncMock` for each new method.
 - Scope `ruff format` to changed files only (`uv run ruff format <file>`) to avoid noisy diffs from pre-existing formatting drift in untouched files.
 - **`_2`/`_3` entity suffix conflicts:** HA appends numeric suffixes to new Z2M entity IDs when stale ZHA registry entries still occupy the original IDs. Step 5 of the migrate wizard detects and resolves this automatically. For devices that were already migrated before this fix, use `zigporter fix-device` to clean up stale entries and rename suffixed entities back to their originals.
+- **Helper / Group config entries:** HA Helper config entries (groups, template helpers, etc.) store entity ID references in their `options` dict, not in automations/scenes/dashboards. `rename-entity` scans these via `HAClient.get_config_entries()` and patches them via `HAClient.update_config_entry_options()`. They appear as "helper" rows in the rename plan. This mirrors the `build_rename_plan_from_snapshot` logic used by `rename-device`.
+
+## Publishing to PyPI
+
+Full details in `guides/publishing.md`. Quick reference:
+
+```bash
+# 1. Bump version + CHANGELOG (or use /bump-version skill)
+#    Edit pyproject.toml: version = "x.y.z"
+#    Edit CHANGELOG.md: move [Unreleased] → [x.y.z] with today's date
+
+# 2. Commit and push to main
+git add pyproject.toml CHANGELOG.md
+git commit -m "chore: bump version to x.y.z"
+git push origin main
+
+# 3. Tag and push — the workflow handles EVERYTHING else
+git tag vx.y.z
+git push origin vx.y.z
+# ✅ Builds, validates, publishes to PyPI, creates GitHub Release, updates CHANGELOG
+# ❌ DO NOT manually run: gh release create vx.y.z
+```
+
+Use the `/bump-version` skill to automate step 1 (analyses unreleased commits, moves
+`[Unreleased]` entries, fixes comparison links, commits — does NOT tag or push).
 
 ## Demo
 

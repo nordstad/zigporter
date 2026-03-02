@@ -33,6 +33,21 @@ zigporter rename-entity light.living_room_1 light.living_room_ceiling --apply
 - **Scripts** — `entity_id` fields and service call targets
 - **Scenes** — entity entries
 - **Lovelace dashboards** — all storage-mode dashboards (UI-managed)
+- **Helper config entries** — Group helpers, Template helpers, and other HA config-entry-backed
+  helpers whose `options` reference the entity ID (e.g. group member lists)
+
+### Did you mean?
+
+If you pass a display name instead of an entity ID, zigporter will suggest the right ID:
+
+```text
+$ zigporter rename-entity "bogus lights" light.new_name
+
+Error: Entity 'bogus lights' not found in the HA entity registry.
+
+  Hint: did you mean light.bogus_lights?
+  Re-run:  zigporter rename-entity light.bogus_lights light.new_name
+```
 
 ### Limitations
 
@@ -74,7 +89,8 @@ zigporter rename-device "Living Room 1" "Living Room Ceiling" --apply
 
 1. **HA device name** — updated in the device registry
 2. **Entity IDs** — all entities that follow the device name slug pattern
-3. **References** — same scope as `rename-entity` (automations, scripts, scenes, dashboards)
+3. **References** — same scope as `rename-entity` (automations, scripts, scenes, dashboards,
+   and Helper config entries)
 
 For entities whose IDs don't follow the device name pattern the command prompts you to
 provide the new entity ID manually rather than guessing.
