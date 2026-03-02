@@ -11,6 +11,7 @@ from zigporter.commands.migrate import (
     step_validate,
 )
 from zigporter.commands.migrate_reporting import (
+    show_device_dependencies,
     step_show_inspect_summary,
     step_show_test_checklist,
 )
@@ -383,6 +384,98 @@ async def test_step_show_test_checklist_silent_when_nothing_matches(sample_devic
 
     # Should return without printing checklist
     await step_show_test_checklist(sample_device, mock_ha_client, MagicMock())
+
+
+async def test_step_show_test_checklist_ha_unreachable(sample_device, mock_ha_client):
+    """When HA is unreachable the checklist step returns silently without raising."""
+    sample_device.automations = []
+    mock_ha_client.get_scripts = AsyncMock(side_effect=OSError("connection refused"))
+    mock_ha_client.get_scenes = AsyncMock(return_value=[])
+
+    await step_show_test_checklist(sample_device, mock_ha_client, MagicMock())
+
+
+# ---------------------------------------------------------------------------
+# show_device_dependencies
+# ---------------------------------------------------------------------------
+
+
+async def test_show_device_dependencies_renders_all_types(sample_device, mock_ha_client):
+    """Automations, scripts, and scenes referencing the device are all printed."""
+    sample_device.entities = [
+        ZHAEntity(
+            entity_id="switch.kitchen_plug",
+            name="Kitchen Plug",
+            platform="zha",
+            state="on",
+            attributes={},
+        )
+    ]
+    sample_device.automations = [
+        AutomationRef(
+            automation_id="automation.morning",
+            alias="Morning routine",
+            entity_references=["switch.kitchen_plug"],
+        )
+    ]
+    mock_ha_client.get_scripts = AsyncMock(
+        return_value=[
+            {
+                "id": "turn_on_kitchen",
+                "alias": "Turn on kitchen",
+                "sequence": [{"service": "switch.turn_on", "entity_id": "switch.kitchen_plug"}],
+            }
+        ]
+    )
+    mock_ha_client.get_scenes = AsyncMock(
+        return_value=[
+            {
+                "id": "kitchen_evening",
+                "name": "Kitchen evening",
+                "entities": {"switch.kitchen_plug": {"state": "on"}},
+            }
+        ]
+    )
+    mock_console = MagicMock()
+
+    await show_device_dependencies(sample_device, mock_ha_client, mock_console)
+
+    mock_ha_client.get_scripts.assert_called_once()
+    mock_ha_client.get_scenes.assert_called_once()
+    mock_console.rule.assert_called()
+
+
+async def test_show_device_dependencies_silent_when_nothing_matches(sample_device, mock_ha_client):
+    """No output when no automations/scripts/scenes reference the device entities."""
+    sample_device.entities = [
+        ZHAEntity(
+            entity_id="switch.kitchen_plug",
+            name="Kitchen Plug",
+            platform="zha",
+            state="on",
+            attributes={},
+        )
+    ]
+    sample_device.automations = []
+    mock_ha_client.get_scripts = AsyncMock(return_value=[])
+    mock_ha_client.get_scenes = AsyncMock(return_value=[])
+    mock_console = MagicMock()
+
+    await show_device_dependencies(sample_device, mock_ha_client, mock_console)
+
+    mock_console.rule.assert_not_called()
+
+
+async def test_show_device_dependencies_ha_unreachable(sample_device, mock_ha_client):
+    """HA being unreachable is silently swallowed — dependency preview is optional."""
+    sample_device.automations = []
+    mock_ha_client.get_scripts = AsyncMock(side_effect=OSError("connection refused"))
+    mock_ha_client.get_scenes = AsyncMock(return_value=[])
+    mock_console = MagicMock()
+
+    await show_device_dependencies(sample_device, mock_ha_client, mock_console)
+
+    mock_console.rule.assert_not_called()
 
 
 def test_show_status_renders(tmp_path):

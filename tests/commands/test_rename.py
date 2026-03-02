@@ -2410,6 +2410,43 @@ async def test_execute_device_rename_reload_skipped_on_z2m_failure(mock_device_e
     mock_device_exec_client.reload_config_entry.assert_not_called()
 
 
+async def test_execute_device_rename_reload_config_entry_failure(mock_device_exec_client):
+    """When reload_config_entry raises, the error is swallowed — rename still succeeds."""
+    from zigporter.commands.rename import DeviceRenamePlan, RenameLocation, RenamePlan  # noqa: PLC0415
+    from zigporter.commands.rename import execute_device_rename  # noqa: PLC0415
+
+    mock_device_exec_client.reload_config_entry = AsyncMock(
+        side_effect=RuntimeError("config entry not found")
+    )
+    mock_z2m = MagicMock()
+    mock_z2m.rename_device = AsyncMock(return_value=None)
+
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Window Left Plug",
+        plans=[
+            RenamePlan(
+                old_entity_id="switch.kitchen_plug",
+                new_entity_id="switch.window_left_plug",
+                locations=[
+                    RenameLocation(
+                        context="registry",
+                        name="HA entity registry",
+                        item_id="switch.kitchen_plug",
+                        occurrences=1,
+                    )
+                ],
+            )
+        ],
+    )
+    # Must not raise
+    await execute_device_rename(
+        mock_device_exec_client, plan, z2m_client=mock_z2m, z2m_friendly_name="KitchenPlug"
+    )
+    mock_device_exec_client.rename_device_name.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # run_rename_device — Z2M sync edge cases
 # ---------------------------------------------------------------------------
@@ -2641,4 +2678,30 @@ async def test_run_rename_device_z2m_lookup_exception_skipped(mocker):
     assert result is True
     _, kwargs = exec_mock.call_args
     # z2m_client may be instantiated but z2m_friendly_name is None → no Z2M rename
+    assert kwargs["z2m_friendly_name"] is None
+
+
+async def test_run_rename_device_z2m_lookup_exception_interactive(mocker):
+    """Z2M lookup exception in interactive (apply=False) mode is silently swallowed."""
+    from zigporter.commands.rename import run_rename_device  # noqa: PLC0415
+
+    device = _make_z2m_test_device("0x001234567890abcd")
+    exec_mock = _make_z2m_run_mocks(mocker, device)
+    mocker.patch(
+        "zigporter.commands.rename.load_z2m_config", return_value=("http://z2m.test", "zigbee2mqtt")
+    )
+    mock_z2m_instance = MagicMock()
+    mock_z2m_instance.get_device_by_ieee = AsyncMock(side_effect=OSError("connection refused"))
+    mocker.patch("zigporter.commands.rename.Z2MClient", return_value=mock_z2m_instance)
+    mocker.patch("zigporter.commands.rename.sys").stdin.isatty.return_value = True
+    mock_confirm = MagicMock()
+    mock_confirm.unsafe_ask_async = AsyncMock(return_value=True)
+    mocker.patch("zigporter.commands.rename.questionary.confirm", return_value=mock_confirm)
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Window Left Plug", False
+    )
+
+    assert result is True
+    _, kwargs = exec_mock.call_args
     assert kwargs["z2m_friendly_name"] is None

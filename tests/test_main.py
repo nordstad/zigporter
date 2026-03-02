@@ -189,6 +189,23 @@ def test_confirm_backup_once_confirmed_writes_marker(tmp_path, mocker):
     assert marker.read_text().strip()
 
 
+def test_confirm_backup_once_marker_write_fails(tmp_path, mocker):
+    """OSError writing the marker prints a warning but does not raise."""
+    marker = tmp_path / ".backup-confirmed"
+    mocker.patch("zigporter.main.backup_confirmed_path", return_value=marker)
+    mocker.patch(
+        "zigporter.main.questionary.confirm",
+        return_value=MagicMock(ask=MagicMock(return_value=True)),
+    )
+    mock_console = mocker.patch("zigporter.main.console")
+    mocker.patch("pathlib.Path.write_text", side_effect=OSError("read-only filesystem"))
+
+    _confirm_backup_once()  # must not raise
+
+    warning_calls = [str(c) for c in mock_console.print.call_args_list]
+    assert any("Warning" in c for c in warning_calls)
+
+
 # ---------------------------------------------------------------------------
 # CLI commands via CliRunner
 # ---------------------------------------------------------------------------
