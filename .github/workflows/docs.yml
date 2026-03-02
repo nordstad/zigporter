@@ -35,8 +35,17 @@ jobs:
 
       - name: Inject version into demo playground
         run: |
-          VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
-          sed -i "s/__ZIGPORTER_VERSION__/v${VERSION}/g" docs/demo/index.html
+          python3 -c "
+          import re, tomllib
+          with open('pyproject.toml', 'rb') as f:
+              version = tomllib.load(f)['project']['version']
+          with open('docs/demo/index.html') as f:
+              html = f.read()
+          html = re.sub(r'(<span id=\"vbadge\">)[^<]*(</span>)', rf'\g<1>v{version}\g<2>', html)
+          with open('docs/demo/index.html', 'w') as f:
+              f.write(html)
+          print(f'Injected version: v{version}')
+          "
 
       - name: Build documentation
         run: uv run zensical build --clean

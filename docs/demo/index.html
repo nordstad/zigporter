@@ -105,7 +105,7 @@ body { background:var(--bg); color:var(--txt); font-family:var(--font);
     <div class="tl tlr"></div><div class="tl tly"></div><div class="tl tlg"></div>
   </div>
   <div class="hdr-t">
-    <strong>zigporter</strong> <span id="vbadge">__ZIGPORTER_VERSION__</span> — interactive demo
+    <strong>zigporter</strong> <span id="vbadge">(dev)</span> — interactive demo
   </div>
 </div>
 
@@ -528,8 +528,7 @@ document.getElementById('breplay').addEventListener('click', () => {
 // ── Version badge ─────────────────────────────────────────────────────────────
 (function() {
   const badge = document.getElementById('vbadge');
-  if (badge && badge.textContent.includes('__ZIGPORTER')) {
-    badge.textContent = '(dev)';
+  if (badge && badge.textContent.trim() === '(dev)') {
     badge.style.color = 'var(--yel)';
   }
 })();
