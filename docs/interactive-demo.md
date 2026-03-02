@@ -9,4 +9,4 @@ to any real system.
 ---
 
 Ready to run the real thing? See [Installation](getting-started/installation.md) and
-[Migration wizard](guide/migration-wizard.md) to get started.
+[Migration wizard](guide/migration-wizard/) to get started.
