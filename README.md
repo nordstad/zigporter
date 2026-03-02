@@ -1,19 +1,15 @@
-# zigporter
-
-<p align="center">
-  <img src="docs/assets/mesh_house_pulse_256.webp" alt="zigporter" width="128">
-</p>
-
-[![CI](https://github.com/nordstad/zigporter/actions/workflows/ci.yml/badge.svg)](https://github.com/nordstad/zigporter/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/nordstad/zigporter/branch/main/graph/badge.svg)](https://codecov.io/gh/nordstad/zigporter)
-[![Documentation](https://img.shields.io/badge/docs-zensical-blue)](https://nordstad.github.io/zigporter)
-[![PyPI - Version](https://img.shields.io/pypi/v/zigporter?label=PyPI)](https://pypi.org/project/zigporter/)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/zigporter?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/zigporter)
-
-Home Assistant device management from the command line — migrate from ZHA to Zigbee2MQTT,
-rename entities and devices with full cascade across automations, scripts, and dashboards.
+<div align="center">
+  <img src="docs/assets/mesh_house_pulse_256.gif" alt="zigporter" width="128">
+  <h1>zigporter</h1>
+  <a href="https://github.com/nordstad/zigporter/actions/workflows/ci.yml"><img src="https://github.com/nordstad/zigporter/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/nordstad/zigporter"><img src="https://codecov.io/gh/nordstad/zigporter/branch/main/graph/badge.svg" alt="codecov"></a>
+  <a href="https://nordstad.github.io/zigporter"><img src="https://img.shields.io/badge/docs-zensical-blue" alt="Documentation"></a>
+  <a href="https://pypi.org/project/zigporter/"><img src="https://img.shields.io/pypi/v/zigporter?label=PyPI" alt="PyPI - Version"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://pepy.tech/projects/zigporter"><img src="https://static.pepy.tech/personalized-badge/zigporter?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads" alt="PyPI Downloads"></a>
+  <p>Home Assistant device management from the command line — migrate from ZHA to Zigbee2MQTT,<br>rename entities and devices with full cascade across automations, scripts, and dashboards.</p>
+</div>
 
 > **Early Development** — Tested with HA OS 2026.2.3 · Supervisor 2026.02.2 · Z2M 2.8.0-1.
 > Open an [issue](https://github.com/nordstad/zigporter/issues) if you run a different configuration.
