@@ -404,8 +404,13 @@ async def execute_rename(ha_client: HAClient, plan: RenamePlan) -> None:
             url_path = loc.item_id or None
             console.print(f"  Updating dashboard [dim]{loc.name!r}[/dim]...", end=" ")
             patched = _deep_replace(loc.raw_config, old, new)
-            await ha_client.save_lovelace_config(patched, url_path)
-            console.print("[green]✓[/green]")
+            try:
+                await ha_client.save_lovelace_config(patched, url_path)
+                console.print("[green]✓[/green]")
+            except RuntimeError:
+                console.print(
+                    "[yellow]⚠ skipped (dashboard is read-only — update manually)[/yellow]"
+                )
 
         elif loc.context == "config_entry":
             console.print(f"  Updating helper [dim]{loc.name!r}[/dim]...", end=" ")
@@ -937,7 +942,13 @@ async def execute_device_rename(
         elif context == "scene":
             await ha_client.update_scene(item_id, config)
         elif context == "lovelace":
-            await ha_client.save_lovelace_config(config, item_id or None)
+            try:
+                await ha_client.save_lovelace_config(config, item_id or None)
+            except RuntimeError:
+                console.print(
+                    "[yellow]⚠ skipped (dashboard is read-only — update manually)[/yellow]"
+                )
+                continue
         elif context == "config_entry":
             await ha_client.update_config_entry_options(item_id, config)
 

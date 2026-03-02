@@ -589,6 +589,31 @@ async def test_get_lovelace_config_rest_fallback_with_url_path(client, mocker):
     assert result == lv_config
 
 
+@respx.mock
+async def test_get_lovelace_config_strategy_returns_yaml_mode(client, mocker):
+    """WS returns a strategy-based config → get_lovelace_config returns YAML_MODE."""
+    from zigporter.ha_client import is_yaml_mode  # noqa: PLC0415
+
+    mock_ws = _make_ws(mocker, {"strategy": {"type": "original-states"}})
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_lovelace_config()
+    assert is_yaml_mode(result)
+
+
+@respx.mock
+async def test_get_lovelace_config_rest_fallback_strategy_returns_yaml_mode(client, mocker):
+    """WS fails (non-yaml-mode error) → REST returns strategy config → YAML_MODE."""
+    from zigporter.ha_client import is_yaml_mode  # noqa: PLC0415
+
+    mock_ws = _make_ws_fail(mocker)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    respx.get(f"{HA_URL}/api/lovelace/config").mock(
+        return_value=httpx.Response(200, json={"strategy": {"type": "grid"}})
+    )
+    result = await client.get_lovelace_config()
+    assert is_yaml_mode(result)
+
+
 async def test_delete_entity(client, mocker):
     mock_ws = _make_ws(mocker, None)
     mocker.patch("websockets.connect", return_value=mock_ws)

@@ -217,6 +217,8 @@ class HAClient:
         try:
             result = await self._ws_command(cmd)
             if result is not None:
+                if "strategy" in result:
+                    return YAML_MODE  # auto-generated dashboard, cannot be saved via WS
                 return result
         except RuntimeError as exc:
             if "mode_not_storage" in str(exc) or "config_requires_reload" in str(exc):
@@ -232,7 +234,10 @@ class HAClient:
             ) as client:
                 resp = await client.get(f"{self._ha_url}/api/lovelace/config", params=params)
                 resp.raise_for_status()
-                return resp.json()
+                data = resp.json()
+                if "strategy" in data:
+                    return YAML_MODE  # auto-generated dashboard, cannot be saved via WS
+                return data
         except (httpx.HTTPError, ValueError, RuntimeError, OSError):
             return YAML_MODE if _yaml_mode else None
 

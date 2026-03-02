@@ -421,6 +421,35 @@ async def test_execute_rename_patches_lovelace_named(mock_exec_client):
     assert patched_url == "mobile"
 
 
+async def test_execute_rename_lovelace_save_failure_warns_and_continues(mock_exec_client, mocker):
+    """save_lovelace_config raises RuntimeError → warns and does not crash."""
+    mock_exec_client.save_lovelace_config = AsyncMock(
+        side_effect=RuntimeError("WebSocket command failed: Not supported")
+    )
+    printed = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **kw: printed.append(a[0] if a else ""),
+    )
+    config = {"views": [{"entity": "switch.old"}]}
+    plan = RenamePlan(
+        old_entity_id="switch.old",
+        new_entity_id="switch.new",
+        locations=[
+            RenameLocation(
+                context="lovelace",
+                name="Lights",
+                item_id="lights",
+                occurrences=1,
+                raw_config=config,
+            )
+        ],
+    )
+    # Must not raise
+    await execute_rename(mock_exec_client, plan)
+    assert any("skipped" in str(p) for p in printed)
+
+
 # ---------------------------------------------------------------------------
 # display_plan (smoke test — must not raise)
 # ---------------------------------------------------------------------------
@@ -1606,6 +1635,54 @@ async def test_execute_device_rename_script_scene_lovelace_config_entry(mock_ful
     mock_full_exec_client.update_script.assert_called_once()
     mock_full_exec_client.update_scene.assert_called_once()
     mock_full_exec_client.save_lovelace_config.assert_called_once()
+    mock_full_exec_client.update_config_entry_options.assert_called_once()
+
+
+async def test_execute_device_rename_lovelace_save_failure_warns_and_continues(
+    mock_full_exec_client, mocker
+):
+    """save_lovelace_config raises RuntimeError → warns, does not crash, other updates continue."""
+    from zigporter.commands.rename import DeviceRenamePlan, execute_device_rename  # noqa: PLC0415
+
+    mock_full_exec_client.save_lovelace_config = AsyncMock(
+        side_effect=RuntimeError("WebSocket command failed: Not supported")
+    )
+    printed = []
+    mocker.patch(
+        "zigporter.commands.rename.console.print",
+        side_effect=lambda *a, **kw: printed.append(a[0] if a else ""),
+    )
+    plan = DeviceRenamePlan(
+        device_id="dev1",
+        old_device_name="Kitchen Plug",
+        new_device_name="Bedroom Lamp",
+        plans=[
+            RenamePlan(
+                old_entity_id="switch.kitchen_plug",
+                new_entity_id="switch.bedroom_lamp",
+                locations=[
+                    RenameLocation(
+                        context="lovelace",
+                        name="Lights",
+                        item_id="lights",
+                        occurrences=1,
+                        raw_config={"views": [{"entity": "switch.kitchen_plug"}]},
+                    ),
+                    RenameLocation(
+                        context="config_entry",
+                        name="Helper",
+                        item_id="ce1",
+                        occurrences=1,
+                        raw_config={"entity_id": "switch.kitchen_plug"},
+                    ),
+                ],
+            )
+        ],
+    )
+    # Must not raise
+    await execute_device_rename(mock_full_exec_client, plan)
+    assert any("skipped" in str(p) for p in printed)
+    # Other contexts still processed
     mock_full_exec_client.update_config_entry_options.assert_called_once()
 
 
