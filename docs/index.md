@@ -3,7 +3,7 @@
 Home Assistant device management from the command line — migrate from ZHA to Zigbee2MQTT,
 rename entities and devices with full cascade across automations, scripts, and dashboards.
 
-> **Try it before you run it** — [Interactive demo →](demo.md) walks through a full ZHA → Z2M migration with simulated devices, right in your browser.
+> **Try it before you run it** — [Interactive demo →](interactive-demo.md) walks through a full ZHA → Z2M migration with simulated devices, right in your browser.
 
 ## Features
 

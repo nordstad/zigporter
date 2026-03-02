@@ -23,7 +23,7 @@ nav = [
     { "Z2MClient" = "api/z2m_client.md" },
     { "Config" = "api/config.md" },
   ] },
-  { "Demo" = "demo.md" },
+  { "Demo" = "interactive-demo.md" },
   { "Architecture" = "architecture.md" },
   { "Development" = "development.md" },
 ]

@@ -38,9 +38,9 @@ body { background:var(--bg); color:var(--txt); font-family:var(--font);
 .tbar { background:var(--bg3); border-bottom:1px solid var(--bdr);
         padding:5px 12px; font-size:11px; color:var(--dim);
         display:flex; align-items:center; gap:8px; }
-.tout { flex:1; overflow-y:auto; padding:14px 18px;
+.tout { flex:1; overflow-y:auto; overflow-x:hidden; padding:14px 18px;
         font-size:12.5px; line-height:1.75; color:var(--ttx);
-        white-space:pre-wrap; word-break:break-all; }
+        white-space:pre; }
 .tout::-webkit-scrollbar { width:5px; }
 .tout::-webkit-scrollbar-thumb { background:var(--bg3); border-radius:3px; }
 
@@ -189,15 +189,15 @@ const DEMO_LISTZ2M = [
   // Title
   [d('                    ') + bd('Zigbee2MQTT Devices (5)'), 100],
   // Table header
-  [d('┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓'), 100],
-  [d('┃ ') + bd('Friendly name        ') + d('┃ ') + bd('IEEE address         ') + d('┃ ') + bd('Type     ') + d('┃ ') + bd('Vendor         ') + d('┃ ') + bd('Model        ') + d('┃'), 60],
-  [d('┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩'), 60],
-  [`│ Aqara Door Sensor     │ ${p('0x00158d0002345def')}   │ EndDevice │ Aqara           │ MCCGQ11LM    │`, 80],
-  [`│ IKEA TRADFRI bulb     │ ${p('0x00158d0001234abc')}   │ Router    │ IKEA of Sweden  │ LED1623G12   │`, 80],
-  [`│ IKEA TRADFRI outlet   │ ${p('0x00158d0004567jkl')}   │ Router    │ IKEA of Sweden  │ E1603        │`, 80],
-  [`│ Philips Hue Motion    │ ${p('0x00158d0003456ghi')}   │ EndDevice │ Signify         │ SML001       │`, 80],
-  [`│ Sonoff ZBMINI         │ ${p('0x00158d0005678mno')}   │ Router    │ ITEAD           │ ZBMINI       │`, 80],
-  [d('└───────────────────────┴──────────────────────┴───────────┴─────────────────┴──────────────┘'), 80],
+  [d('┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓'), 100],
+  [d('┃ ') + bd('Friendly name         ') + d('┃ ') + bd('IEEE address         ') + d('┃ ') + bd('Type      ') + d('┃ ') + bd('Vendor          ') + d('┃'), 60],
+  [d('┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩'), 60],
+  [`│ Aqara Door Sensor     │ ${p('0x00158d0002345def')}   │ EndDevice │ Aqara           │`, 80],
+  [`│ IKEA TRADFRI bulb     │ ${p('0x00158d0001234abc')}   │ Router    │ IKEA of Sweden  │`, 80],
+  [`│ IKEA TRADFRI outlet   │ ${p('0x00158d0004567jkl')}   │ Router    │ IKEA of Sweden  │`, 80],
+  [`│ Philips Hue Motion    │ ${p('0x00158d0003456ghi')}   │ EndDevice │ Signify         │`, 80],
+  [`│ Sonoff ZBMINI         │ ${p('0x00158d0005678mno')}   │ Router    │ ITEAD           │`, 80],
+  [d('└───────────────────────┴──────────────────────┴───────────┴─────────────────┘'), 80],
 ];
 
 // ── DEMO: migrate ─────────────────────────────────────────────────────────────
@@ -326,9 +326,9 @@ const DEMO_RENAME = [
   [rule('Rename plan  IKEA TRADFRI bulb → Living Room Light', 70), 200],
   [null, 100],
   [d('┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━┓'), 100],
-  [d('┃ ') + bd('Context      ') + d('┃ ') + bd('Name                                               ') + d('┃ ') + bd('N  ') + d('┃'), 60],
+  [d('┃ ') + bd('Context      ') + d('┃ ') + bd('Name                                              ') + d('┃ ') + bd('N   ') + d('┃'), 60],
   [d('┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━┩'), 60],
-  [`│ registry     │ ${c('light.living_room_bulb')} ${c('→')} ${c('light.living_room_light')}    │ 1   │`, 80],
+  [`│ registry     │ ${c('light.living_room_bulb')} ${c('→')} ${c('light.living_room_light')}  │ 1   │`, 80],
   [`│ automation   │ Morning Routine                                   │ 2   │`, 80],
   [`│ lovelace     │ default dashboard                                 │ 1   │`, 80],
   [d('└──────────────┴───────────────────────────────────────────────────┴─────┘'), 60],
@@ -376,12 +376,12 @@ const DEMO_INSPECT = [
   [rule('IKEA TRADFRI bulb', 70), 200],
   [null, 100],
   [d('┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓'), 100],
-  [d('┃ ') + bd('Field           ') + d('┃ ') + bd('Value                                              ') + d('┃'), 60],
+  [d('┃ ') + bd('Field           ') + d('┃ ') + bd('Value                                             ') + d('┃'), 60],
   [d('┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩'), 60],
   [`│ Name            │ IKEA TRADFRI bulb                                 │`, 80],
-  [`│ IEEE            │ ${p('0x00158d0001234abc')}                              │`, 80],
-  [`│ ZHA device ID   │ ${d('f3a1b2c4d5e6f789')}                              │`, 80],
-  [`│ Z2M device ID   │ ${g('a1b2c3d4e5f60011')}  ${d('(active)')}                  │`, 80],
+  [`│ IEEE            │ ${p('0x00158d0001234abc')}                                │`, 80],
+  [`│ ZHA device ID   │ ${d('f3a1b2c4d5e6f789')}                                  │`, 80],
+  [`│ Z2M device ID   │ ${g('a1b2c3d4e5f60011')}  ${d('(active)')}                        │`, 80],
   [`│ Area            │ Living Room                                       │`, 80],
   [`│ Model           │ LED1623G12                                        │`, 80],
   [`│ Manufacturer    │ IKEA of Sweden                                    │`, 80],
