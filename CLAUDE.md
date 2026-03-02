@@ -95,3 +95,14 @@ Z2M_MQTT_TOPIC=zigbee2mqtt  # Default; change if customised
 - When adding async methods to `HAClient`, update the `mock_ha_client` fixture in `tests/commands/test_migrate.py` with `AsyncMock` for each new method.
 - Scope `ruff format` to changed files only (`uv run ruff format <file>`) to avoid noisy diffs from pre-existing formatting drift in untouched files.
 - **`_2`/`_3` entity suffix conflicts:** HA appends numeric suffixes to new Z2M entity IDs when stale ZHA registry entries still occupy the original IDs. Step 5 of the migrate wizard detects and resolves this automatically. For devices that were already migrated before this fix, use `zigporter fix-device` to clean up stale entries and rename suffixed entities back to their originals.
+
+## Demo
+
+`site/demo/index.html` is a self-contained browser terminal emulator with hardcoded playback scripts.
+
+**Keep it in sync:** after adding or significantly changing a CLI command, run `/update-demo` to audit
+and update the demo scenarios. Specifically:
+
+- New command added → add a `DEMO_<NAME>` script and `DEMOS` registry entry
+- Command output or steps changed → update the matching `DEMO_*` constant
+- Command removed → remove its `DEMO_*` constant and `DEMOS` entry
