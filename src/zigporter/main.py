@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
@@ -14,11 +15,13 @@ from zigporter.commands.list_z2m import list_z2m_command
 from zigporter.commands.migrate import migrate_command
 from zigporter.commands.setup import setup_command
 from zigporter.config import (
+    backup_confirmed_path,
     default_export_path,
     default_state_path,
     load_config,
     load_z2m_config,
 )
+from zigporter.ui import QUESTIONARY_STYLE
 
 app = typer.Typer(
     name="zigporter",
@@ -27,21 +30,7 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 console = Console()
-
-_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:ansicyan bold"),
-        ("question", "bold"),
-        ("answer", "fg:ansicyan bold"),
-        ("pointer", "fg:ansicyan bold"),
-        ("highlighted", "fg:ansicyan bold"),
-        ("selected", "fg:ansicyan"),
-        ("separator", "fg:ansibrightblack"),
-        ("instruction", "fg:ansibrightblack"),
-        ("text", ""),
-        ("disabled", "fg:ansibrightblack italic"),
-    ]
-)
+_STYLE = QUESTIONARY_STYLE
 
 
 def _version_callback(value: bool) -> None:
@@ -112,6 +101,38 @@ def _get_z2m_config_optional() -> tuple[str, str]:
         return load_z2m_config()
     except ValueError:
         return "", "zigbee2mqtt"
+
+
+def _confirm_backup_once() -> None:
+    """Require one-time confirmation that the user has taken a HA backup."""
+    marker = backup_confirmed_path()
+    if marker.exists():
+        return
+
+    console.print(
+        "\n[yellow]Before migrating, create a full Home Assistant backup.[/yellow]\n"
+        "[dim]Settings → System → Backups[/dim]"
+    )
+    confirmed = questionary.confirm(
+        "I have created a backup and want to continue",
+        default=False,
+        style=_STYLE,
+    ).ask()
+    if not confirmed:
+        console.print(
+            "[red]Backup confirmation required.[/red] "
+            "Run [bold]zigporter migrate[/bold] again after creating a backup."
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        marker.write_text(datetime.now(tz=timezone.utc).isoformat() + "\n")
+    except OSError:
+        console.print(
+            f"[yellow]Warning:[/yellow] Could not save backup confirmation marker at {marker}."
+        )
+    else:
+        console.print("[green]✓[/green] Backup confirmation saved.")
 
 
 @app.command()
@@ -193,7 +214,7 @@ def _resolve_or_fetch_export(
             data = json.loads(default.read_text())
             exported_at = data.get("exported_at", "unknown date")
             device_count = len(data.get("devices", []))
-        except Exception:
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
             exported_at = "unknown date"
             device_count = 0
 
@@ -286,6 +307,9 @@ def migrate(
         )
         if not ok:
             raise typer.Exit(code=1)
+
+    if not status:
+        _confirm_backup_once()
 
     export_path = _resolve_or_fetch_export(zha_export, ha_url, token, verify_ssl)
     state_path = state if state is not None else default_state_path()

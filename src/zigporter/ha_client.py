@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 import websockets
 
-from zigporter.utils import normalize_ieee
+from zigporter.utils import normalize_ieee, parse_z2m_ieee_identifier
 
 # Sentinel returned by get_lovelace_config when HA confirms the dashboard is in YAML mode.
 # Use is_yaml_mode() to distinguish this from a genuine fetch failure (None).
@@ -233,7 +233,7 @@ class HAClient:
                 resp = await client.get(f"{self._ha_url}/api/lovelace/config", params=params)
                 resp.raise_for_status()
                 return resp.json()
-        except Exception:
+        except (httpx.HTTPError, ValueError, RuntimeError, OSError):
             return YAML_MODE if _yaml_mode else None
 
     async def get_z2m_device_id(self, ieee: str) -> str | None:
@@ -249,12 +249,8 @@ class HAClient:
             for platform, identifier in entry.get("identifiers", []):
                 if platform != "mqtt":
                     continue
-                ident = identifier.lower()
-                if ident.startswith("zigbee2mqtt_"):
-                    ident = ident[len("zigbee2mqtt_") :]
-                if ident.startswith("0x"):
-                    ident = ident[2:]
-                if ident.zfill(16) == norm:
+                ident = parse_z2m_ieee_identifier(identifier)
+                if ident == norm:
                     return entry["id"]
         return None
 

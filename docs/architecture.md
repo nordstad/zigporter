@@ -34,4 +34,7 @@ After every state transition the file is written synchronously so a crash or `Ct
 
 ## Configuration
 
-`config.py` loads variables from `.env` via `python-dotenv` and exposes a `Config` dataclass. An SSL context is built from `HA_VERIFY_SSL` and passed through all HTTP and WebSocket calls.
+`config.py` loads variables from `.env` via `python-dotenv` and returns typed tuples via
+`load_config()` / `load_z2m_config()`. CWD `.env` overrides `~/.config/zigporter/.env`, and
+shell environment variables override both. SSL verification is driven by `HA_VERIFY_SSL` and
+passed through all HTTP and WebSocket calls.

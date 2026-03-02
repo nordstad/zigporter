@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from zigporter.main import (
+    _confirm_backup_once,
     _get_config,
     _get_config_optional,
     _get_z2m_config,
@@ -141,6 +142,54 @@ def test_resolve_or_fetch_export_bad_json_handled(tmp_path, mocker):
 
 
 # ---------------------------------------------------------------------------
+# _confirm_backup_once
+# ---------------------------------------------------------------------------
+
+
+def test_confirm_backup_once_skips_when_marker_exists(tmp_path, mocker):
+    marker = tmp_path / ".backup-confirmed"
+    marker.write_text("already-confirmed\n")
+    mocker.patch("zigporter.main.backup_confirmed_path", return_value=marker)
+    confirm = mocker.patch("zigporter.main.questionary.confirm")
+
+    _confirm_backup_once()
+
+    confirm.assert_not_called()
+
+
+def test_confirm_backup_once_declined_exits(tmp_path, mocker):
+    import typer
+
+    marker = tmp_path / ".backup-confirmed"
+    mocker.patch("zigporter.main.backup_confirmed_path", return_value=marker)
+    mocker.patch("zigporter.main.console")
+    mocker.patch(
+        "zigporter.main.questionary.confirm",
+        return_value=MagicMock(ask=MagicMock(return_value=False)),
+    )
+
+    with pytest.raises(typer.Exit):
+        _confirm_backup_once()
+
+    assert not marker.exists()
+
+
+def test_confirm_backup_once_confirmed_writes_marker(tmp_path, mocker):
+    marker = tmp_path / ".backup-confirmed"
+    mocker.patch("zigporter.main.backup_confirmed_path", return_value=marker)
+    mocker.patch(
+        "zigporter.main.questionary.confirm",
+        return_value=MagicMock(ask=MagicMock(return_value=True)),
+    )
+    mocker.patch("zigporter.main.console")
+
+    _confirm_backup_once()
+
+    assert marker.exists()
+    assert marker.read_text().strip()
+
+
+# ---------------------------------------------------------------------------
 # CLI commands via CliRunner
 # ---------------------------------------------------------------------------
 
@@ -213,6 +262,40 @@ def test_inspect_command(mocker):
     result = runner.invoke(app, ["inspect"])
     assert result.exit_code == 0
     mock_inspect.assert_called_once()
+
+
+def test_migrate_command_requires_backup_confirmation(mocker, tmp_path):
+    export_path = tmp_path / "export.json"
+    state_path = tmp_path / "state.json"
+    mocker.patch("zigporter.main._get_config", return_value=("https://ha.test", "tok", True))
+    mocker.patch("zigporter.main._get_z2m_config", return_value=("https://z2m.test", "zigbee2mqtt"))
+    mocker.patch("zigporter.main._resolve_or_fetch_export", return_value=export_path)
+    mocker.patch("zigporter.main.default_state_path", return_value=state_path)
+    mock_confirm = mocker.patch("zigporter.main._confirm_backup_once")
+    mock_migrate = mocker.patch("zigporter.main.migrate_command")
+
+    result = runner.invoke(app, ["migrate", "--skip-checks"])
+
+    assert result.exit_code == 0
+    mock_confirm.assert_called_once()
+    mock_migrate.assert_called_once()
+
+
+def test_migrate_status_skips_backup_confirmation(mocker, tmp_path):
+    export_path = tmp_path / "export.json"
+    state_path = tmp_path / "state.json"
+    mocker.patch("zigporter.main._get_config", return_value=("https://ha.test", "tok", True))
+    mocker.patch("zigporter.main._get_z2m_config", return_value=("https://z2m.test", "zigbee2mqtt"))
+    mocker.patch("zigporter.main._resolve_or_fetch_export", return_value=export_path)
+    mocker.patch("zigporter.main.default_state_path", return_value=state_path)
+    mock_confirm = mocker.patch("zigporter.main._confirm_backup_once")
+    mock_migrate = mocker.patch("zigporter.main.migrate_command")
+
+    result = runner.invoke(app, ["migrate", "--status"])
+
+    assert result.exit_code == 0
+    mock_confirm.assert_not_called()
+    mock_migrate.assert_called_once()
 
 
 def test_ensure_config_no_env_runs_setup(tmp_path, mocker):

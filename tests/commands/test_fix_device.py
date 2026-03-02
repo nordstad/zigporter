@@ -62,6 +62,11 @@ def test_mqtt_ieee_returns_none_for_empty():
     assert _mqtt_ieee({}) is None
 
 
+def test_mqtt_ieee_returns_none_for_non_z2m_mqtt_identifier():
+    entry = {"identifiers": [["mqtt", "homeassistant_mydevice"]]}
+    assert _mqtt_ieee(entry) is None
+
+
 def test_device_display_name_prefers_name_by_user():
     entry = {"name_by_user": "My Device", "name": "Default Name", "id": "dev-1"}
     assert _device_display_name(entry) == "My Device"
@@ -226,7 +231,7 @@ async def test_apply_fix_happy_path(mocker):
 async def test_apply_fix_delete_entity_failure_continues(mocker):
     pair = _make_pair(stale_entities=["switch.plug"])
     ha = mocker.AsyncMock()
-    ha.delete_entity.side_effect = Exception("Not found")
+    ha.delete_entity.side_effect = RuntimeError("Not found")
 
     await apply_fix(pair, ha)  # must not raise
 
@@ -257,7 +262,7 @@ async def test_apply_fix_both_removal_methods_fail(mocker):
     pair = _make_pair()
     ha = mocker.AsyncMock()
     ha.remove_device.side_effect = RuntimeError("command failed: unknown_command")
-    ha.remove_zha_device.side_effect = Exception("ZHA offline")
+    ha.remove_zha_device.side_effect = RuntimeError("ZHA offline")
 
     await apply_fix(pair, ha)  # must not raise
 
@@ -265,7 +270,7 @@ async def test_apply_fix_both_removal_methods_fail(mocker):
 async def test_apply_fix_rename_entity_failure_continues(mocker):
     pair = _make_pair(suffix_renames=[("switch.plug_2", "switch.plug")])
     ha = mocker.AsyncMock()
-    ha.rename_entity_id.side_effect = Exception("Rename failed")
+    ha.rename_entity_id.side_effect = RuntimeError("Rename failed")
 
     await apply_fix(pair, ha)  # must not raise
 

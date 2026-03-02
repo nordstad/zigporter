@@ -26,7 +26,7 @@ uv run ruff check .    # lint
 uv run ruff format .   # format
 ```
 
-A git pre-commit hook runs both automatically on every commit.
+Run these before opening a PR to keep CI green.
 
 ## Key conventions
 

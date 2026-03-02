@@ -13,24 +13,12 @@ from rich.table import Table
 
 from zigporter.config import load_z2m_config
 from zigporter.ha_client import HAClient, is_yaml_mode
+from zigporter.ui import QUESTIONARY_STYLE
 from zigporter.z2m_client import Z2MClient
 
 console = Console()
 
-_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:ansicyan bold"),
-        ("question", "bold"),
-        ("answer", "fg:ansicyan bold"),
-        ("pointer", "fg:ansicyan bold"),
-        ("highlighted", "fg:ansicyan bold"),
-        ("selected", "fg:ansicyan"),
-        ("separator", "fg:ansibrightblack"),
-        ("instruction", "fg:ansibrightblack"),
-        ("text", ""),
-        ("disabled", "fg:ansibrightblack italic"),
-    ]
-)
+_STYLE = QUESTIONARY_STYLE
 
 
 # ---------------------------------------------------------------------------
@@ -920,7 +908,7 @@ async def execute_device_rename(
         console.print("  Renaming device in Z2M...", end=" ")
         try:
             await z2m_client.rename_device(z2m_friendly_name, device_plan.new_device_name)
-        except Exception as exc:
+        except (RuntimeError, OSError) as exc:
             console.print(f"[yellow]⚠ skipped ({exc})[/yellow]")
         else:
             console.print("[green]✓[/green]")
@@ -932,7 +920,7 @@ async def execute_device_rename(
                     console.print("[green]✓[/green]")
                 else:
                     console.print("[yellow]⚠ skipped (Z2M config entry not found)[/yellow]")
-            except Exception as exc:
+            except (RuntimeError, OSError) as exc:
                 console.print(f"[yellow]⚠ skipped ({exc})[/yellow]")
 
 
@@ -1083,7 +1071,7 @@ async def run_rename_device(
             z2m_dev = await z2m_client.get_device_by_ieee(ieee)
             if z2m_dev:
                 z2m_friendly_name = z2m_dev.get("friendly_name")
-        except Exception:
+        except (ValueError, RuntimeError, OSError):
             pass  # Z2M not configured or unreachable — skip silently
 
     # 6. Display plan

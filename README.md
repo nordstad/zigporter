@@ -87,6 +87,9 @@ zigporter migrate
 > [back up your Home Assistant configuration](https://www.home-assistant.io/common-tasks/os/#backups).
 > This tool is provided **as-is** with no warranty. Use at your own risk.
 
+On the first non-status run, `zigporter` requires a one-time backup confirmation and stores
+that acknowledgement in `~/.config/zigporter/.backup-confirmed`.
+
 The wizard guides you through each device one at a time:
 
 1. Remove from ZHA — polls the HA registry until the device is gone

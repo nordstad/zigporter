@@ -4,3 +4,26 @@ def normalize_ieee(ieee: str) -> str:
     if s.startswith("0x"):
         s = s[2:]
     return s.zfill(16)
+
+
+def parse_z2m_ieee_identifier(identifier: str) -> str | None:
+    """Extract a strict 16-char IEEE hex string from a Z2M-style identifier.
+
+    Accepted forms:
+    - zigbee2mqtt_0x0011223344556677
+    - zigbee2mqtt_0011223344556677
+    - 0x0011223344556677
+    - 0011223344556677
+    - 00:11:22:33:44:55:66:77
+    """
+    s = identifier.strip().lower()
+    if s.startswith("zigbee2mqtt_"):
+        s = s[len("zigbee2mqtt_") :]
+    s = s.replace(":", "").replace("-", "")
+    if s.startswith("0x"):
+        s = s[2:]
+    if len(s) != 16:
+        return None
+    if any(c not in "0123456789abcdef" for c in s):
+        return None
+    return s

@@ -43,6 +43,14 @@ def test_ieee_from_z2m_identifier_non_z2m():
     assert _ieee_from_z2m_identifier("some_other_integration_abc") is None
 
 
+def test_ieee_from_z2m_identifier_rejects_short_hex():
+    assert _ieee_from_z2m_identifier("zigbee2mqtt_0xabc") is None
+
+
+def test_ieee_from_z2m_identifier_rejects_non_hex_chars():
+    assert _ieee_from_z2m_identifier("zigbee2mqtt_0x00112233445566zz") is None
+
+
 # ---------------------------------------------------------------------------
 # Ingress path: Bearer token accepted
 # ---------------------------------------------------------------------------

@@ -18,6 +18,9 @@ Check progress without entering the wizard:
 zigporter migrate --status
 ```
 
+On the first non-status run, `zigporter` requires a one-time backup confirmation and stores
+that acknowledgment in `~/.config/zigporter/.backup-confirmed`.
+
 ## Steps
 
 Each device passes through seven steps:

@@ -9,23 +9,11 @@ import questionary
 from rich.console import Console
 
 from zigporter.config import config_dir
+from zigporter.ui import QUESTIONARY_STYLE
 
 console = Console()
 
-_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:ansicyan bold"),
-        ("question", "bold"),
-        ("answer", "fg:ansicyan bold"),
-        ("pointer", "fg:ansicyan bold"),
-        ("highlighted", "fg:ansicyan bold"),
-        ("selected", "fg:ansicyan"),
-        ("separator", "fg:ansibrightblack"),
-        ("instruction", "fg:ansibrightblack"),
-        ("text", ""),
-        ("disabled", "fg:ansibrightblack italic"),
-    ]
-)
+_STYLE = QUESTIONARY_STYLE
 
 
 def _read_current(env_path: Path) -> dict[str, str]:
@@ -87,7 +75,7 @@ async def _test_connections(ha_url: str, ha_token: str, verify_ssl: bool, z2m_ur
                 console.print(
                     f"  [red]✗[/red]  HA returned {resp.status_code} — check HA_URL and HA_TOKEN"
                 )
-    except Exception as exc:
+    except (httpx.HTTPError, OSError, RuntimeError) as exc:
         console.print(f"  [red]✗[/red]  HA not reachable: {exc}")
 
     if z2m_url:
@@ -100,7 +88,7 @@ async def _test_connections(ha_url: str, ha_token: str, verify_ssl: bool, z2m_ur
                     console.print(
                         f"  [red]✗[/red]  Z2M returned {resp.status_code} — check Z2M_URL"
                     )
-        except Exception as exc:
+        except (httpx.HTTPError, OSError, RuntimeError) as exc:
             console.print(f"  [red]✗[/red]  Z2M not reachable: {exc}")
     else:
         console.print("  [dim]–[/dim]  Z2M skipped (not configured)")

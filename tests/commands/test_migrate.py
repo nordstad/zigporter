@@ -8,8 +8,11 @@ from zigporter.commands.migrate import (
     step_reconcile_entity_ids,
     step_remove_from_zha,
     step_rename,
-    step_show_test_checklist,
     step_validate,
+)
+from zigporter.commands.migrate_reporting import (
+    step_show_inspect_summary,
+    step_show_test_checklist,
 )
 from zigporter.migration_state import load_state, mark_migrated
 from zigporter.models import AutomationRef, ZHADevice, ZHAEntity
@@ -350,7 +353,7 @@ async def test_step_show_test_checklist_prints_all_types(sample_device, mock_ha_
     )
 
     # Should not raise; output is printed to console
-    await step_show_test_checklist(sample_device, mock_ha_client)
+    await step_show_test_checklist(sample_device, mock_ha_client, MagicMock())
     mock_ha_client.get_scripts.assert_called_once()
     mock_ha_client.get_scenes.assert_called_once()
 
@@ -379,7 +382,7 @@ async def test_step_show_test_checklist_silent_when_nothing_matches(sample_devic
     )
 
     # Should return without printing checklist
-    await step_show_test_checklist(sample_device, mock_ha_client)
+    await step_show_test_checklist(sample_device, mock_ha_client, MagicMock())
 
 
 def test_show_status_renders(tmp_path):
@@ -706,30 +709,24 @@ async def test_step_reconcile_suffix_conflict_skips_on_cancel(mock_ha_client):
 
 async def test_step_show_inspect_summary_skips_when_no_z2m_device(sample_device, mock_ha_client):
     """When Z2M device is not found in HA, entity registry is never queried."""
-    from zigporter.commands.migrate import step_show_inspect_summary  # noqa: PLC0415
-
     mock_ha_client.get_z2m_device_id = AsyncMock(return_value=None)
 
-    await step_show_inspect_summary(sample_device, mock_ha_client)
+    await step_show_inspect_summary(sample_device, mock_ha_client, MagicMock())
 
     mock_ha_client.get_entity_registry.assert_not_called()
 
 
 async def test_step_show_inspect_summary_skips_when_no_entities(sample_device, mock_ha_client):
     """When Z2M device has no enabled entities, dashboard fetch is skipped."""
-    from zigporter.commands.migrate import step_show_inspect_summary  # noqa: PLC0415
-
     mock_ha_client.get_entity_registry = AsyncMock(return_value=[])
 
-    await step_show_inspect_summary(sample_device, mock_ha_client)
+    await step_show_inspect_summary(sample_device, mock_ha_client, MagicMock())
 
     mock_ha_client.get_panels.assert_not_called()
 
 
 async def test_step_show_inspect_summary_normal(sample_device, mock_ha_client):
     """Normal path: fetches entity registry and dashboard data then shows the summary."""
-    from zigporter.commands.migrate import step_show_inspect_summary  # noqa: PLC0415
-
     mock_ha_client.get_lovelace_config = AsyncMock(
         return_value={
             "views": [
@@ -741,7 +738,7 @@ async def test_step_show_inspect_summary_normal(sample_device, mock_ha_client):
         }
     )
 
-    await step_show_inspect_summary(sample_device, mock_ha_client)
+    await step_show_inspect_summary(sample_device, mock_ha_client, MagicMock())
 
     mock_ha_client.get_z2m_device_id.assert_called_once_with(sample_device.ieee)
     mock_ha_client.get_entity_registry.assert_called()
@@ -750,12 +747,10 @@ async def test_step_show_inspect_summary_normal(sample_device, mock_ha_client):
 
 async def test_step_show_inspect_summary_swallows_exceptions(sample_device, mock_ha_client):
     """Exceptions during summary fetching do not propagate — the wizard must not be interrupted."""
-    from zigporter.commands.migrate import step_show_inspect_summary  # noqa: PLC0415
-
     mock_ha_client.get_z2m_device_id = AsyncMock(side_effect=RuntimeError("network error"))
 
     # Must not raise
-    await step_show_inspect_summary(sample_device, mock_ha_client)
+    await step_show_inspect_summary(sample_device, mock_ha_client, MagicMock())
 
 
 # ---------------------------------------------------------------------------

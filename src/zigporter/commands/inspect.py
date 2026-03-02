@@ -6,25 +6,14 @@ import questionary
 from rich.console import Console
 from rich.panel import Panel
 
+from zigporter.entity_refs import collect_config_entity_ids
 from zigporter.ha_client import HAClient
+from zigporter.ui import QUESTIONARY_STYLE
 from zigporter.utils import normalize_ieee
 
 console = Console()
 
-_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:ansicyan bold"),
-        ("question", "bold"),
-        ("answer", "fg:ansicyan bold"),
-        ("pointer", "fg:ansicyan bold"),
-        ("highlighted", "fg:ansicyan bold"),
-        ("selected", "fg:ansicyan"),
-        ("separator", "fg:ansibrightblack"),
-        ("instruction", "fg:ansibrightblack"),
-        ("text", ""),
-        ("disabled", "fg:ansibrightblack italic"),
-    ]
-)
+_STYLE = QUESTIONARY_STYLE
 
 
 # ---------------------------------------------------------------------------
@@ -118,28 +107,6 @@ def _scan_dashboard(
                     )
                 )
     return refs
-
-
-# ---------------------------------------------------------------------------
-# Config entity walker (automations / scripts)
-# ---------------------------------------------------------------------------
-
-
-def _collect_config_entities(node: Any) -> set[str]:
-    """Recursively collect entity_id values from an automation/script config."""
-    ids: set[str] = set()
-    if isinstance(node, dict):
-        val = node.get("entity_id")
-        if isinstance(val, str):
-            ids.add(val)
-        elif isinstance(val, list):
-            ids.update(v for v in val if isinstance(v, str))
-        for v in node.values():
-            ids.update(_collect_config_entities(v))
-    elif isinstance(node, list):
-        for item in node:
-            ids.update(_collect_config_entities(item))
-    return ids
 
 
 # ---------------------------------------------------------------------------
@@ -300,11 +267,11 @@ def build_deps(
 
     # Automations
     automations = [
-        a for a in all_data["automation_configs"] if _collect_config_entities(a) & target
+        a for a in all_data["automation_configs"] if collect_config_entity_ids(a) & target
     ]
 
     # Scripts
-    scripts = [s for s in all_data["scripts"] if _collect_config_entities(s) & target]
+    scripts = [s for s in all_data["scripts"] if collect_config_entity_ids(s) & target]
 
     # Scenes
     scenes = [s for s in all_data["scenes"] if set(s.get("entities", {}).keys()) & target]
@@ -366,7 +333,7 @@ def show_report(deps: DeviceDeps) -> None:
         console.print(f"\n[bold]Automations[/bold] ({len(deps.automations)})")
         for auto in deps.automations:
             alias = auto.get("alias") or auto.get("id", "?")
-            refs = sorted(_collect_config_entities(auto) & set(deps.entities))
+            refs = sorted(collect_config_entity_ids(auto) & set(deps.entities))
             console.print(f"  [cyan]□[/cyan]  {alias}")
             for eid in refs:
                 console.print(f"       [dim]{eid}[/dim]")
@@ -376,7 +343,7 @@ def show_report(deps: DeviceDeps) -> None:
         console.print(f"\n[bold]Scripts[/bold] ({len(deps.scripts)})")
         for script in deps.scripts:
             name = script.get("alias") or script.get("id", "?")
-            refs = sorted(_collect_config_entities(script) & set(deps.entities))
+            refs = sorted(collect_config_entity_ids(script) & set(deps.entities))
             console.print(f"  [cyan]□[/cyan]  {name}")
             for eid in refs:
                 console.print(f"       [dim]{eid}[/dim]")

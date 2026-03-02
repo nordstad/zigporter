@@ -10,24 +10,12 @@ from rich.console import Console
 from rich.table import Table
 
 from zigporter.ha_client import HAClient
-from zigporter.utils import normalize_ieee
+from zigporter.ui import QUESTIONARY_STYLE
+from zigporter.utils import normalize_ieee, parse_z2m_ieee_identifier
 
 console = Console()
 
-_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:ansicyan bold"),
-        ("question", "bold"),
-        ("answer", "fg:ansicyan bold"),
-        ("pointer", "fg:ansicyan bold"),
-        ("highlighted", "fg:ansicyan bold"),
-        ("selected", "fg:ansicyan"),
-        ("separator", "fg:ansibrightblack"),
-        ("instruction", "fg:ansibrightblack"),
-        ("text", ""),
-        ("disabled", "fg:ansibrightblack italic"),
-    ]
-)
+_STYLE = QUESTIONARY_STYLE
 
 _NUMERIC_SUFFIX_PAT = re.compile(r"^(.+)_\d+$")
 
@@ -74,12 +62,9 @@ def _mqtt_ieee(device_entry: dict[str, Any]) -> str | None:
     for platform, identifier in device_entry.get("identifiers", []):
         if platform != "mqtt":
             continue
-        ident = identifier.lower()
-        if ident.startswith("zigbee2mqtt_"):
-            ident = ident[len("zigbee2mqtt_") :]
-        if ident.startswith("0x"):
-            ident = ident[2:]
-        return ident.zfill(16)
+        parsed = parse_z2m_ieee_identifier(identifier)
+        if parsed:
+            return parsed
     return None
 
 
@@ -159,7 +144,7 @@ async def apply_fix(pair: StalePair, ha_client: HAClient) -> None:
         try:
             await ha_client.delete_entity(eid)
             console.print(f"  [green]✓[/green] Deleted stale entity  [dim]{eid}[/dim]")
-        except Exception as exc:
+        except (RuntimeError, OSError) as exc:
             console.print(f"  [yellow]Warning:[/yellow] Could not delete {eid}: {exc}")
 
     # 2. Remove the stale ZHA device entry.
@@ -181,7 +166,7 @@ async def apply_fix(pair: StalePair, ha_client: HAClient) -> None:
             await ha_client.remove_zha_device(_ieee_colon(pair.ieee))
             console.print("  [green]✓[/green] Removed stale ZHA device entry via ZHA service")
             removed = True
-        except Exception as exc:
+        except (RuntimeError, OSError) as exc:
             console.print(f"  [yellow]Warning:[/yellow] Could not remove via ZHA service: {exc}")
 
     if not removed:
@@ -194,7 +179,7 @@ async def apply_fix(pair: StalePair, ha_client: HAClient) -> None:
         try:
             await ha_client.rename_entity_id(z2m_id, base_id)
             console.print(f"  [green]✓[/green] {z2m_id} → [bold]{base_id}[/bold]")
-        except Exception as exc:
+        except (RuntimeError, OSError) as exc:
             console.print(f"  [yellow]Warning:[/yellow] Could not rename {z2m_id}: {exc}")
 
 

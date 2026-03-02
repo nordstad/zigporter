@@ -60,7 +60,7 @@ async def test_check_ha_reachable_success():
 async def test_check_ha_reachable_failure():
     with patch("zigporter.commands.check.httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=Exception("Connection refused"))
+        mock_client.get = AsyncMock(side_effect=RuntimeError("Connection refused"))
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -133,7 +133,7 @@ async def test_check_z2m_running_success():
 async def test_check_z2m_running_failure():
     with patch("zigporter.commands.check.httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=Exception("Connection refused"))
+        mock_client.get = AsyncMock(side_effect=RuntimeError("Connection refused"))
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 

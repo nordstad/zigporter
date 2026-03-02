@@ -7,6 +7,11 @@ import questionary
 from rich.console import Console
 from rich.table import Table
 
+from zigporter.commands.migrate_reporting import (
+    show_device_dependencies,
+    step_show_inspect_summary,
+    step_show_test_checklist,
+)
 from zigporter.ha_client import HAClient
 from zigporter.migration_state import (
     DeviceStatus,
@@ -19,25 +24,13 @@ from zigporter.migration_state import (
     save_state,
 )
 from zigporter.models import ZHADevice, ZHAExport
+from zigporter.ui import QUESTIONARY_STYLE
 from zigporter.utils import normalize_ieee
 from zigporter.z2m_client import Z2MClient
 
 console = Console()
 
-_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:ansicyan bold"),
-        ("question", "bold"),
-        ("answer", "fg:ansicyan bold"),
-        ("pointer", "fg:ansicyan bold"),
-        ("highlighted", "fg:ansicyan bold"),
-        ("selected", "fg:ansicyan"),
-        ("separator", "fg:ansibrightblack"),
-        ("instruction", "fg:ansibrightblack"),
-        ("text", ""),
-        ("disabled", "fg:ansibrightblack italic"),
-    ]
-)
+_STYLE = QUESTIONARY_STYLE
 
 WIZARD_STEPS = 7
 
@@ -183,7 +176,7 @@ async def step_remove_from_zha(device: ZHADevice, ha_client: HAClient) -> bool:
     try:
         await ha_client.remove_zha_device(device.ieee)
         console.print("[green]✓ Removal command sent[/green]")
-    except Exception as exc:
+    except (RuntimeError, OSError) as exc:
         console.print(f"[yellow]Could not remove automatically: {exc}[/yellow]")
         console.print(
             "\nRemove the device manually in Home Assistant:\n"
@@ -242,7 +235,7 @@ async def step_pair_with_z2m(
     try:
         await z2m_client.enable_permit_join(seconds=pj_secs)
         console.print("[green]✓ Permit join enabled[/green]")
-    except Exception as exc:
+    except (RuntimeError, OSError) as exc:
         console.print(f"[red]Could not enable permit join: {exc}[/red]")
         return None
 
@@ -254,7 +247,7 @@ async def step_pair_with_z2m(
         known_iees: set[str] = {
             normalize_ieee(d.get("ieee_address", "")) for d in await z2m_client.get_devices()
         }
-    except Exception:
+    except (RuntimeError, OSError):
         known_iees = set()
     target_ieee = normalize_ieee(device.ieee)
 
@@ -272,7 +265,7 @@ async def step_pair_with_z2m(
             refresh_secs = min(remaining + poll_interval, _PERMIT_JOIN_MAX)
             try:
                 await z2m_client.enable_permit_join(seconds=refresh_secs)
-            except Exception:
+            except (RuntimeError, OSError):
                 pass
             pj_started_at = elapsed
 
@@ -282,7 +275,7 @@ async def step_pair_with_z2m(
         )
         try:
             all_devices = await z2m_client.get_devices()
-        except Exception:
+        except (RuntimeError, OSError):
             all_devices = []
 
         # Detect unexpected joiners: a new device appeared but it's not the one we want.
@@ -331,7 +324,7 @@ async def step_pair_with_z2m(
         # One final attempt to pick up the device from the Z2M API
         try:
             z2m_device = await z2m_client.get_device_by_ieee(device.ieee)
-        except Exception:
+        except (RuntimeError, OSError):
             z2m_device = None
         if z2m_device:
             console.print(
@@ -380,7 +373,7 @@ async def step_rename(
     try:
         await z2m_client.rename_device(current_name, target_name)
         console.print(f"[green]✓ Renamed to {target_name}[/green]")
-    except Exception as exc:
+    except (RuntimeError, OSError) as exc:
         console.print(f"[red]Rename failed: {exc}[/red]")
         return False
 
@@ -394,7 +387,7 @@ async def step_rename(
                     await ha_client.update_device_area(z2m_device_id, device.area_id)
                     console.print(f"[green]✓ Area set to {device.area_name}[/green]")
                     break
-                except Exception:
+                except (RuntimeError, OSError):
                     if attempt < 3:
                         await asyncio.sleep(3)
             else:
@@ -434,23 +427,6 @@ async def _wait_for_z2m_device_in_ha(
         elapsed += poll_interval
     console.print()  # clear the \r line
     return None
-
-
-def _collect_entity_ids(node: Any) -> set[str]:
-    """Recursively collect all entity_id string values from a config dict/list."""
-    ids: set[str] = set()
-    if isinstance(node, dict):
-        val = node.get("entity_id")
-        if isinstance(val, str):
-            ids.add(val)
-        elif isinstance(val, list):
-            ids.update(v for v in val if isinstance(v, str))
-        for v in node.values():
-            ids.update(_collect_entity_ids(v))
-    elif isinstance(node, list):
-        for item in node:
-            ids.update(_collect_entity_ids(item))
-    return ids
 
 
 def _is_ieee_entity(entity_id: str) -> bool:
@@ -577,7 +553,7 @@ async def step_reconcile_entity_ids(device: ZHADevice, ha_client: HAClient) -> N
                 try:
                     await ha_client.rename_entity_id(current_id, target_id)
                     console.print(f"[green]✓[/green] {current_id} → {target_id}")
-                except Exception as exc:
+                except (RuntimeError, OSError) as exc:
                     console.print(f"[yellow]Warning:[/yellow] Could not rename {current_id}: {exc}")
 
     # --- Resolve numeric-suffix conflicts ---
@@ -605,7 +581,7 @@ async def step_reconcile_entity_ids(device: ZHADevice, ha_client: HAClient) -> N
             for z2m_id, base_id in suffix_resolvable:
                 try:
                     await ha_client.delete_entity(base_id)
-                except Exception as exc:
+                except (RuntimeError, OSError) as exc:
                     console.print(
                         f"[yellow]Warning:[/yellow] Could not delete stale {base_id}: {exc}"
                     )
@@ -613,7 +589,7 @@ async def step_reconcile_entity_ids(device: ZHADevice, ha_client: HAClient) -> N
                 try:
                     await ha_client.rename_entity_id(z2m_id, base_id)
                     console.print(f"[green]✓[/green] {z2m_id} → {base_id}")
-                except Exception as exc:
+                except (RuntimeError, OSError) as exc:
                     console.print(f"[yellow]Warning:[/yellow] Could not rename {z2m_id}: {exc}")
 
 
@@ -634,7 +610,7 @@ async def _reload_z2m_integration(ha_client: HAClient, z2m_device_id: str) -> No
         try:
             await ha_client.reload_config_entry(entry_id)
             console.print(f"[green]✓[/green] Reloaded Z2M integration ({entry_id})")
-        except Exception as exc:
+        except (RuntimeError, OSError) as exc:
             console.print(
                 f"[yellow]Warning:[/yellow] Could not reload config entry {entry_id}: {exc}"
             )
@@ -757,160 +733,6 @@ async def step_validate(device: ZHADevice, ha_client: HAClient, retries: int = 1
 
 
 # ---------------------------------------------------------------------------
-# Post-migration test checklist
-# ---------------------------------------------------------------------------
-
-
-async def step_show_test_checklist(device: ZHADevice, ha_client: HAClient) -> None:
-    """Display a checklist of automations, scripts, and scenes to test after migration."""
-    old_ids = {e.entity_id for e in device.entities}
-
-    # Collect matching scripts and scenes from live HA data
-    scripts, scenes = await asyncio.gather(ha_client.get_scripts(), ha_client.get_scenes())
-
-    matching_scripts: list[tuple[str, list[str]]] = []
-    for s in scripts:
-        refs = _collect_entity_ids(s) & old_ids
-        if refs:
-            name = s.get("alias") or s.get("id", "?")
-            matching_scripts.append((name, sorted(refs)))
-
-    matching_scenes: list[tuple[str, list[str]]] = []
-    for s in scenes:
-        # Scene entities live under an "entities" dict keyed by entity_id
-        refs = set(s.get("entities", {}).keys()) & old_ids
-        if refs:
-            name = s.get("name") or s.get("id", "?")
-            matching_scenes.append((name, sorted(refs)))
-
-    has_automations = bool(device.automations)
-    has_scripts = bool(matching_scripts)
-    has_scenes = bool(matching_scenes)
-
-    if not has_automations and not has_scripts and not has_scenes:
-        return
-
-    console.print("\n")
-    console.rule("[bold cyan]Post-migration test checklist[/bold cyan]")
-
-    if has_automations:
-        console.print("\n  [bold]Automations[/bold]")
-        for auto in device.automations:
-            console.print(f"  [cyan]□[/cyan]  {auto.alias}")
-            for eid in auto.entity_references:
-                console.print(f"       [dim]{eid}[/dim]")
-
-    if has_scripts:
-        console.print("\n  [bold]Scripts[/bold]")
-        for name, refs in matching_scripts:
-            console.print(f"  [cyan]□[/cyan]  {name}")
-            for eid in refs:
-                console.print(f"       [dim]{eid}[/dim]")
-
-    if has_scenes:
-        console.print("\n  [bold]Scenes[/bold]")
-        for name, refs in matching_scenes:
-            console.print(f"  [cyan]□[/cyan]  {name}")
-            for eid in refs:
-                console.print(f"       [dim]{eid}[/dim]")
-
-    console.print(
-        "\n  [dim]Tip: Also check your Lovelace dashboards for cards referencing these entities.[/dim]"
-    )
-    console.rule()
-
-
-# ---------------------------------------------------------------------------
-# Post-rename device summary (entities + dashboards)
-# ---------------------------------------------------------------------------
-
-
-async def step_show_inspect_summary(device: ZHADevice, ha_client: HAClient) -> None:
-    """Show current entities and dashboard cards for the migrated Z2M device.
-
-    Called after entity ID reconciliation (step 5) and before validation (step 7)
-    so the user can see which dashboard cards reference the device's entities.
-    """
-    _print_step(6, "Review entities & dashboards")
-    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
-
-    try:
-        z2m_device_id = await ha_client.get_z2m_device_id(device.ieee)
-        if z2m_device_id is None:
-            return
-
-        full_registry = await ha_client.get_entity_registry()
-        entity_ids = [
-            e["entity_id"]
-            for e in full_registry
-            if e.get("device_id") == z2m_device_id and not e.get("disabled_by")
-        ]
-
-        if not entity_ids:
-            return
-
-        console.print()
-        console.rule(f"[bold cyan]{device.name}[/bold cyan]")
-        await show_migrate_inspect_summary(entity_ids, ha_client)
-        console.rule()
-    except Exception:
-        pass  # Non-critical — never interrupt the wizard
-
-
-# ---------------------------------------------------------------------------
-# Pre-migration dependency summary
-# ---------------------------------------------------------------------------
-
-
-async def _show_device_deps(device: ZHADevice, ha_client: HAClient) -> None:
-    """Show automations, scripts, and scenes that reference this device before migration starts."""
-    old_ids = {e.entity_id for e in device.entities}
-
-    matching_scripts: list[dict[str, Any]] = []
-    matching_scenes: list[dict[str, Any]] = []
-    try:
-        scripts, scenes = await asyncio.gather(ha_client.get_scripts(), ha_client.get_scenes())
-        matching_scripts = [s for s in scripts if _collect_entity_ids(s) & old_ids]
-        matching_scenes = [s for s in scenes if set(s.get("entities", {}).keys()) & old_ids]
-    except Exception:
-        pass
-
-    has_automations = bool(device.automations)
-    has_scripts = bool(matching_scripts)
-    has_scenes = bool(matching_scenes)
-
-    if not has_automations and not has_scripts and not has_scenes:
-        return
-
-    console.print()
-    console.rule("[bold cyan]Dependencies[/bold cyan]")
-    console.print("[dim]These will need testing after migration:[/dim]\n")
-
-    if has_automations:
-        console.print(f"  [bold]Automations[/bold] ({len(device.automations)})")
-        for auto in device.automations:
-            console.print(f"  [cyan]□[/cyan]  {auto.alias}")
-
-    if has_scripts:
-        console.print(f"\n  [bold]Scripts[/bold] ({len(matching_scripts)})")
-        for s in matching_scripts:
-            name = s.get("alias") or s.get("id", "?")
-            console.print(f"  [cyan]□[/cyan]  {name}")
-
-    if has_scenes:
-        console.print(f"\n  [bold]Scenes[/bold] ({len(matching_scenes)})")
-        for s in matching_scenes:
-            name = s.get("name") or s.get("id", "?")
-            console.print(f"  [cyan]□[/cyan]  {name}")
-
-    console.print(
-        "\n  [dim]Tip: Run [bold]zigporter inspect[/bold] for dashboard cards "
-        "and full entity details.[/dim]"
-    )
-    console.rule()
-
-
-# ---------------------------------------------------------------------------
 # Main wizard orchestrator
 # ---------------------------------------------------------------------------
 
@@ -940,7 +762,7 @@ async def run_wizard(
         "pairing with Z2M before it can be used again.[/dim]".format(name=device.name)
     )
 
-    await _show_device_deps(device, ha_client)
+    await show_device_dependencies(device, ha_client, console)
 
     mark_in_progress(state, device.ieee)
     save_state(state, state_path)
@@ -972,7 +794,8 @@ async def run_wizard(
         await step_reconcile_entity_ids(device, ha_client)
 
         # Show entity and dashboard summary before validation
-        await step_show_inspect_summary(device, ha_client)
+        _print_step(6, "Review entities & dashboards")
+        await step_show_inspect_summary(device, ha_client, console)
 
         # Step 6 — Validate
         valid = await step_validate(device, ha_client)
@@ -988,7 +811,7 @@ async def run_wizard(
                 f"[bold]{device.name}[/bold] successfully migrated.\n"
                 f"Progress: [bold]{migrated}/{total}[/bold] devices migrated."
             )
-            await step_show_test_checklist(device, ha_client)
+            await step_show_test_checklist(device, ha_client, console)
         else:
             mark_failed(state, device.ieee)
             save_state(state, state_path)

@@ -6,23 +6,11 @@ from rich.console import Console
 
 from zigporter.ha_client import HAClient
 from zigporter.models import CheckResult, CheckStatus
+from zigporter.ui import QUESTIONARY_STYLE
 
 console = Console()
 
-_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:ansicyan bold"),
-        ("question", "bold"),
-        ("answer", "fg:ansicyan bold"),
-        ("pointer", "fg:ansicyan bold"),
-        ("highlighted", "fg:ansicyan bold"),
-        ("selected", "fg:ansicyan"),
-        ("separator", "fg:ansibrightblack"),
-        ("instruction", "fg:ansibrightblack"),
-        ("text", ""),
-        ("disabled", "fg:ansibrightblack italic"),
-    ]
-)
+_STYLE = QUESTIONARY_STYLE
 
 _STATUS_ICON = {
     CheckStatus.OK: "[green]✓[/green]",
@@ -70,7 +58,7 @@ async def _check_ha_reachable(ha_url: str, token: str, verify_ssl: bool) -> Chec
             resp = await client.get(f"{ha_url}/api/")
             resp.raise_for_status()
         return CheckResult(name="HA reachable", status=CheckStatus.OK, message=ha_url)
-    except Exception as exc:
+    except (httpx.HTTPError, OSError, RuntimeError) as exc:
         return CheckResult(
             name="HA reachable",
             status=CheckStatus.FAILED,
@@ -101,7 +89,7 @@ async def _check_zha_active(ha_url: str, token: str, verify_ssl: bool) -> CheckR
             status=CheckStatus.OK,
             message=f"{count} device(s) found",
         )
-    except Exception as exc:
+    except (httpx.HTTPError, OSError, RuntimeError) as exc:
         return CheckResult(
             name="ZHA active",
             status=CheckStatus.FAILED,
@@ -135,7 +123,7 @@ async def _check_z2m_running(
                         status=CheckStatus.OK,
                         message=f"{count} device(s) paired",
                     )
-                except Exception:
+                except ValueError:
                     return CheckResult(
                         name="Z2M running",
                         status=CheckStatus.OK,
@@ -145,7 +133,7 @@ async def _check_z2m_running(
             return CheckResult(
                 name="Z2M running", status=CheckStatus.OK, message="Z2M is responding"
             )
-    except Exception as exc:
+    except (httpx.HTTPError, OSError, RuntimeError) as exc:
         return CheckResult(
             name="Z2M running",
             status=CheckStatus.FAILED,

@@ -6,6 +6,7 @@ from typing import Any
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from zigporter.entity_refs import collect_config_entity_ids
 from zigporter.ha_client import HAClient
 from zigporter.models import AutomationRef, ZHADevice, ZHAEntity, ZHAExport
 
@@ -39,26 +40,7 @@ def _build_state_map(states: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 def _extract_entity_ids_from_automation(config: dict[str, Any]) -> list[str]:
     """Walk an automation config dict and collect all entity_id values."""
-    entity_ids: set[str] = set()
-
-    def _walk(node: Any) -> None:
-        if isinstance(node, dict):
-            if "entity_id" in node:
-                value = node["entity_id"]
-                if isinstance(value, str):
-                    entity_ids.add(value)
-                elif isinstance(value, list):
-                    for v in value:
-                        if isinstance(v, str):
-                            entity_ids.add(v)
-            for v in node.values():
-                _walk(v)
-        elif isinstance(node, list):
-            for item in node:
-                _walk(item)
-
-    _walk(config)
-    return sorted(entity_ids)
+    return sorted(collect_config_entity_ids(config))
 
 
 def _match_automations_to_devices(
