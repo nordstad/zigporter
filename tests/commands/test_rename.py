@@ -10,6 +10,7 @@ from zigporter.commands.rename import (
     _count_occurrences,
     _deep_replace,
     _discover_dashboards,
+    _suggest_entity_ids,
     build_rename_plan,
     display_plan,
     execute_rename,
@@ -193,6 +194,7 @@ def mock_ha_client():
         ]
     )
     client.get_panels = AsyncMock(return_value={})
+    client.get_config_entries = AsyncMock(return_value=[])
     client.get_lovelace_config = AsyncMock(
         return_value={
             "views": [
@@ -311,6 +313,7 @@ def mock_exec_client():
     client.update_script = AsyncMock(return_value=None)
     client.update_scene = AsyncMock(return_value=None)
     client.save_lovelace_config = AsyncMock(return_value=None)
+    client.update_config_entry_options = AsyncMock(return_value=None)
     return client
 
 
@@ -610,7 +613,8 @@ async def test_run_rename_apply_success(mocker):
 
 
 async def test_run_rename_validation_error(mocker):
-    mocker.patch("zigporter.commands.rename.HAClient")
+    mock_ha_cls = mocker.patch("zigporter.commands.rename.HAClient")
+    mock_ha_cls.return_value.get_entity_registry = AsyncMock(return_value=[])
     mocker.patch("zigporter.commands.rename.build_rename_plan", side_effect=ValueError("not found"))
 
     from zigporter.commands.rename import run_rename  # noqa: PLC0415
@@ -2705,3 +2709,79 @@ async def test_run_rename_device_z2m_lookup_exception_interactive(mocker):
     assert result is True
     _, kwargs = exec_mock.call_args
     assert kwargs["z2m_friendly_name"] is None
+
+
+# ---------------------------------------------------------------------------
+# config_entry scanning — build_rename_plan
+# ---------------------------------------------------------------------------
+
+
+async def test_build_rename_plan_finds_config_entry(mock_ha_client):
+    mock_ha_client.get_config_entries = AsyncMock(
+        return_value=[
+            {
+                "entry_id": "helper-group-1",
+                "title": "Bogus Lights",
+                "options": {"entities": ["switch.kitchen_plug", "light.hall"]},
+            }
+        ]
+    )
+    plan = await build_rename_plan(mock_ha_client, "switch.kitchen_plug", "switch.new_plug")
+    ce_locs = [loc for loc in plan.locations if loc.context == "config_entry"]
+    assert len(ce_locs) == 1
+    assert ce_locs[0].item_id == "helper-group-1"
+    assert ce_locs[0].name == "Bogus Lights"
+    assert ce_locs[0].occurrences >= 1
+
+
+async def test_execute_rename_patches_config_entry(mock_exec_client):
+    options = {"entities": ["switch.old", "light.hall"]}
+    plan = RenamePlan(
+        old_entity_id="switch.old",
+        new_entity_id="switch.new",
+        locations=[
+            RenameLocation(
+                context="config_entry",
+                name="Bogus Lights",
+                item_id="helper-group-1",
+                occurrences=1,
+                raw_config=options,
+            )
+        ],
+    )
+    await execute_rename(mock_exec_client, plan)
+    mock_exec_client.update_config_entry_options.assert_called_once()
+    call_entry_id, call_options = mock_exec_client.update_config_entry_options.call_args[0]
+    assert call_entry_id == "helper-group-1"
+    assert "switch.new" in call_options["entities"]
+    assert "switch.old" not in call_options["entities"]
+
+
+# ---------------------------------------------------------------------------
+# _suggest_entity_ids
+# ---------------------------------------------------------------------------
+
+
+def test_suggest_entity_ids_matches_by_name():
+    registry = [
+        {"entity_id": "light.bogus_lights", "name_by_user": "bogus lights", "name": None},
+        {"entity_id": "switch.kitchen_plug", "name_by_user": None, "name": "Kitchen Plug"},
+    ]
+    result = _suggest_entity_ids("bogus lights", registry)
+    assert result == ["light.bogus_lights"]
+
+
+def test_suggest_entity_ids_matches_by_name_field():
+    registry = [
+        {"entity_id": "switch.kitchen_plug", "name_by_user": None, "name": "Kitchen Plug"},
+    ]
+    result = _suggest_entity_ids("kitchen plug", registry)
+    assert result == ["switch.kitchen_plug"]
+
+
+def test_suggest_entity_ids_no_match():
+    registry = [
+        {"entity_id": "light.hall", "name_by_user": "Hall Light", "name": None},
+    ]
+    result = _suggest_entity_ids("bogus lights", registry)
+    assert result == []

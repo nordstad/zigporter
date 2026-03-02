@@ -158,11 +158,12 @@ async def build_rename_plan(
     if new_entity_id in existing_ids:
         raise ValueError(f"Entity '{new_entity_id}' already exists in the HA entity registry.")
 
-    automations, scripts, scenes, panels = await asyncio.gather(
+    automations, scripts, scenes, panels, config_entries = await asyncio.gather(
         ha_client.get_automation_configs(),
         ha_client.get_scripts(),
         ha_client.get_scenes(),
         ha_client.get_panels(),
+        ha_client.get_config_entries(),
     )
 
     url_paths, titles = _discover_dashboards(panels)
@@ -219,6 +220,20 @@ async def build_rename_plan(
                 )
             )
 
+    for entry in config_entries:
+        options = entry.get("options") or {}
+        count = _count_occurrences(options, old_entity_id)
+        if count:
+            locations.append(
+                RenameLocation(
+                    context="config_entry",
+                    name=entry.get("title") or entry.get("entry_id", "?"),
+                    item_id=entry["entry_id"],
+                    occurrences=count,
+                    raw_config=options,
+                )
+            )
+
     scanned_dashboard_names: list[str] = []
     yaml_mode_dashboard_names: list[str] = []
     yaml_mode_dashboard_paths: list[str | None] = []
@@ -266,6 +281,17 @@ _CONTEXT_LABEL: dict[str, str] = {
     "lovelace": "dashboard",
     "config_entry": "helper",
 }
+
+
+def _suggest_entity_ids(name: str, registry: list[dict[str, Any]]) -> list[str]:
+    """Return entity IDs whose name_by_user or name matches `name` (case-insensitive)."""
+    needle = name.strip().lower()
+    return [
+        e["entity_id"]
+        for e in registry
+        if (e.get("name_by_user") or "").strip().lower() == needle
+        or (e.get("name") or "").strip().lower() == needle
+    ]
 
 
 def display_plan(plan: RenamePlan) -> None:
@@ -381,6 +407,12 @@ async def execute_rename(ha_client: HAClient, plan: RenamePlan) -> None:
             await ha_client.save_lovelace_config(patched, url_path)
             console.print("[green]✓[/green]")
 
+        elif loc.context == "config_entry":
+            console.print(f"  Updating helper [dim]{loc.name!r}[/dim]...", end=" ")
+            patched = _deep_replace(loc.raw_config, old, new)
+            await ha_client.update_config_entry_options(loc.item_id, patched)
+            console.print("[green]✓[/green]")
+
 
 # ---------------------------------------------------------------------------
 # Entry point
@@ -402,6 +434,13 @@ async def run_rename(
         plan = await build_rename_plan(ha_client, old_entity_id, new_entity_id)
     except ValueError as exc:
         console.print(f"\n[red]Error:[/red] {exc}")
+        if "not found" in str(exc):
+            registry = await ha_client.get_entity_registry()
+            suggestions = _suggest_entity_ids(old_entity_id, registry)
+            if suggestions:
+                for suggestion in suggestions:
+                    console.print(f"\n  Hint: did you mean [bold]{suggestion}[/bold]?")
+                    console.print(f"  Re-run:  zigporter rename-entity {suggestion} <new-id>")
         return False
     console.print("[green]✓[/green]")
 
