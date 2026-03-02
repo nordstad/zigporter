@@ -32,6 +32,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --group docs
 
+      - name: Inject version into demo playground
+        run: |
+          VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
+          sed -i "s/__ZIGPORTER_VERSION__/v${VERSION}/g" docs/demo/index.html
+
       - name: Build documentation
         run: uv run zensical build --clean
 
