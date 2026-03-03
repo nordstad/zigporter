@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-03-03
+
+### Fixed
+
+- Use absolute URL for logo so it renders correctly on PyPI
+- Fix Documentation link in package metadata to point to the MkDocs site
+
 ## [0.5.0] - 2026-03-03
 
 ### Added
@@ -171,7 +178,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump codecov/codecov-action from 4 to 5 (#3)
 - Bump actions/github-script from 7 to 8 (#2)
 
-[Unreleased]: https://github.com/nordstad/zigporter/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/nordstad/zigporter/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/nordstad/zigporter/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/nordstad/zigporter/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/nordstad/zigporter/compare/v0.4.0...v0.4.0
 [0.4.0]: https://github.com/nordstad/zigporter/compare/v0.3.0...v0.4.0
