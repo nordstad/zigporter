@@ -92,20 +92,20 @@ body { background:var(--bg); color:var(--txt); font-family:var(--font);
 
 @media (max-width:640px) {
   .main  { flex-direction:column; }
-  /* Terminal: smaller font + horizontal scroll so wide tables aren't clipped */
-  .tout  { font-size:10.5px; line-height:1.65; padding:8px 10px; overflow-x:auto;
+  /* Terminal: 8px font fits ~78-char wide tables on a 390px viewport with minimal padding */
+  .tout  { font-size:8px; line-height:1.6; padding:6px 4px; overflow-x:auto;
            -webkit-overflow-scrolling:touch; }
   .tbar  { font-size:10px; padding:4px 10px; }
-  /* Sidebar: taller strip so card labels + status text aren't squeezed */
-  .side  { width:100%; height:168px; flex-shrink:0;
+  /* Sidebar: taller to give cards + replay bar breathing room */
+  .side  { width:100%; height:190px; flex-shrink:0;
            border-left:none; border-top:1px solid var(--bdr); }
   .stitle{ padding:5px 10px; font-size:10px; }
   .sbody { display:flex; gap:8px; overflow-x:auto; overflow-y:hidden; padding:8px;
            -webkit-overflow-scrolling:touch; }
   .card  { flex-shrink:0; min-width:148px; margin-bottom:0; }
   .card .cd { display:none; }   /* hide description in compact strip */
-  .sfoot { padding:6px 8px; }
-  .breplay { font-size:10.5px; padding:5px 8px; }
+  .sfoot { padding:10px 8px; }
+  .breplay { font-size:11px; padding:6px 8px; }
 }
 </style>
 </head>
