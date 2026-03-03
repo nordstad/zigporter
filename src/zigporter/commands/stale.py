@@ -199,8 +199,18 @@ async def _do_remove_device(
 # Picker helpers
 # ---------------------------------------------------------------------------
 
-_GROUP_ORDER = {None: 0, StaleDeviceStatus.STALE: 1, StaleDeviceStatus.IGNORED: 2}
-_GROUP_LABEL = {None: "New", StaleDeviceStatus.STALE: "Stale", StaleDeviceStatus.IGNORED: "Ignored"}
+_GROUP_ORDER = {
+    None: 0,
+    StaleDeviceStatus.NEW: 0,
+    StaleDeviceStatus.STALE: 1,
+    StaleDeviceStatus.IGNORED: 2,
+}
+_GROUP_LABEL = {
+    None: "New",
+    StaleDeviceStatus.NEW: "New",
+    StaleDeviceStatus.STALE: "Stale",
+    StaleDeviceStatus.IGNORED: "Ignored",
+}
 
 # Sentinel for the "Done" picker choice.  questionary.Choice treats value=None as
 # "no value set" and falls back to returning the title string, so we use a distinct

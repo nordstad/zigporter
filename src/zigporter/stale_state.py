@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 
 class StaleDeviceStatus(str, Enum):
+    NEW = "new"
     STALE = "stale"
     IGNORED = "ignored"
 
@@ -20,7 +21,7 @@ class StaleDeviceEntry(BaseModel):
     device_id: str
     name: str
     first_seen_offline_at: datetime
-    status: StaleDeviceStatus = StaleDeviceStatus.STALE
+    status: StaleDeviceStatus = StaleDeviceStatus.NEW
     note: str | None = None
 
 

@@ -54,7 +54,7 @@ def test_record_first_seen_sets_timestamp(tmp_path):
 
     entry = state.devices[DEVICE_ID]
     assert before <= entry.first_seen_offline_at <= after
-    assert entry.status == StaleDeviceStatus.STALE
+    assert entry.status == StaleDeviceStatus.NEW
 
 
 def test_record_first_seen_does_not_overwrite(tmp_path):
