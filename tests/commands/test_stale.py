@@ -1,15 +1,26 @@
 """Tests for the stale command detection logic and helpers."""
 
+from unittest.mock import MagicMock
+
+import pytest  # noqa: F401
 import questionary
 
 from zigporter.commands.stale import (
+    _DONE,
     _device_is_offline,
+    _do_remove_device,
+    _handle_clear,
+    _handle_ignore,
+    _handle_mark_stale,
+    _handle_remove,
     _integration,
     _is_ha_core_device,
+    _show_device_detail,
     _zha_ieee_from_identifiers,
     detect_offline_devices,
+    stale_command,
 )
-from zigporter.stale_state import StaleState
+from zigporter.stale_state import StaleDeviceStatus, StaleState, mark_stale
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +317,7 @@ def test_detect_offline_devices_includes_identifiers():
 
 def test_build_picker_choices_groups():
     from zigporter.commands.stale import _build_picker_choices
-    from zigporter.stale_state import mark_ignored, mark_stale
+    from zigporter.stale_state import mark_ignored
 
     offline = [
         {
@@ -348,3 +359,372 @@ def test_build_picker_choices_groups():
     assert "New Device" in device_labels[0]
     assert "Stale Device" in device_labels[1]
     assert "Ignored Device" in device_labels[2]
+
+
+# ---------------------------------------------------------------------------
+# _do_remove_device
+# ---------------------------------------------------------------------------
+
+_DEVICE = {"device_id": "dev-1", "identifiers": [["zha", "00:11:22:33:44:55:66:77"]]}
+_DEVICE_NON_ZHA = {"device_id": "dev-1", "identifiers": [["mqtt", "some_id"]]}
+
+
+async def test_do_remove_device_success(mocker):
+    mock_ha = mocker.AsyncMock()
+    mock_ha.get_stale_check_data.return_value = {"device_registry": []}
+    mocker.patch("zigporter.commands.stale.HAClient", return_value=mock_ha)
+    mocker.patch("asyncio.sleep")
+
+    result = await _do_remove_device("http://ha.test", "token", False, _DEVICE)
+
+    mock_ha.remove_device.assert_called_once_with("dev-1")
+    assert result is True
+
+
+async def test_do_remove_device_still_in_registry(mocker):
+    mock_ha = mocker.AsyncMock()
+    mock_ha.get_stale_check_data.return_value = {"device_registry": [{"id": "dev-1"}]}
+    mocker.patch("zigporter.commands.stale.HAClient", return_value=mock_ha)
+    mocker.patch("asyncio.sleep")
+
+    result = await _do_remove_device("http://ha.test", "token", False, _DEVICE)
+
+    assert result is False
+
+
+async def test_do_remove_device_unknown_command_zha_fallback(mocker):
+    mock_ha = mocker.AsyncMock()
+    mock_ha.remove_device.side_effect = RuntimeError("unknown_command")
+    mock_ha.get_stale_check_data.return_value = {"device_registry": []}
+    mocker.patch("zigporter.commands.stale.HAClient", return_value=mock_ha)
+    mocker.patch("asyncio.sleep")
+
+    result = await _do_remove_device("http://ha.test", "token", False, _DEVICE)
+
+    mock_ha.remove_zha_device.assert_called_once_with("00:11:22:33:44:55:66:77")
+    assert result is True
+
+
+async def test_do_remove_device_unknown_command_no_zha_ieee(mocker):
+    mock_ha = mocker.AsyncMock()
+    mock_ha.remove_device.side_effect = RuntimeError("unknown_command")
+    mocker.patch("zigporter.commands.stale.HAClient", return_value=mock_ha)
+
+    result = await _do_remove_device("http://ha.test", "token", False, _DEVICE_NON_ZHA)
+
+    mock_ha.remove_zha_device.assert_not_called()
+    assert result is False
+
+
+async def test_do_remove_device_other_error_reraises(mocker):
+    mock_ha = mocker.AsyncMock()
+    mock_ha.remove_device.side_effect = RuntimeError("server_error: boom")
+    mocker.patch("zigporter.commands.stale.HAClient", return_value=mock_ha)
+
+    with pytest.raises(RuntimeError, match="server_error"):
+        await _do_remove_device("http://ha.test", "token", False, _DEVICE)
+
+
+# ---------------------------------------------------------------------------
+# _handle_remove
+# ---------------------------------------------------------------------------
+
+
+def _device_fixture():
+    return {"device_id": "dev-1", "name": "Test Bulb", "identifiers": []}
+
+
+def test_handle_remove_user_declines(mocker, tmp_path):
+    mocker.patch("questionary.confirm", return_value=MagicMock(ask=MagicMock(return_value=False)))
+    mock_run = mocker.patch("zigporter.commands.stale.asyncio.run")
+    state = StaleState()
+    removed_ids: set = set()
+
+    _handle_remove(_device_fixture(), state, tmp_path / "s.json", removed_ids, "url", "tok", False)
+
+    mock_run.assert_not_called()
+    assert "dev-1" not in removed_ids
+
+
+def test_handle_remove_success(mocker, tmp_path):
+    mocker.patch("questionary.confirm", return_value=MagicMock(ask=MagicMock(return_value=True)))
+    mocker.patch("zigporter.commands.stale.asyncio.run", return_value=True)
+    state = StaleState()
+    removed_ids: set = set()
+
+    _handle_remove(_device_fixture(), state, tmp_path / "s.json", removed_ids, "url", "tok", False)
+
+    assert "dev-1" in removed_ids
+
+
+def test_handle_remove_still_present(mocker, tmp_path, capsys):
+    mocker.patch("questionary.confirm", return_value=MagicMock(ask=MagicMock(return_value=True)))
+    mocker.patch("zigporter.commands.stale.asyncio.run", return_value=False)
+    mocker.patch("zigporter.commands.stale._do_remove_device")
+    state = StaleState()
+    removed_ids: set = set()
+
+    _handle_remove(_device_fixture(), state, tmp_path / "s.json", removed_ids, "url", "tok", False)
+
+    assert "dev-1" not in removed_ids
+
+
+def test_handle_remove_exception(mocker, tmp_path, capsys):
+    mocker.patch("questionary.confirm", return_value=MagicMock(ask=MagicMock(return_value=True)))
+    mocker.patch("zigporter.commands.stale.asyncio.run", side_effect=RuntimeError("boom"))
+    mocker.patch("zigporter.commands.stale._do_remove_device")
+    state = StaleState()
+    removed_ids: set = set()
+
+    _handle_remove(_device_fixture(), state, tmp_path / "s.json", removed_ids, "url", "tok", False)
+
+    assert "dev-1" not in removed_ids
+
+
+# ---------------------------------------------------------------------------
+# _handle_mark_stale / _handle_ignore / _handle_clear
+# ---------------------------------------------------------------------------
+
+
+def test_handle_mark_stale_with_note(mocker, tmp_path):
+    mocker.patch(
+        "questionary.text", return_value=MagicMock(ask=MagicMock(return_value="check later"))
+    )
+    state = StaleState()
+    device = {"device_id": "dev-1", "name": "Bulb"}
+
+    _handle_mark_stale(device, state, tmp_path / "s.json")
+
+    assert state.devices["dev-1"].status == StaleDeviceStatus.STALE
+    assert state.devices["dev-1"].note == "check later"
+
+
+def test_handle_mark_stale_empty_note_stored_as_none(mocker, tmp_path):
+    mocker.patch("questionary.text", return_value=MagicMock(ask=MagicMock(return_value="")))
+    state = StaleState()
+    device = {"device_id": "dev-1", "name": "Bulb"}
+
+    _handle_mark_stale(device, state, tmp_path / "s.json")
+
+    assert state.devices["dev-1"].note is None
+
+
+def test_handle_ignore(tmp_path):
+    state = StaleState()
+    device = {"device_id": "dev-1", "name": "Bulb"}
+
+    _handle_ignore(device, state, tmp_path / "s.json")
+
+    assert state.devices["dev-1"].status == StaleDeviceStatus.IGNORED
+
+
+def test_handle_clear(tmp_path):
+    state = StaleState()
+    mark_stale(state, "dev-1", "Bulb", note="old note")
+    device = {"device_id": "dev-1", "name": "Bulb"}
+
+    _handle_clear(device, state, tmp_path / "s.json")
+
+    assert "dev-1" not in state.devices
+
+
+# ---------------------------------------------------------------------------
+# _show_device_detail
+# ---------------------------------------------------------------------------
+
+
+def _detail_device(entity_ids=None, area_name="Kitchen"):
+    ids = entity_ids or ["light.bulb"]
+    return {
+        "device_id": "dev-1",
+        "name": "Test Bulb",
+        "area_name": area_name,
+        "integration": "zha",
+        "entity_ids": ids,
+        "state_map": {eid: "unavailable" for eid in ids},
+        "identifiers": [],
+    }
+
+
+def test_show_device_detail_action_stale(mocker, tmp_path):
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value="stale")))
+    mock_stale = mocker.patch("zigporter.commands.stale._handle_mark_stale")
+    state = StaleState()
+
+    _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
+
+    mock_stale.assert_called_once()
+
+
+def test_show_device_detail_action_ignore(mocker, tmp_path):
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value="ignore")))
+    mock_ignore = mocker.patch("zigporter.commands.stale._handle_ignore")
+    state = StaleState()
+
+    _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
+
+    mock_ignore.assert_called_once()
+
+
+def test_show_device_detail_action_remove(mocker, tmp_path):
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value="remove")))
+    mock_remove = mocker.patch("zigporter.commands.stale._handle_remove")
+    state = StaleState()
+
+    _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
+
+    mock_remove.assert_called_once()
+
+
+def test_show_device_detail_action_clear_only_when_entry_exists(mocker, tmp_path):
+    """Clear option appears only when device already has a state entry."""
+    choices_seen = []
+
+    def capture_select(question, choices, **kwargs):
+        choices_seen.extend(c.value for c in choices if isinstance(c, questionary.Choice))
+        return MagicMock(ask=MagicMock(return_value="back"))
+
+    mocker.patch("questionary.select", side_effect=capture_select)
+    state = StaleState()
+
+    # No entry → no "clear" choice
+    _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
+    assert "clear" not in choices_seen
+
+    choices_seen.clear()
+    mark_stale(state, "dev-1", "Test Bulb")
+
+    # Entry present → "clear" choice added
+    _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
+    assert "clear" in choices_seen
+
+
+def test_show_device_detail_action_back_is_noop(mocker, tmp_path):
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value="back")))
+    mock_remove = mocker.patch("zigporter.commands.stale._handle_remove")
+    mock_stale = mocker.patch("zigporter.commands.stale._handle_mark_stale")
+    state = StaleState()
+
+    _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
+
+    mock_remove.assert_not_called()
+    mock_stale.assert_not_called()
+
+
+def test_show_device_detail_no_entities(mocker, tmp_path, capsys):
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value="back")))
+    state = StaleState()
+    device = _detail_device(entity_ids=[])
+    device["area_name"] = ""
+
+    _show_device_detail(device, state, tmp_path / "s.json", set(), "url", "tok", False)
+    # No crash — "(no entities)" path exercised
+
+
+def test_show_device_detail_truncates_entities(mocker, tmp_path):
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value="back")))
+    state = StaleState()
+    ids = [f"light.bulb_{i}" for i in range(8)]
+    device = _detail_device(entity_ids=ids)
+
+    _show_device_detail(device, state, tmp_path / "s.json", set(), "url", "tok", False)
+    # No crash — truncation (> 5 entities) path exercised
+
+
+def test_show_device_detail_shows_note(mocker, tmp_path):
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value="back")))
+    state = StaleState()
+    mark_stale(state, "dev-1", "Test Bulb", note="replace soon")
+
+    _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
+    # No crash — note display path exercised
+
+
+# ---------------------------------------------------------------------------
+# stale_command
+# ---------------------------------------------------------------------------
+
+
+def _offline_device():
+    return {
+        "device_id": "dev-1",
+        "name": "Old Bulb",
+        "area_name": "Bedroom",
+        "integration": "zha",
+        "entity_ids": ["light.old_bulb"],
+        "state_map": {"light.old_bulb": "unavailable"},
+        "identifiers": [],
+    }
+
+
+async def _fake_fetch_one(*_args):
+    return [_offline_device()]
+
+
+async def _fake_fetch_empty(*_args):
+    return []
+
+
+def test_stale_command_connection_error(mocker, tmp_path):
+    mocker.patch(
+        "zigporter.commands.stale._fetch_offline_devices",
+        side_effect=RuntimeError("cannot connect"),
+    )
+
+    stale_command("url", "tok", False, state_path=tmp_path / "s.json")
+    # No crash; error message printed via Rich (not captured in capsys easily)
+
+
+def test_stale_command_no_offline_devices(mocker, tmp_path):
+    mocker.patch(
+        "zigporter.commands.stale._fetch_offline_devices",
+        side_effect=_fake_fetch_empty,
+    )
+
+    stale_command("url", "tok", False, state_path=tmp_path / "s.json")
+    # Exits early — no questionary interaction
+
+
+def test_stale_command_user_selects_done(mocker, tmp_path):
+    mocker.patch(
+        "zigporter.commands.stale._fetch_offline_devices",
+        side_effect=_fake_fetch_one,
+    )
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value=_DONE)))
+
+    stale_command("url", "tok", False, state_path=tmp_path / "s.json")
+    # Exits loop cleanly on Done sentinel
+
+
+def test_stale_command_all_devices_removed(mocker, tmp_path):
+    mocker.patch(
+        "zigporter.commands.stale._fetch_offline_devices",
+        side_effect=_fake_fetch_one,
+    )
+
+    def fake_show_detail(device, state, state_path, removed_ids, *_args):
+        removed_ids.add(device["device_id"])
+
+    mocker.patch("zigporter.commands.stale._show_device_detail", side_effect=fake_show_detail)
+    mocker.patch(
+        "questionary.select", return_value=MagicMock(ask=MagicMock(return_value=_offline_device()))
+    )
+
+    stale_command("url", "tok", False, state_path=tmp_path / "s.json")
+    # Loop exits via "All offline devices have been handled." branch
+
+
+def test_stale_command_records_first_seen(mocker, tmp_path):
+    mocker.patch(
+        "zigporter.commands.stale._fetch_offline_devices",
+        side_effect=_fake_fetch_one,
+    )
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value=_DONE)))
+    state_path = tmp_path / "s.json"
+
+    stale_command("url", "tok", False, state_path=state_path)
+
+    from zigporter.stale_state import load_stale_state
+
+    state = load_stale_state(state_path)
+    assert "dev-1" in state.devices
