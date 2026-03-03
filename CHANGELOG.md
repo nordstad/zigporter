@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.5.0] - 2026-03-03
+
+### Added
+
+- feat: add zigporter stale command for offline device identification and cleanup (#30)
+
 ## [0.5.0] - 2026-03-03
 
 ### Added
@@ -172,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/nordstad/zigporter/compare/v0.5.0...v0.5.0
 [0.5.0]: https://github.com/nordstad/zigporter/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/nordstad/zigporter/compare/v0.4.0...v0.4.0
 [0.4.0]: https://github.com/nordstad/zigporter/compare/v0.3.0...v0.4.0
