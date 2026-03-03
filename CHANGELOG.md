@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-03
+
+### Added
+
+- `stale` command: scan all integrations for offline devices and interactively
+  remove, annotate, or ignore them; state persists across runs in
+  `~/.config/zigporter/stale.json`
+
+### Fixed
+
+- Handle `unknown_command` fallback for ZHA device removal in stale command
+- Reduce false positives: exclude HA core device, `entry_type=service` devices,
+  and hub/gateway devices with responsive children
+- Newly-seen offline devices now appear under the "New" group in the picker
+  instead of being mixed into "Stale"
 
 ## [0.4.0] - 2026-03-03
 
@@ -156,7 +171,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump codecov/codecov-action from 4 to 5 (#3)
 - Bump actions/github-script from 7 to 8 (#2)
 
-[Unreleased]: https://github.com/nordstad/zigporter/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/nordstad/zigporter/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/nordstad/zigporter/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/nordstad/zigporter/compare/v0.4.0...v0.4.0
 [0.4.0]: https://github.com/nordstad/zigporter/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/nordstad/zigporter/compare/v0.2.1...v0.3.0
