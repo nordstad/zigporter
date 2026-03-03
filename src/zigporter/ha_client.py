@@ -66,6 +66,40 @@ class HAClient:
             + "/api/websocket"
         )
 
+    async def get_stale_check_data(self) -> dict[str, Any]:
+        """Batch-fetch device registry, entity registry, and area registry.
+
+        Opens a single WebSocket connection and fires three commands sequentially.
+        Returns a dict with keys: ``device_registry``, ``entity_registry``,
+        ``area_registry``.
+        """
+        commands = [
+            ("device_registry", {"type": "config/device_registry/list"}),
+            ("entity_registry", {"type": "config/entity_registry/list"}),
+            ("area_registry", {"type": "config/area_registry/list"}),
+        ]
+
+        ssl_ctx = self._ssl_context()
+        async with websockets.connect(self._ws_url, ssl=ssl_ctx, max_size=16 * 1024 * 1024) as ws:
+            msg = json.loads(await ws.recv())
+            if msg.get("type") != "auth_required":
+                raise RuntimeError(f"Expected auth_required, got: {msg}")
+
+            await ws.send(json.dumps({"type": "auth", "access_token": self._token}))
+            msg = json.loads(await ws.recv())
+            if msg.get("type") != "auth_ok":
+                raise RuntimeError(f"WebSocket authentication failed: {msg}")
+
+            results: dict[str, Any] = {}
+            for cmd_id, (key, command) in enumerate(commands, start=1):
+                await ws.send(json.dumps({"id": cmd_id, **command}))
+                msg = json.loads(await ws.recv())
+                if not msg.get("success"):
+                    raise RuntimeError(f"WebSocket command '{command['type']}' failed: {msg}")
+                results[key] = msg["result"]
+
+        return results
+
     async def get_states(self) -> list[dict[str, Any]]:
         """Fetch all entity states via REST API."""
         async with httpx.AsyncClient(headers=self._headers, verify=self._ssl_context()) as client:

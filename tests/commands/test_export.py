@@ -190,3 +190,122 @@ def test_build_export_empty_automations(
 
     for device in export.devices:
         assert device.automations == []
+
+
+def test_build_export_available_false_when_all_entities_offline(
+    zha_devices_payload,
+    device_registry_payload,
+    entity_registry_payload,
+    area_registry_payload,
+    automation_configs_payload,
+):
+    # Make all entity states unavailable / unknown
+    states = [
+        {
+            "entity_id": "climate.living_room_thermostat",
+            "state": "unavailable",
+            "attributes": {"friendly_name": "Living Room Thermostat"},
+        },
+        {
+            "entity_id": "switch.plug",
+            "state": "unknown",
+            "attributes": {"friendly_name": "Kitchen Plug"},
+        },
+    ]
+    export = build_export(
+        zha_devices=zha_devices_payload,
+        device_registry=device_registry_payload,
+        entity_registry=entity_registry_payload,
+        area_registry=area_registry_payload,
+        states=states,
+        automation_configs=automation_configs_payload,
+        ha_url="https://ha.test",
+    )
+
+    for device in export.devices:
+        assert device.available is False
+
+
+def test_build_export_available_true_when_any_entity_online(
+    zha_devices_payload,
+    device_registry_payload,
+    entity_registry_payload,
+    area_registry_payload,
+    automation_configs_payload,
+):
+    # Keep default states — thermostat is "heat" (online), plug is "on"
+    export = build_export(
+        zha_devices=zha_devices_payload,
+        device_registry=device_registry_payload,
+        entity_registry=entity_registry_payload,
+        area_registry=area_registry_payload,
+        states=[
+            {
+                "entity_id": "climate.living_room_thermostat",
+                "state": "heat",
+                "attributes": {"friendly_name": "Living Room Thermostat"},
+            },
+            {
+                "entity_id": "switch.plug",
+                "state": "on",
+                "attributes": {"friendly_name": "Kitchen Plug"},
+            },
+        ],
+        automation_configs=automation_configs_payload,
+        ha_url="https://ha.test",
+    )
+
+    for device in export.devices:
+        assert device.available is True
+
+
+def test_build_export_available_none_when_no_enabled_entities(
+    device_registry_payload,
+    area_registry_payload,
+    automation_configs_payload,
+):
+    # ZHA device with all entities disabled
+    zha_devices = [
+        {
+            "ieee": "ff:ee:dd:cc:bb:aa:99:88",
+            "device_reg_id": "device-disabled",
+            "name": "Disabled Device",
+            "user_given_name": None,
+            "manufacturer": "IKEA",
+            "model": "E1743",
+            "device_type": "EndDevice",
+            "quirk_applied": False,
+            "quirk_class": None,
+        }
+    ]
+    device_registry = device_registry_payload + [{"id": "device-disabled", "area_id": None}]
+    entity_registry = [
+        {
+            "entity_id": "light.disabled",
+            "platform": "zha",
+            "device_id": "device-disabled",
+            "unique_id": "ff:ee:dd:cc:bb:aa:99:88",
+            "name": None,
+            "device_class": None,
+            "disabled_by": "user",
+        }
+    ]
+    states = [
+        {
+            "entity_id": "light.disabled",
+            "state": "unavailable",
+            "attributes": {"friendly_name": "Disabled Light"},
+        }
+    ]
+    export = build_export(
+        zha_devices=zha_devices,
+        device_registry=device_registry,
+        entity_registry=entity_registry,
+        area_registry=area_registry_payload,
+        states=states,
+        automation_configs=[],
+        ha_url="https://ha.test",
+    )
+
+    disabled_device = next(d for d in export.devices if d.ieee == "ff:ee:dd:cc:bb:aa:99:88")
+    assert disabled_device.available is None

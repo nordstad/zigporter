@@ -406,6 +406,20 @@ def rename_device(
     )
 
 
+@app.command()
+def stale() -> None:
+    """Identify and manage offline/stale devices across all integrations.
+
+    Connects to Home Assistant, lists devices where all entities are
+    unavailable, and lets you remove, annotate or ignore them.
+    State is persisted to ~/.config/zigporter/stale.json.
+    """
+    from zigporter.commands.stale import stale_command  # noqa: PLC0415
+
+    ha_url, token, verify_ssl = _get_config()
+    stale_command(ha_url=ha_url, token=token, verify_ssl=verify_ssl)
+
+
 @app.command(name="fix-device")
 def fix_device() -> None:
     """Remove stale ZHA device entries left behind after migration to Zigbee2MQTT.

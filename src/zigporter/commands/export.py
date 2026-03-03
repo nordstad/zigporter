@@ -129,6 +129,14 @@ def build_export(
                 )
             )
 
+        enabled_states = [e.state for e in entities if not e.disabled and e.state is not None]
+        if enabled_states:
+            available: bool | None = any(
+                s not in ("unavailable", "unknown") for s in enabled_states
+            )
+        else:
+            available = None
+
         devices.append(
             ZHADevice(
                 device_id=device_id,
@@ -144,6 +152,7 @@ def build_export(
                 quirk_class=zha_dev.get("quirk_class"),
                 entities=entities,
                 automations=auto_map.get(device_id, []),
+                available=available,
             )
         )
 
@@ -195,8 +204,10 @@ def export_command(
     indent = 2 if pretty else None
     output.write_text(export.model_dump_json(indent=indent))
 
+    offline_count = sum(1 for d in export.devices if d.available is False)
+    offline_note = f" [dim]({offline_count} offline)[/dim]" if offline_count else ""
     console.print(
-        f"\nExport complete: [bold]{len(export.devices)}[/bold] devices, "
+        f"\nExport complete: [bold]{len(export.devices)}[/bold] devices{offline_note}, "
         f"[bold]{sum(len(d.entities) for d in export.devices)}[/bold] entities, "
         f"[bold]{sum(len(d.automations) for d in export.devices)}[/bold] automation references\n"
         f"Written to [green]{output}[/green]"
