@@ -104,6 +104,7 @@ def detect_offline_devices(
                 "name": name,
                 "area_name": area_name,
                 "integration": _integration(device),
+                "identifiers": device.get("identifiers", []),
                 "entity_ids": enabled_entity_ids,
                 "state_map": {eid: state_map.get(eid, "unknown") for eid in enabled_entity_ids},
             }
@@ -129,10 +130,43 @@ async def _fetch_offline_devices(ha_url: str, token: str, verify_ssl: bool) -> l
     )
 
 
-async def _do_remove_device(ha_url: str, token: str, verify_ssl: bool, device_id: str) -> bool:
-    """Remove the device and verify it is gone from the registry. Returns True on success."""
+def _zha_ieee_from_identifiers(identifiers: list) -> str | None:
+    """Return the ZHA IEEE address from a device's identifiers list, or None."""
+    for identifier in identifiers:
+        if isinstance(identifier, list) and len(identifier) >= 2 and identifier[0] == "zha":
+            return str(identifier[1])
+    return None
+
+
+async def _do_remove_device(
+    ha_url: str, token: str, verify_ssl: bool, device: dict[str, Any]
+) -> bool:
+    """Remove the device and verify it is gone from the registry.
+
+    Mirrors the fallback logic in fix_device: tries the device registry WS command first,
+    then falls back to ``zha.remove`` for ZHA devices if the command is unsupported.
+    Returns True when the device is confirmed gone.
+    """
     client = HAClient(ha_url, token, verify_ssl)
-    await client.remove_device(device_id)
+    device_id = device["device_id"]
+    removed = False
+
+    try:
+        await client.remove_device(device_id)
+        removed = True
+    except RuntimeError as exc:
+        if "unknown_command" not in str(exc):
+            raise
+        # config/device_registry/remove is unsupported on this HA version.
+        # Fall back to the ZHA service for ZHA devices.
+        ieee = _zha_ieee_from_identifiers(device.get("identifiers", []))
+        if ieee:
+            await client.remove_zha_device(ieee)
+            removed = True
+
+    if not removed:
+        return False
+
     ws_data = await client.get_stale_check_data()
     registry_ids = {d["id"] for d in ws_data["device_registry"]}
     return device_id not in registry_ids
@@ -203,7 +237,7 @@ def _handle_remove(
 
     console.print(f"\nRemoving [bold]{device['name']}[/bold]...", end=" ")
     try:
-        success = asyncio.run(_do_remove_device(ha_url, token, verify_ssl, device["device_id"]))
+        success = asyncio.run(_do_remove_device(ha_url, token, verify_ssl, device))
     except (RuntimeError, OSError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
         return

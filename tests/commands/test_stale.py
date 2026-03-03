@@ -6,6 +6,7 @@ from zigporter.commands.stale import (
     _device_is_offline,
     _integration,
     _is_ha_core_device,
+    _zha_ieee_from_identifiers,
     detect_offline_devices,
 )
 from zigporter.stale_state import StaleState
@@ -47,6 +48,25 @@ def test_integration_returns_mqtt():
 
 def test_integration_returns_unknown_for_empty():
     assert _integration({}) == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# _zha_ieee_from_identifiers
+# ---------------------------------------------------------------------------
+
+
+def test_zha_ieee_from_identifiers_returns_ieee():
+    identifiers = [["zha", "00:11:22:33:44:55:66:77"]]
+    assert _zha_ieee_from_identifiers(identifiers) == "00:11:22:33:44:55:66:77"
+
+
+def test_zha_ieee_from_identifiers_returns_none_for_non_zha():
+    identifiers = [["mqtt", "zigbee2mqtt_0x0011223344556677"]]
+    assert _zha_ieee_from_identifiers(identifiers) is None
+
+
+def test_zha_ieee_from_identifiers_returns_none_for_empty():
+    assert _zha_ieee_from_identifiers([]) is None
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +208,13 @@ def test_detect_offline_devices_state_map_populated():
 
     result = detect_offline_devices(devices, entity_registry, [], states)
     assert result[0]["state_map"] == {"sensor.temp": "unavailable", "sensor.hum": "unknown"}
+
+
+def test_detect_offline_devices_includes_identifiers():
+    """The identifiers field must be forwarded so removal fallback can extract the ZHA IEEE."""
+    devices = [_make_device("dev-1", identifiers=[["zha", "00:11:22:33:44:55:66:77"]])]
+    result = detect_offline_devices(devices, [], [], [])
+    assert result[0]["identifiers"] == [["zha", "00:11:22:33:44:55:66:77"]]
 
 
 # ---------------------------------------------------------------------------
