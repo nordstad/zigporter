@@ -1,6 +1,6 @@
 # Interactive Demo
 
-Experience the `zigporter migrate` wizard interactively before running it against your own
+Try out `zigporter` commands interactively before running them against your own
 Home Assistant instance. The demo uses simulated devices and connectivity — nothing is sent
 to any real system.
 
