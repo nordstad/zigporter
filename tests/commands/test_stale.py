@@ -125,14 +125,26 @@ def test_device_is_offline_missing_state_treated_as_unknown():
 # ---------------------------------------------------------------------------
 
 
-def _make_device(device_id: str, identifiers=None, area_id=None, name="Device"):
-    return {
+def _make_device(
+    device_id: str,
+    identifiers=None,
+    area_id=None,
+    name="Device",
+    entry_type=None,
+    via_device_id=None,
+):
+    d = {
         "id": device_id,
         "name": name,
         "name_by_user": None,
         "area_id": area_id,
         "identifiers": identifiers or [["zha", device_id]],
     }
+    if entry_type is not None:
+        d["entry_type"] = entry_type
+    if via_device_id is not None:
+        d["via_device_id"] = via_device_id
+    return d
 
 
 def test_detect_offline_devices_returns_offline_device():
@@ -149,6 +161,34 @@ def test_detect_offline_devices_returns_offline_device():
     assert result[0]["name"] == "Kitchen Light"
 
 
+def test_detect_offline_devices_excludes_service_entry_type():
+    """Integration hub devices (entry_type='service') must not be reported as offline."""
+    devices = [
+        _make_device(
+            "dev-hub",
+            identifiers=[["ikea", "dirigera_hub"]],
+            name="IKEA Dirigera Hub",
+            entry_type="service",
+        ),
+        _make_device("dev-1", name="Ceiling Bulb"),
+    ]
+    entity_registry = [
+        # Hub has an unavailable firmware sensor — should not trigger a stale hit
+        {"entity_id": "update.hub_firmware", "device_id": "dev-hub", "disabled_by": None},
+        {"entity_id": "light.bulb", "device_id": "dev-1", "disabled_by": None},
+    ]
+    states = [
+        {"entity_id": "update.hub_firmware", "state": "unavailable"},
+        {"entity_id": "light.bulb", "state": "unavailable"},
+    ]
+
+    result = detect_offline_devices(devices, entity_registry, [], states)
+    assert all(r["device_id"] != "dev-hub" for r in result), (
+        "service entry_type device must be excluded"
+    )
+    assert any(r["device_id"] == "dev-1" for r in result)
+
+
 def test_detect_offline_devices_excludes_ha_core():
     devices = [
         _make_device("dev-ha", identifiers=[["homeassistant", "core"]], name="Home Assistant"),
@@ -162,6 +202,48 @@ def test_detect_offline_devices_excludes_ha_core():
     result = detect_offline_devices(devices, entity_registry, [], states)
     assert all(r["device_id"] != "dev-ha" for r in result)
     assert any(r["device_id"] == "dev-1" for r in result)
+
+
+def test_detect_offline_devices_excludes_hub_with_active_children():
+    """A gateway whose own entities are unavailable must not be flagged when its children are online."""
+    devices = [
+        _make_device("gw", identifiers=[["plejd", "gwy01"]], name="Plejd Gateway"),
+        # Child device — online, connected via the gateway
+        _make_device("light-1", name="Kitchen Light", via_device_id="gw"),
+    ]
+    entity_registry = [
+        {"entity_id": "button.gw_identify", "device_id": "gw", "disabled_by": None},
+        {"entity_id": "light.kitchen", "device_id": "light-1", "disabled_by": None},
+    ]
+    states = [
+        {"entity_id": "button.gw_identify", "state": "unavailable"},
+        {"entity_id": "light.kitchen", "state": "on"},
+    ]
+
+    result = detect_offline_devices(devices, entity_registry, [], states)
+    assert all(r["device_id"] != "gw" for r in result), "hub with active children must be excluded"
+    assert result == []
+
+
+def test_detect_offline_devices_includes_hub_when_all_children_offline():
+    """A gateway should still be flagged when ALL its children are also offline."""
+    devices = [
+        _make_device("gw", identifiers=[["plejd", "gwy01"]], name="Plejd Gateway"),
+        _make_device("light-1", name="Kitchen Light", via_device_id="gw"),
+    ]
+    entity_registry = [
+        {"entity_id": "button.gw_identify", "device_id": "gw", "disabled_by": None},
+        {"entity_id": "light.kitchen", "device_id": "light-1", "disabled_by": None},
+    ]
+    states = [
+        {"entity_id": "button.gw_identify", "state": "unavailable"},
+        {"entity_id": "light.kitchen", "state": "unavailable"},
+    ]
+
+    result = detect_offline_devices(devices, entity_registry, [], states)
+    device_ids = {r["device_id"] for r in result}
+    assert "gw" in device_ids, "hub with all-offline children should be flagged"
+    assert "light-1" in device_ids
 
 
 def test_detect_offline_devices_excludes_online_device():

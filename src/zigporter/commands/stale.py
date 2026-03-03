@@ -84,9 +84,29 @@ def detect_offline_devices(
     state_map = {s["entity_id"]: s["state"] for s in states}
     area_map = {a["area_id"]: a["name"] for a in area_registry}
 
+    # Build a set of device IDs that are acting as hubs with at least one non-offline child.
+    # Physical gateways (e.g. Plejd GWY-01, UniFi controller) register their leaf devices
+    # with via_device_id pointing back to themselves. If any child device is online, the hub
+    # is clearly working — don't flag it as stale regardless of its own entity states.
+    hubs_with_active_children: set[str] = set()
+    for device in device_registry:
+        via = device.get("via_device_id")
+        if via and not _device_is_offline(device, entity_registry, state_map):
+            hubs_with_active_children.add(via)
+
     offline: list[dict[str, Any]] = []
     for device in device_registry:
         if _is_ha_core_device(device):
+            continue
+        # Skip integration-level service entries (hubs, coordinators, gateway virtual devices).
+        # Their entities (e.g. firmware update sensors) can report unavailable even when the
+        # actual physical devices they manage are working fine.
+        if device.get("entry_type") == "service":
+            continue
+        # Skip hub/gateway devices that have non-offline child devices. The hub's own
+        # entities (identify button, firmware sensor) may be unavailable even when the
+        # devices it manages are all responsive.
+        if device["id"] in hubs_with_active_children:
             continue
         if not _device_is_offline(device, entity_registry, state_map):
             continue
@@ -167,6 +187,9 @@ async def _do_remove_device(
     if not removed:
         return False
 
+    # Wait briefly so HA can process the removal before we verify.
+    await asyncio.sleep(1)
+
     ws_data = await client.get_stale_check_data()
     registry_ids = {d["id"] for d in ws_data["device_registry"]}
     return device_id not in registry_ids
@@ -178,6 +201,11 @@ async def _do_remove_device(
 
 _GROUP_ORDER = {None: 0, StaleDeviceStatus.STALE: 1, StaleDeviceStatus.IGNORED: 2}
 _GROUP_LABEL = {None: "New", StaleDeviceStatus.STALE: "Stale", StaleDeviceStatus.IGNORED: "Ignored"}
+
+# Sentinel for the "Done" picker choice.  questionary.Choice treats value=None as
+# "no value set" and falls back to returning the title string, so we use a distinct
+# sentinel to reliably detect when the user selects Done.
+_DONE = object()
 
 
 def _build_picker_choices(offline: list[dict[str, Any]], state: StaleState) -> list:
@@ -203,12 +231,13 @@ def _build_picker_choices(offline: list[dict[str, Any]], state: StaleState) -> l
                 questionary.Separator(f" ── {label} {'─' * max(0, 50 - len(label) - 4)}")
             )
 
-        area = f"  {device['area_name']}" if device["area_name"] else ""
-        row = f"  {device['name']:<40}{area}"
+        area = f"{device['area_name']:<18}" if device["area_name"] else " " * 18
+        note = f"· {entry.note[:35]}" if entry and entry.note else ""
+        row = f"  {device['name']:<40}  {area}  {note}"
         choices.append(questionary.Choice(title=row, value=device))
 
     choices.append(questionary.Separator("─" * 56))
-    choices.append(questionary.Choice(title="  Done", value=None))
+    choices.append(questionary.Choice(title="  Done", value=_DONE))
     return choices
 
 
@@ -249,7 +278,10 @@ def _handle_remove(
         removed_ids.add(device["device_id"])
     else:
         console.print(
-            "[yellow]⚠ Device still present in registry — removal may be pending[/yellow]"
+            "[yellow]⚠ Device still present in registry.[/yellow]\n"
+            "[dim]It may be actively managed by an integration that re-registered it. "
+            "To remove it permanently, delete the device from within that integration's settings "
+            "or disable the integration entry.[/dim]"
         )
 
 
@@ -397,7 +429,7 @@ def stale_command(
             style=_STYLE,
         ).ask()
 
-        if selected is None:
+        if selected is None or selected is _DONE:
             break
 
         _show_device_detail(selected, state, state_path, removed_ids, ha_url, token, verify_ssl)
