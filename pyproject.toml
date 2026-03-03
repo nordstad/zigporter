@@ -21,7 +21,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/nordstad/zigporter"
 Repository = "https://github.com/nordstad/zigporter"
-Documentation = "https://github.com/nordstad/zigporter#readme"
+Documentation = "https://nordstad.github.io/zigporter/"
 "Bug Tracker" = "https://github.com/nordstad/zigporter/issues"
 Changelog = "https://github.com/nordstad/zigporter/blob/main/CHANGELOG.md"
 
