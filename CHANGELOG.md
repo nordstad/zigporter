@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.4.0] - 2026-03-03
+
+### Fixed
+
+- fix: handle lovelace strategy dashboards and save failures gracefully (#28)
+
 ## [0.4.0] - 2026-03-03
 
 ### Fixed
@@ -150,6 +157,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/nordstad/zigporter/compare/v0.4.0...v0.4.0
 [0.4.0]: https://github.com/nordstad/zigporter/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/nordstad/zigporter/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/nordstad/zigporter/compare/v0.2.1...v0.2.1
