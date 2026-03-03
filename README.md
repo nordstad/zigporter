@@ -28,6 +28,7 @@
     <tr><td nowrap><code>export</code></td><td>Snapshot your ZHA device inventory to JSON</td></tr>
     <tr><td nowrap><code>list&#x2011;z2m</code></td><td>List all devices currently paired with Zigbee2MQTT</td></tr>
     <tr><td nowrap><code>fix&#x2011;device</code></td><td>Post-migration cleanup: remove stale ZHA device entries, delete their entities, and rename any <code>_2</code>/<code>_3</code> suffixed Z2M entities back to their original IDs</td></tr>
+    <tr><td nowrap><code>stale</code></td><td>Scan all integrations for offline devices and interactively remove, annotate, or ignore them</td></tr>
   </tbody>
 </table>
 
@@ -118,6 +119,24 @@ The command scans HA for devices that have both a stale ZHA entry and an active 
 lets you pick one, deletes the stale ZHA entities, removes the ZHA device from the registry,
 and renames any `_2`/`_3` suffixed Z2M entities back to their original IDs so dashboard
 cards work again.
+
+## Find and Clean Up Offline Devices
+
+Scan HA for devices whose entities are all `unavailable` or `unknown`:
+
+```bash
+zigporter stale
+```
+
+The command lists every offline device grouped as **New / Stale / Ignored**. For each
+device you can:
+
+- **Remove** — delete the entry from the HA registry
+- **Mark as stale** — add a note and come back later
+- **Ignore** — suppress devices you know are intentionally offline
+
+Decisions persist across runs. Hub and gateway devices with active children (e.g. a Plejd
+GWY-01 whose lights are responsive) are automatically excluded to avoid false positives.
 
 ## Rename an Entity
 

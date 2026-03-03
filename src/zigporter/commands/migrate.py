@@ -78,9 +78,10 @@ def show_status(export: ZHAExport, state: MigrationState) -> None:
         migrated_at = (
             dev_state.migrated_at.strftime("%Y-%m-%d %H:%M") if dev_state.migrated_at else ""
         )
+        offline_suffix = " [dim](offline)[/dim]" if device and device.available is False else ""
         table.add_row(
             f"[{style}]{icon}[/{style}]",
-            f"[{style}]{dev_state.name}[/{style}]",
+            f"[{style}]{dev_state.name}[/{style}]{offline_suffix}",
             model,
             area,
             f"[{style}]{dev_state.status.value}[/{style}]",
@@ -112,8 +113,8 @@ def pick_device(export: ZHAExport, state: MigrationState) -> ZHADevice | None:
         console.print("[green]All devices have been migrated![/green]")
         return None
 
-    # Sort by area (no-area → end), then by name within each area
-    pending.sort(key=lambda d: (d.area_name or "\xff", d.name))
+    # Sort by area (no-area → end), then offline devices sink to bottom, then by name
+    pending.sort(key=lambda d: (d.area_name or "\xff", d.available is False, d.name))
 
     choices: list = []
     current_area: str | None = object()  # type: ignore[assignment]
@@ -128,12 +129,13 @@ def pick_device(export: ZHAExport, state: MigrationState) -> ZHADevice | None:
 
         dev_state = state.devices.get(device.ieee)
         status = dev_state.status if dev_state else DeviceStatus.PENDING
+        offline_tag = "  (offline)" if device.available is False else ""
         suffix = (
             "  ◌ in progress"
             if status == DeviceStatus.IN_PROGRESS
             else ("  ✗ failed" if status == DeviceStatus.FAILED else "")
         )
-        label = f"  {device.name:<40} {device.model or ''}{suffix}"
+        label = f"  {device.name:<40} {device.model or ''}{offline_tag}{suffix}"
         choices.append(questionary.Choice(title=label, value=device))
 
     selected = questionary.select(

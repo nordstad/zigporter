@@ -394,6 +394,50 @@ const DEMO_INSPECT = [
   [d('ZHA: no stale entry found  ·  Z2M: matched by IEEE'), 150],
 ];
 
+// ── DEMO: stale ───────────────────────────────────────────────────────────────
+const DEMO_STALE = [
+  [`<span class="ps">$</span> <span class="cmd">zigporter stale</span>`, 0],
+  [null, 300],
+  [`Fetching device data from Home Assistant...`, 200, 1],
+  [`Fetching device data from Home Assistant...  ${ok('✓')}`, 900, 2],
+  [null, 100],
+  [`${bd('3 offline device(s) found')}  ${d('(0 stale · 0 ignored)')}`, 200],
+  [null, 300],
+  // First device: remove
+  [qline('Select a device to review:', 'Old TRADFRI Bulb                     Bedroom'), 900],
+  [null, 200],
+  [`${bd('Old TRADFRI Bulb')}  ${d('·  Area: Bedroom')}`, 150],
+  [`Integration: ${c('zha')}  ·  Entities: ${y('light.tradfri_bulb')} ${d('(unavailable)')}, ${y('update.tradfri_bulb_firmware')} ${d('(unavailable)')}`, 100],
+  [null, 100],
+  [qline('What would you like to do?', 'Remove from Home Assistant'), 700],
+  [qline('Remove "Old TRADFRI Bulb" from Home Assistant? This cannot be undone.', 'Yes'), 600],
+  [null, 100],
+  [`Removing ${bd('Old TRADFRI Bulb')}...`, 200, 1],
+  [`Removing ${bd('Old TRADFRI Bulb')}...  ${ok('✓ Removed')}`, 1000, 2],
+  [null, 500],
+  // Second device: mark stale with note
+  [qline('Select a device to review:', 'SMLIGHT SLZB-06M                     Garage'), 900],
+  [null, 200],
+  [`${bd('SMLIGHT SLZB-06M')}  ${d('·  Area: Garage')}`, 150],
+  [`Integration: ${c('mqtt')}  ·  Entities: ${y('sensor.slzb_uptime')} ${d('(unavailable)')}, ${y('update.slzb_firmware')} ${d('(unavailable)')}`, 100],
+  [null, 100],
+  [qline('What would you like to do?', 'Mark as stale (note for later)'), 700],
+  [qline('Add a note (optional, Enter to skip):', 'replaced by new coordinator'), 800],
+  [`${ok('✓')} Marked as stale`, 300],
+  [null, 500],
+  // Note now visible inline in picker row; user drills in to ignore
+  [qline('Select a device to review:', `SMLIGHT SLZB-06M                     Garage              ${d('· replaced by new coordin…')}`), 900],
+  [null, 200],
+  [`${bd('SMLIGHT SLZB-06M')}  ${d('·  Area: Garage')}`, 100],
+  [`Integration: ${c('mqtt')}  ·  Entities: ${y('sensor.slzb_uptime')} ${d('(unavailable)')}, ${y('update.slzb_firmware')} ${d('(unavailable)')}`, 80],
+  [`${d('Note: replaced by new coordinator')}`, 80],
+  [null, 100],
+  [qline('What would you like to do?', 'Ignore (known offline, no action needed)'), 700],
+  [`${ok('✓')} Marked as ignored`, 300],
+  [null, 400],
+  [qline('Select a device to review:', 'Done'), 700],
+];
+
 // ── Demo registry ─────────────────────────────────────────────────────────────
 const DEMOS = [
   { key:'check',     label:'check',         desc:'Verify HA + Z2M connectivity',         script:DEMO_CHECK },
@@ -402,6 +446,7 @@ const DEMOS = [
   { key:'rename',    label:'rename-device', desc:'Rename device, cascade all references', script:DEMO_RENAME },
   { key:'fix',       label:'fix-device',    desc:'Clean up stale ZHA registry entries',   script:DEMO_FIX },
   { key:'inspect',   label:'inspect',       desc:'Show a device\'s full state',           script:DEMO_INSPECT },
+  { key:'stale',     label:'stale',         desc:'Find and manage offline devices',        script:DEMO_STALE },
 ];
 
 // ── Playback engine ───────────────────────────────────────────────────────────

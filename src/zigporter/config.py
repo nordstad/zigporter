@@ -39,6 +39,15 @@ def default_state_path() -> Path:
     return config_dir() / "migration-state.json"
 
 
+def default_stale_path() -> Path:
+    """Return the default path for the stale device state file.
+
+    Returns:
+        ``~/.config/zigporter/stale.json``
+    """
+    return config_dir() / "stale.json"
+
+
 def backup_confirmed_path() -> Path:
     """Return the sentinel path written when the user confirms a HA backup.
 

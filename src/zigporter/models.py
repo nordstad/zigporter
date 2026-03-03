@@ -88,6 +88,7 @@ class ZHADevice(BaseModel):
     quirk_class: str | None = None
     entities: list[ZHAEntity] = Field(default_factory=list)
     automations: list[AutomationRef] = Field(default_factory=list)
+    available: bool | None = None  # True=online, False=all entities offline, None=unknown
 
 
 class ZHAExport(BaseModel):
