@@ -4,8 +4,8 @@ import httpx
 import pytest
 import respx
 
-from zigporter.utils import normalize_ieee
-from zigporter.z2m_client import Z2MClient, _ieee_from_z2m_identifier
+from zigporter.utils import normalize_ieee, parse_z2m_ieee_identifier
+from zigporter.z2m_client import Z2MClient
 
 
 HA_URL = "https://ha.test"
@@ -36,19 +36,19 @@ def test_normalize_ieee_0x_format():
 
 
 def test_ieee_from_z2m_identifier_standard():
-    assert _ieee_from_z2m_identifier("zigbee2mqtt_0x001234567890abcd") == "001234567890abcd"
+    assert parse_z2m_ieee_identifier("zigbee2mqtt_0x001234567890abcd") == "001234567890abcd"
 
 
 def test_ieee_from_z2m_identifier_non_z2m():
-    assert _ieee_from_z2m_identifier("some_other_integration_abc") is None
+    assert parse_z2m_ieee_identifier("some_other_integration_abc") is None
 
 
 def test_ieee_from_z2m_identifier_rejects_short_hex():
-    assert _ieee_from_z2m_identifier("zigbee2mqtt_0xabc") is None
+    assert parse_z2m_ieee_identifier("zigbee2mqtt_0xabc") is None
 
 
 def test_ieee_from_z2m_identifier_rejects_non_hex_chars():
-    assert _ieee_from_z2m_identifier("zigbee2mqtt_0x00112233445566zz") is None
+    assert parse_z2m_ieee_identifier("zigbee2mqtt_0x00112233445566zz") is None
 
 
 # ---------------------------------------------------------------------------

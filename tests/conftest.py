@@ -1,7 +1,19 @@
 import pytest
 
+import zigporter.config
+
 
 HA_URL = "https://ha.test"
+
+
+@pytest.fixture(autouse=True)
+def reset_env_loaded():
+    """Reset the _load_env sentinel before each test for isolation."""
+    zigporter.config._env_loaded = False
+    yield
+    zigporter.config._env_loaded = False
+
+
 HA_TOKEN = "test-token-abc123"
 
 

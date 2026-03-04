@@ -5,14 +5,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 from zigporter.commands.fix_device import (
     StalePair,
-    _device_display_name,
-    _ieee_colon,
     _mqtt_ieee,
     _zha_ieee,
     apply_fix,
     find_stale_pairs,
     run_fix_device,
 )
+from zigporter.utils import device_display_name, ieee_to_colon
 
 
 # ---------------------------------------------------------------------------
@@ -21,7 +20,7 @@ from zigporter.commands.fix_device import (
 
 
 def test_ieee_colon_formats_correctly():
-    assert _ieee_colon("0011223344556677") == "00:11:22:33:44:55:66:77"
+    assert ieee_to_colon("0011223344556677") == "00:11:22:33:44:55:66:77"
 
 
 def test_zha_ieee_returns_normalized_ieee():
@@ -69,17 +68,17 @@ def test_mqtt_ieee_returns_none_for_non_z2m_mqtt_identifier():
 
 def test_device_display_name_prefers_name_by_user():
     entry = {"name_by_user": "My Device", "name": "Default Name", "id": "dev-1"}
-    assert _device_display_name(entry) == "My Device"
+    assert device_display_name(entry) == "My Device"
 
 
 def test_device_display_name_falls_back_to_name():
     entry = {"name": "Default Name", "id": "dev-1"}
-    assert _device_display_name(entry) == "Default Name"
+    assert device_display_name(entry) == "Default Name"
 
 
 def test_device_display_name_falls_back_to_id():
     entry = {"id": "dev-1"}
-    assert _device_display_name(entry) == "dev-1"
+    assert device_display_name(entry) == "dev-1"
 
 
 # ---------------------------------------------------------------------------
