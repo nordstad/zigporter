@@ -10,6 +10,7 @@ backend. Use ``is_yaml_mode()`` to distinguish it from a fetch failure (``None``
 
 import json
 import ssl
+from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
@@ -17,14 +18,22 @@ import websockets
 
 from zigporter.utils import normalize_ieee, parse_z2m_ieee_identifier
 
+
+class _YamlMode:
+    """Sentinel returned by get_lovelace_config when dashboard is in YAML mode."""
+
+    def __repr__(self) -> str:
+        return "YAML_MODE"
+
+
 # Sentinel returned by get_lovelace_config when HA confirms the dashboard is in YAML mode.
 # Use is_yaml_mode() to distinguish this from a genuine fetch failure (None).
-YAML_MODE: dict[str, Any] = {}
+YAML_MODE = _YamlMode()
 
 
 def is_yaml_mode(v: object) -> bool:
     """Return True iff v is the YAML_MODE sentinel from get_lovelace_config."""
-    return v is YAML_MODE
+    return isinstance(v, _YamlMode)
 
 
 class HAClient:
@@ -66,6 +75,23 @@ class HAClient:
             + "/api/websocket"
         )
 
+    @asynccontextmanager
+    async def _ws_session(self):
+        """Async context manager that opens an authenticated WebSocket session.
+
+        Yields the WebSocket connection after completing the HA auth handshake.
+        """
+        ssl_ctx = self._ssl_context()
+        async with websockets.connect(self._ws_url, ssl=ssl_ctx, max_size=16 * 1024 * 1024) as ws:
+            msg = json.loads(await ws.recv())
+            if msg.get("type") != "auth_required":
+                raise RuntimeError(f"Expected auth_required, got: {msg}")
+            await ws.send(json.dumps({"type": "auth", "access_token": self._token}))
+            msg = json.loads(await ws.recv())
+            if msg.get("type") != "auth_ok":
+                raise RuntimeError(f"WebSocket authentication failed: {msg}")
+            yield ws
+
     async def get_stale_check_data(self) -> dict[str, Any]:
         """Batch-fetch device registry, entity registry, and area registry.
 
@@ -79,17 +105,7 @@ class HAClient:
             ("area_registry", {"type": "config/area_registry/list"}),
         ]
 
-        ssl_ctx = self._ssl_context()
-        async with websockets.connect(self._ws_url, ssl=ssl_ctx, max_size=16 * 1024 * 1024) as ws:
-            msg = json.loads(await ws.recv())
-            if msg.get("type") != "auth_required":
-                raise RuntimeError(f"Expected auth_required, got: {msg}")
-
-            await ws.send(json.dumps({"type": "auth", "access_token": self._token}))
-            msg = json.loads(await ws.recv())
-            if msg.get("type") != "auth_ok":
-                raise RuntimeError(f"WebSocket authentication failed: {msg}")
-
+        async with self._ws_session() as ws:
             results: dict[str, Any] = {}
             for cmd_id, (key, command) in enumerate(commands, start=1):
                 await ws.send(json.dumps({"id": cmd_id, **command}))
@@ -121,19 +137,7 @@ class HAClient:
             ("automation_configs", {"type": "config/automation/list"}),
         ]
 
-        ssl_ctx = self._ssl_context()
-        async with websockets.connect(self._ws_url, ssl=ssl_ctx, max_size=16 * 1024 * 1024) as ws:
-            # Auth handshake
-            msg = json.loads(await ws.recv())
-            if msg.get("type") != "auth_required":
-                raise RuntimeError(f"Expected auth_required, got: {msg}")
-
-            await ws.send(json.dumps({"type": "auth", "access_token": self._token}))
-            msg = json.loads(await ws.recv())
-            if msg.get("type") != "auth_ok":
-                raise RuntimeError(f"WebSocket authentication failed: {msg}")
-
-            # Send all commands sequentially on the same connection
+        async with self._ws_session() as ws:
             results: dict[str, Any] = {}
             for cmd_id, (key, command) in enumerate(commands, start=1):
                 await ws.send(json.dumps({"id": cmd_id, **command}))
@@ -152,23 +156,12 @@ class HAClient:
 
     async def _ws_command(self, command: dict[str, Any]) -> Any:
         """Send a single WebSocket command and return the result."""
-        ssl_ctx = self._ssl_context()
-        async with websockets.connect(self._ws_url, ssl=ssl_ctx, max_size=16 * 1024 * 1024) as ws:
-            msg = json.loads(await ws.recv())
-            if msg.get("type") != "auth_required":
-                raise RuntimeError(f"Expected auth_required, got: {msg}")
-
-            await ws.send(json.dumps({"type": "auth", "access_token": self._token}))
-            msg = json.loads(await ws.recv())
-            if msg.get("type") != "auth_ok":
-                raise RuntimeError(f"WebSocket authentication failed: {msg}")
-
+        async with self._ws_session() as ws:
             cmd = {"id": 1, **command}
             await ws.send(json.dumps(cmd))
             msg = json.loads(await ws.recv())
             if not msg.get("success"):
                 raise RuntimeError(f"WebSocket command failed: {msg}")
-
             return msg["result"]
 
     async def get_zha_devices(self) -> list[dict[str, Any]]:

@@ -60,7 +60,14 @@ def backup_confirmed_path() -> Path:
     return config_dir() / ".backup-confirmed"
 
 
+_env_loaded: bool = False
+
+
 def _load_env() -> None:
+    global _env_loaded
+    if _env_loaded:
+        return
+    _env_loaded = True
     # CWD .env takes highest precedence; fall back to ~/.config/zigporter/.env
     if not load_dotenv(Path.cwd() / ".env"):
         load_dotenv(config_dir() / ".env")

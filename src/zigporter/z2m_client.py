@@ -14,15 +14,6 @@ import httpx
 from zigporter.utils import normalize_ieee, parse_z2m_ieee_identifier
 
 
-def _ieee_from_z2m_identifier(identifier: str) -> str | None:
-    """Extract a normalized IEEE string from a Z2M MQTT discovery identifier.
-
-    Z2M registers HA devices with identifiers like 'zigbee2mqtt_0x001234567890abcd'.
-    Returns a 16-char lowercase hex string, or None if not a Z2M-style identifier.
-    """
-    return parse_z2m_ieee_identifier(identifier)
-
-
 class Z2MClient:
     """Zigbee2MQTT client.
 
@@ -152,7 +143,7 @@ class Z2MClient:
             ieee_hex = None
             for platform, identifier in entry.get("identifiers", []):
                 if platform == "mqtt":
-                    ieee_hex = _ieee_from_z2m_identifier(identifier)
+                    ieee_hex = parse_z2m_ieee_identifier(identifier)
                     if ieee_hex:
                         break
             if ieee_hex is None:

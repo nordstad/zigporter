@@ -141,9 +141,17 @@ GWY-01 whose lights are responsive) are automatically excluded to avoid false po
 ## Rename an Entity
 
 Rename a Home Assistant entity ID and automatically update every reference — automations,
-scripts, scenes, and Lovelace dashboards:
+scripts, scenes, and Lovelace dashboards.
+
+Both arguments are optional. Run with no arguments for a guided wizard:
 
 ```bash
+# Interactive wizard — pick entity from a list, edit the new ID in-place
+zigporter rename-entity
+
+# Provide the old ID only — prompts for the new ID (pre-filled for editing)
+zigporter rename-entity sensor.old_device_energy
+
 # Preview changes (dry run)
 zigporter rename-entity light.living_room_1 light.living_room_ceiling
 
@@ -152,15 +160,27 @@ zigporter rename-entity light.living_room_1 light.living_room_ceiling --apply
 ```
 
 Without `--apply` the command shows a full diff and prompts for confirmation before writing.
+New entity IDs are validated against the `domain.entity_name` format before any changes are made.
 
 > **Note:** Jinja2 template expressions (`{{ states('old.id') }}`) are not patched automatically — review them after renaming.
 
 ## Rename a Device
 
 Rename any Home Assistant device by name and cascade the change to all its entities and
-references in HA. Supports partial name matching:
+references in HA. Supports partial name matching.
+
+Both arguments are optional. Run with no arguments for a guided wizard:
 
 ```bash
+# Interactive wizard — pick device from an area-grouped list, type the new name
+zigporter rename-device
+
+# Restrict the picker to Zigbee devices only (ZHA + Zigbee2MQTT)
+zigporter rename-device --filter=zigbee
+
+# Provide the old name only — prompts for the new name
+zigporter rename-device "Living Room 1"
+
 # Preview changes (dry run)
 zigporter rename-device "Living Room 1" "Living Room Ceiling"
 

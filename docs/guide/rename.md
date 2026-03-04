@@ -10,16 +10,37 @@ the interactive prompt to write changes.
 
 ## Rename an entity
 
-Rename a Home Assistant entity ID and update every reference to it:
+Rename a Home Assistant entity ID and update every reference to it.
+
+Both arguments are optional — omit them to use the interactive wizard:
 
 ```bash
-zigporter rename-entity <old_entity_id> <new_entity_id>
+zigporter rename-entity [old_entity_id] [new_entity_id]
 ```
 
-### Example
+### Interactive wizard
 
 ```bash
-# Preview changes
+# Wizard — two-step picker, then new-ID prompt pre-filled for editing
+zigporter rename-entity
+
+# Provide only the old ID — prompts for the new ID (pre-filled with the current value)
+zigporter rename-entity sensor.old_device_energy
+```
+
+The wizard uses a two-step picker:
+
+1. **Select a domain** — short scrollable list, e.g. `light (14 entities)`, `sensor (89 entities)`
+2. **Select an entity** — full browsable list for the chosen domain. Select `🔍 Search...` at the
+   top to switch to a type-to-filter autocomplete instead of scrolling.
+
+The new entity ID is validated against `domain.entity_name` format (lowercase letters,
+digits, and underscores) both in the interactive prompt and when passed as an argument.
+
+### Non-interactive
+
+```bash
+# Preview changes (dry run)
 zigporter rename-entity light.living_room_1 light.living_room_ceiling
 
 # Apply the rename
@@ -69,16 +90,34 @@ Rename any Home Assistant device by name and cascade the change to all its entit
 every reference to those entities across HA. Works with any integration — Zigbee, Z-Wave,
 Matter, Wi-Fi, and more.
 
+Both arguments are optional — omit them to use the interactive wizard:
+
 ```bash
-zigporter rename-device <old_name> <new_name>
+zigporter rename-device [old_name] [new_name]
 ```
 
-Partial name matching is supported — the command finds devices whose name contains `old_name`.
+Partial name matching is supported when `old_name` is provided.
 
-### Example
+### Interactive wizard
 
 ```bash
-# Preview changes
+# Wizard — area-grouped device picker, then new-name prompt pre-filled for editing
+zigporter rename-device
+
+# Restrict the picker to Zigbee devices only (ZHA + Zigbee2MQTT)
+zigporter rename-device --filter=zigbee
+
+# Restrict the picker to Matter / Thread devices only
+zigporter rename-device --filter=matter
+
+# Provide only the old name — prompts for the new name (pre-filled with current name)
+zigporter rename-device "Living Room 1"
+```
+
+### Non-interactive
+
+```bash
+# Preview changes (dry run)
 zigporter rename-device "Living Room 1" "Living Room Ceiling"
 
 # Apply the rename

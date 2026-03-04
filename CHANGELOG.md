@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `rename-device` accepts `--filter=zigbee` to restrict the interactive picker to ZHA and Zigbee2MQTT devices only.
+
+### Changed
+
+- `rename-device` new-name prompt now starts empty instead of pre-filling the current name.
+
+### Refactored
+
+- `ha_client`: `YAML_MODE` sentinel changed from a plain `dict` to a typed `_YamlMode` instance for
+  safer identity checks. All callers must use `is_yaml_mode()` — direct equality comparisons (`== YAML_MODE`)
+  are no longer meaningful. `is_yaml_mode` is a public export.
+
 ## [0.5.1] - 2026-03-03
 
 ### Fixed

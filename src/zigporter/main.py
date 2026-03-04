@@ -65,42 +65,32 @@ def _ensure_config() -> None:
             raise typer.Exit(code=1)
 
 
-def _get_config() -> tuple[str, str, bool]:
+def _get_config(*, optional: bool = False) -> tuple[str, str, bool]:
     if os.environ.get("ZIGPORTER_DEMO"):
         return ("", "", True)
-    _ensure_config()
+    if not optional:
+        _ensure_config()
     try:
         return load_config()
     except ValueError as exc:
+        if optional:
+            return "", "", True
         console.print(f"[red]Configuration error:[/red] {exc}")
         console.print("  Run [bold]zigporter setup[/bold] to update your config.")
         raise typer.Exit(code=1) from exc
 
 
-def _get_z2m_config() -> tuple[str, str]:
+def _get_z2m_config(*, optional: bool = False) -> tuple[str, str]:
     if os.environ.get("ZIGPORTER_DEMO"):
         return ("", "zigbee2mqtt")
     try:
         return load_z2m_config()
     except ValueError as exc:
+        if optional:
+            return "", "zigbee2mqtt"
         console.print(f"[red]Configuration error:[/red] {exc}")
         console.print("  Run [bold]zigporter setup[/bold] to update your config.")
         raise typer.Exit(code=1) from exc
-
-
-def _get_config_optional() -> tuple[str, str, bool]:
-    """Like _get_config but returns empty strings instead of exiting on missing values."""
-    try:
-        return load_config()
-    except ValueError:
-        return "", "", True
-
-
-def _get_z2m_config_optional() -> tuple[str, str]:
-    try:
-        return load_z2m_config()
-    except ValueError:
-        return "", "zigbee2mqtt"
 
 
 def _confirm_backup_once() -> None:
@@ -155,8 +145,8 @@ def check() -> None:
     Run this before your first migration session.
     """
     _ensure_config()
-    ha_url, token, verify_ssl = _get_config_optional()
-    z2m_url, _ = _get_z2m_config_optional()
+    ha_url, token, verify_ssl = _get_config(optional=True)
+    z2m_url, _ = _get_z2m_config(optional=True)
 
     ok = check_command(
         ha_url=ha_url,
@@ -343,8 +333,12 @@ def inspect(
 
 @app.command()
 def rename_entity(
-    old_entity_id: str = typer.Argument(..., help="Current entity ID to rename."),
-    new_entity_id: str = typer.Argument(..., help="New entity ID to assign."),
+    old_entity_id: str | None = typer.Argument(
+        None, help="Current entity ID to rename. Omit to pick interactively."
+    ),
+    new_entity_id: str | None = typer.Argument(
+        None, help="New entity ID to assign. Omit to be prompted."
+    ),
     apply: bool = typer.Option(
         False,
         "--apply",
@@ -359,7 +353,7 @@ def rename_entity(
     Note: Jinja2 template strings (e.g. {{ states('old.id') }}) are not patched
     automatically — review them manually after renaming.
     """
-    from zigporter.commands.rename import rename_command  # noqa: PLC0415
+    from zigporter.commands.rename_entity import rename_command  # noqa: PLC0415
 
     ha_url, token, verify_ssl = _get_config()
     rename_command(
@@ -374,12 +368,21 @@ def rename_entity(
 
 @app.command()
 def rename_device(
-    old_name: str = typer.Argument(..., help="Current device name (or partial match)."),
-    new_name: str = typer.Argument(..., help="New friendly name for the device."),
+    old_name: str | None = typer.Argument(
+        None, help="Current device name (or partial match). Omit to pick interactively."
+    ),
+    new_name: str | None = typer.Argument(
+        None, help="New friendly name for the device. Omit to be prompted."
+    ),
     apply: bool = typer.Option(
         False,
         "--apply",
         help="Apply the rename. Without this flag the command runs as a dry run.",
+    ),
+    device_filter: str | None = typer.Option(
+        None,
+        "--filter",
+        help="Restrict picker to a device protocol. Valid values: 'zigbee' (ZHA + Z2M), 'matter' (Matter + Thread).",
     ),
 ) -> None:
     """Rename a device and cascade the change to all its entities, automations, scripts, scenes, and dashboards.
@@ -393,7 +396,7 @@ def rename_device(
     Note: Jinja2 template strings (e.g. {{ states('old.id') }}) are not patched
     automatically — review them manually after renaming.
     """
-    from zigporter.commands.rename import rename_device_command  # noqa: PLC0415
+    from zigporter.commands.rename_device import rename_device_command  # noqa: PLC0415
 
     ha_url, token, verify_ssl = _get_config()
     rename_device_command(
@@ -403,6 +406,7 @@ def rename_device(
         old_name=old_name,
         new_name=new_name,
         apply=apply,
+        device_filter=device_filter,
     )
 
 

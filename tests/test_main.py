@@ -9,9 +9,7 @@ from typer.testing import CliRunner
 from zigporter.main import (
     _confirm_backup_once,
     _get_config,
-    _get_config_optional,
     _get_z2m_config,
-    _get_z2m_config_optional,
     _resolve_or_fetch_export,
     app,
 )
@@ -59,7 +57,7 @@ def test_get_z2m_config_exits_on_error(mocker):
 
 def test_get_config_optional_returns_empty_on_error(mocker):
     mocker.patch("zigporter.main.load_config", side_effect=ValueError("missing"))
-    url, tok, ssl = _get_config_optional()
+    url, tok, ssl = _get_config(optional=True)
     assert url == ""
     assert tok == ""
     assert ssl is True
@@ -67,7 +65,7 @@ def test_get_config_optional_returns_empty_on_error(mocker):
 
 def test_get_z2m_config_optional_returns_defaults_on_error(mocker):
     mocker.patch("zigporter.main.load_z2m_config", side_effect=ValueError("missing"))
-    url, topic = _get_z2m_config_optional()
+    url, topic = _get_z2m_config(optional=True)
     assert url == ""
     assert topic == "zigbee2mqtt"
 

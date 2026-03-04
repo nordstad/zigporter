@@ -11,18 +11,18 @@ from rich.table import Table
 
 from zigporter.ha_client import HAClient
 from zigporter.ui import QUESTIONARY_STYLE
-from zigporter.utils import normalize_ieee, parse_z2m_ieee_identifier
+from zigporter.utils import (
+    device_display_name,
+    ieee_to_colon,
+    normalize_ieee,
+    parse_z2m_ieee_identifier,
+)
 
 console = Console()
 
 _STYLE = QUESTIONARY_STYLE
 
 _NUMERIC_SUFFIX_PAT = re.compile(r"^(.+)_\d+$")
-
-
-def _ieee_colon(normalized: str) -> str:
-    """Convert 16-char normalized hex IEEE to colon-separated format for ZHA services."""
-    return ":".join(normalized[i : i + 2] for i in range(0, 16, 2))
 
 
 # ---------------------------------------------------------------------------
@@ -66,10 +66,6 @@ def _mqtt_ieee(device_entry: dict[str, Any]) -> str | None:
         if parsed:
             return parsed
     return None
-
-
-def _device_display_name(entry: dict[str, Any]) -> str:
-    return entry.get("name_by_user") or entry.get("name") or entry.get("id", "?")
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +122,7 @@ def find_stale_pairs(
         pairs.append(
             StalePair(
                 ieee=ieee,
-                name=_device_display_name(z2m_entry),
+                name=device_display_name(z2m_entry),
                 zha_device_id=zha_did,
                 z2m_device_id=z2m_did,
                 stale_entity_ids=[e["entity_id"] for e in stale_entities],
@@ -163,7 +159,7 @@ async def apply_fix(pair: StalePair, ha_client: HAClient) -> None:
 
     if not removed:
         try:
-            await ha_client.remove_zha_device(_ieee_colon(pair.ieee))
+            await ha_client.remove_zha_device(ieee_to_colon(pair.ieee))
             console.print("  [green]✓[/green] Removed stale ZHA device entry via ZHA service")
             removed = True
         except (RuntimeError, OSError) as exc:
