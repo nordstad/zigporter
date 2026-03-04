@@ -8,6 +8,8 @@ from rich.panel import Panel
 
 from zigporter.entity_refs import collect_config_entity_ids
 from zigporter.ha_client import HAClient
+from zigporter.lovelace import cards_from_view as _cards_from_view
+from zigporter.lovelace import discover_dashboards
 from zigporter.ui import QUESTIONARY_STYLE
 from zigporter.utils import normalize_ieee
 
@@ -71,20 +73,6 @@ def _collect_lovelace_entities(node: Any) -> set[str]:
     return ids
 
 
-def _cards_from_view(view: dict[str, Any]) -> list[dict[str, Any]]:
-    """Extract top-level cards from a view regardless of layout type.
-
-    HA has two layouts:
-    - Classic: view.cards  (list of card dicts)
-    - Sections (2024+): view.sections[*].cards  (cards nested inside sections)
-    Both can exist on the same dashboard so we collect from both.
-    """
-    cards: list[dict[str, Any]] = list(view.get("cards", []))
-    for section in view.get("sections", []):
-        cards.extend(section.get("cards", []))
-    return cards
-
-
 def _scan_dashboard(
     config: dict[str, Any],
     dashboard_title: str,
@@ -124,32 +112,7 @@ async def fetch_all_data(ha_client: HAClient) -> dict[str, Any]:
         ha_client.get_scenes(),
     )
 
-    # Discover Lovelace dashboards from the full panel registry.
-    # get_panels() returns ALL registered panels regardless of storage/yaml mode,
-    # unlike lovelace/dashboards which only returns storage-mode dashboards.
-    dashboard_url_paths: list[str | None] = []
-    dashboard_titles: dict[str | None, str] = {}
-
-    for panel_key, panel in panels_data.items():
-        if panel.get("component_name") != "lovelace":
-            continue
-        panel_url = panel.get("url_path") or panel_key
-        # The default Lovelace dashboard is registered as "lovelace";
-        # lovelace/config uses url_path=None to refer to it.
-        if panel_url in ("lovelace", ""):
-            lv_path: str | None = None
-            title = panel.get("title") or "Default"
-        else:
-            lv_path = panel_url
-            title = panel.get("title") or panel_url
-        if lv_path not in dashboard_url_paths:
-            dashboard_url_paths.append(lv_path)
-            dashboard_titles[lv_path] = title
-
-    # Always include the default dashboard even if panels returned nothing
-    if None not in dashboard_url_paths:
-        dashboard_url_paths.insert(0, None)
-        dashboard_titles[None] = "Default"
+    dashboard_url_paths, dashboard_titles = discover_dashboards(panels_data)
 
     lovelace_configs = await asyncio.gather(
         *[ha_client.get_lovelace_config(p) for p in dashboard_url_paths]
@@ -180,27 +143,7 @@ async def show_migrate_inspect_summary(
     target = set(entity_ids)
 
     panels_data = await ha_client.get_panels()
-
-    dashboard_url_paths: list[str | None] = []
-    dashboard_titles: dict[str | None, str] = {}
-
-    for panel_key, panel in panels_data.items():
-        if panel.get("component_name") != "lovelace":
-            continue
-        panel_url = panel.get("url_path") or panel_key
-        if panel_url in ("lovelace", ""):
-            lv_path: str | None = None
-            title = panel.get("title") or "Default"
-        else:
-            lv_path = panel_url
-            title = panel.get("title") or panel_url
-        if lv_path not in dashboard_url_paths:
-            dashboard_url_paths.append(lv_path)
-            dashboard_titles[lv_path] = title
-
-    if None not in dashboard_url_paths:
-        dashboard_url_paths.insert(0, None)
-        dashboard_titles[None] = "Default"
+    dashboard_url_paths, dashboard_titles = discover_dashboards(panels_data)
 
     lovelace_configs = await asyncio.gather(
         *[ha_client.get_lovelace_config(p) for p in dashboard_url_paths]

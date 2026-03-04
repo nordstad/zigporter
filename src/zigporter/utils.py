@@ -1,3 +1,13 @@
+def device_display_name(entry: dict) -> str:
+    """Return a human-readable name for a device or entity registry entry."""
+    return entry.get("name_by_user") or entry.get("name") or entry.get("id", "?")
+
+
+def ieee_to_colon(normalized: str) -> str:
+    """Convert 16-char normalized hex IEEE to colon-separated format for ZHA services."""
+    return ":".join(normalized[i : i + 2] for i in range(0, 16, 2))
+
+
 def normalize_ieee(ieee: str) -> str:
     """Normalize an IEEE address to a 16-char lowercase hex string (no separators or prefix)."""
     s = ieee.lower().replace(":", "").replace("-", "")
