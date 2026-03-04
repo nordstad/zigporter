@@ -1,6 +1,6 @@
 [project]
 name = "zigporter"
-version = "0.5.1"
+version = "0.6.0"
 description = "CLI toolkit for Zigbee device management in Home Assistant: migrate from ZHA to Zigbee2MQTT, rename entities, and fix stale registry entries"
 readme = "README.md"
 authors = [
