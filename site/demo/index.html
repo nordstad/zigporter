@@ -91,21 +91,10 @@ body { background:var(--bg); color:var(--txt); font-family:var(--font);
 .breplay:hover { color:var(--txt); border-color:var(--dim); }
 
 @media (max-width:640px) {
-  .main  { flex-direction:column; }
-  /* Terminal: 8px font fits ~78-char wide tables on a 390px viewport with minimal padding */
-  .tout  { font-size:8px; line-height:1.6; padding:6px 4px; overflow-x:auto;
-           -webkit-overflow-scrolling:touch; }
-  .tbar  { font-size:10px; padding:4px 10px; }
-  /* Sidebar: taller to give cards + replay bar breathing room */
-  .side  { width:100%; height:190px; flex-shrink:0;
-           border-left:none; border-top:1px solid var(--bdr); }
-  .stitle{ padding:5px 10px; font-size:10px; }
-  .sbody { display:flex; gap:8px; overflow-x:auto; overflow-y:hidden; padding:8px;
-           -webkit-overflow-scrolling:touch; }
+  .main { flex-direction:column; }
+  .side { width:100%; height:130px; border-left:none; border-top:1px solid var(--bdr); }
+  .sbody { display:flex; gap:8px; overflow-x:auto; overflow-y:hidden; padding:8px; }
   .card  { flex-shrink:0; min-width:148px; margin-bottom:0; }
-  .card .cd { display:none; }   /* hide description in compact strip */
-  .sfoot { padding:10px 8px; }
-  .breplay { font-size:11px; padding:6px 8px; }
 }
 </style>
 </head>
