@@ -16,6 +16,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "rich>=13",
     "questionary>=2.1.1",
+    "svgwrite>=1.4",
 ]
 
 [project.urls]

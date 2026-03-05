@@ -439,5 +439,39 @@ def fix_device() -> None:
     _fix(ha_url=ha_url, token=token, verify_ssl=verify_ssl)
 
 
+@app.command(name="network-map")
+def network_map(
+    output_format: str = typer.Option("tree", "--format", help="Output format: tree or table."),
+    warn_lqi: int = typer.Option(80, "--warn-lqi", help="LQI below this is flagged WEAK."),
+    critical_lqi: int = typer.Option(
+        30, "--critical-lqi", help="LQI below this is flagged CRITICAL."
+    ),
+    output_svg: Path | None = typer.Option(
+        None, "--output", help="Write a radial SVG map to this path (e.g. network.svg)."
+    ),
+) -> None:
+    """Show Zigbee mesh topology with signal strength (LQI) for each device.
+
+    Default view is a router-centric tree. Use --format=table for a flat list
+    sorted by LQI ascending (weakest links first). Use --output to save a
+    radial SVG diagram with LQI-encoded edges.
+    """
+    from zigporter.commands.network_map import network_map_command as _nm  # noqa: PLC0415
+
+    ha_url, token, verify_ssl = _get_config()
+    z2m_url, mqtt_topic = _get_z2m_config()
+    _nm(
+        ha_url=ha_url,
+        token=token,
+        z2m_url=z2m_url,
+        verify_ssl=verify_ssl,
+        mqtt_topic=mqtt_topic,
+        output_format=output_format,
+        warn_lqi=warn_lqi,
+        critical_lqi=critical_lqi,
+        output_svg=output_svg,
+    )
+
+
 if __name__ == "__main__":
     app()

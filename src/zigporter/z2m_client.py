@@ -6,12 +6,17 @@ falls back to the HA WebSocket API for device queries and the
 ``mqtt.publish`` service for control commands.
 """
 
+import asyncio
 import json
+import time
 from typing import Any
 
 import httpx
 
 from zigporter.utils import normalize_ieee, parse_z2m_ieee_identifier
+
+# Seconds to wait for a Z2M MQTT response before giving up.
+_NETWORK_MAP_TIMEOUT = 60
 
 
 class Z2MClient:
@@ -173,6 +178,79 @@ class Z2MClient:
             "mqtt", "publish", {"topic": topic, "payload": payload}
         )
 
+    async def _get_network_map_via_mqtt(self) -> dict[str, Any]:
+        """Fetch the Z2M network map via HA WebSocket MQTT subscribe+publish.
+
+        Used when the Z2M HTTP REST API is unavailable (Z2M 2.x removed it).
+        Opens a single HA WebSocket connection, subscribes to the response topic,
+        publishes the map request, then waits up to ``_NETWORK_MAP_TIMEOUT``
+        seconds for Z2M to reply.
+        """
+        ha = self._ha_client()
+        response_topic = f"{self._mqtt_topic}/bridge/response/networkmap"
+        request_topic = f"{self._mqtt_topic}/bridge/request/networkmap"
+
+        async with ha._ws_session() as ws:
+            # 1. Subscribe to the networkmap response topic (id=1)
+            await ws.send(json.dumps({"id": 1, "type": "mqtt/subscribe", "topic": response_topic}))
+            msg = json.loads(await ws.recv())
+            if not msg.get("success"):
+                raise RuntimeError(f"mqtt/subscribe failed: {msg}")
+
+            # 2. Publish the network map request via call_service (id=2)
+            await ws.send(
+                json.dumps(
+                    {
+                        "id": 2,
+                        "type": "call_service",
+                        "domain": "mqtt",
+                        "service": "publish",
+                        "service_data": {
+                            "topic": request_topic,
+                            "payload": json.dumps({"type": "raw"}),
+                        },
+                    }
+                )
+            )
+            msg = json.loads(await ws.recv())
+            if not msg.get("success"):
+                raise RuntimeError(f"mqtt.publish call_service failed: {msg}")
+
+            # 3. Wait for the event carrying the networkmap response
+            deadline = time.monotonic() + _NETWORK_MAP_TIMEOUT
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(
+                        f"Timed out after {_NETWORK_MAP_TIMEOUT}s waiting for Z2M network map"
+                    )
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    raise RuntimeError(
+                        f"Timed out after {_NETWORK_MAP_TIMEOUT}s waiting for Z2M network map"
+                    )
+
+                msg = json.loads(raw)
+                if msg.get("type") != "event" or msg.get("id") != 1:
+                    continue  # skip confirmations and unrelated events
+
+                event = msg.get("event", {})
+                payload_str = event.get("payload", "{}")
+                try:
+                    payload = json.loads(payload_str)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+
+                if payload.get("status") == "ok":
+                    # Z2M wraps the data in a "value" key for raw maps
+                    data = payload.get("data", {})
+                    inner = data.get("value", data)
+                    return {"data": inner}
+
+                if payload.get("status") == "error":
+                    raise RuntimeError(f"Z2M network map error: {payload.get('error', 'unknown')}")
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -212,6 +290,18 @@ class Z2MClient:
                 f"{self._mqtt_topic}/bridge/request/permit_join",
                 json.dumps({"time": 0}),
             )
+
+    async def get_network_map(self) -> dict[str, Any]:
+        """Return the raw Z2M network map (nodes + links).
+
+        Tries the Z2M HTTP REST endpoint first. Z2M 2.x removed that endpoint,
+        so falls back to subscribing to the MQTT response topic and publishing
+        the request via HA's WebSocket ``call_service`` API.
+        """
+        try:
+            return await self._get("/api/networkmap?type=raw")
+        except (RuntimeError, httpx.HTTPStatusError, httpx.RequestError):
+            return await self._get_network_map_via_mqtt()
 
     async def rename_device(self, current_name: str, new_name: str) -> None:
         """Rename a Z2M device by its current friendly name."""
