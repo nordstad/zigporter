@@ -18,8 +18,6 @@ NODE_R_ROUTER = 20
 NODE_R_END = 14
 
 BG = "#0f172a"
-RING_STROKE = "#1e293b"
-RING_LABEL = "#94a3b8"
 
 COORD_FILL = "#f59e0b"
 ROUTER_FILL = "#0ea5e9"
@@ -51,6 +49,16 @@ def _edge_color(lqi: int, warn: int, crit: int) -> str:
 
 def _edge_width(lqi: int) -> float:
     return round(0.8 + (lqi / 255) * 2.8, 2)
+
+
+def _lerp_color(t: float, near: str, far: str) -> str:
+    """Linearly interpolate between two hex colours. t=0 → near, t=1 → far."""
+    r1, g1, b1 = int(near[1:3], 16), int(near[3:5], 16), int(near[5:7], 16)
+    r2, g2, b2 = int(far[1:3], 16), int(far[3:5], 16), int(far[5:7], 16)
+    r = round(r1 + (r2 - r1) * t)
+    g = round(g1 + (g2 - g1) * t)
+    b = round(b1 + (b2 - b1) * t)
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 def _node_fill(node_type: str) -> str:
@@ -373,13 +381,16 @@ def render_svg(
     # Ring guides
     ring_group = dwg.g(id="rings")
     for h in range(1, max_hops + 1):
+        t = (h - 1) / max(max_hops - 1, 1)  # 0.0 at hop 1, 1.0 at outermost
+        ring_stroke = _lerp_color(t, "#1a2e24", "#2e1a1a")
+        ring_label_c = _lerp_color(t, "#7ec4a8", "#c48a8a")
         ring_r = h * RING_SPACING
         ring_group.add(
             dwg.circle(
                 center=(cx, cy),
                 r=ring_r,
                 fill="none",
-                stroke=RING_STROKE,
+                stroke=ring_stroke,
                 stroke_width=1,
                 stroke_dasharray="5,4",
             )
@@ -388,7 +399,7 @@ def render_svg(
             dwg.text(
                 f"Hop {h}",
                 insert=(cx, cy - ring_r + 14),
-                fill=RING_LABEL,
+                fill=ring_label_c,
                 font_size="12px",
                 text_anchor="middle",
                 font_weight="bold",
