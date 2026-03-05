@@ -35,6 +35,9 @@ LABEL_FS = "11px"
 DIM_FS = "11px"
 LEGEND_FS = "11px"
 
+COLLISION_GAP = 6  # px padding between node edges after nudge
+COLLISION_ITERS = 40  # max angle-nudge iterations before giving up
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -131,11 +134,14 @@ def _assign_angles(
     angles: dict[str, float],
     start: float,
     end: float,
+    depth_map: dict[str, int],
+    nodes: dict[str, dict[str, Any]],
 ) -> None:
     """Recursively assign angular midpoints using leaf-count-proportional slices.
 
-    A minimum angle floor of ``2π / (N_children * 4)`` prevents any node from
-    being squished below ~15°, which avoids visual overlap in dense branches.
+    The minimum angle floor is geometry-aware: each child gets at least enough
+    arc so that its circle diameter plus ``COLLISION_GAP`` fits at its ring
+    radius, preventing the initial placement from creating impossible overlaps.
     """
     angles[ieee] = (start + end) / 2
     kids = children.get(ieee, [])
@@ -144,16 +150,22 @@ def _assign_angles(
 
     # Alternate large/small children for visual balance
     sorted_kids = sorted(kids, key=lambda k: -leaf_counts.get(k, 1))
-    n_kids = len(sorted_kids)
     total = sum(leaf_counts.get(k, 1) for k in sorted_kids)
     span = end - start
-    min_angle = span / (n_kids * 4)
+
+    # Geometry-aware per-child minimum angle: enough arc to fit the node circle
+    child_depth = depth_map.get(ieee, 0) + 1
+    r_at_depth = max((child_depth - 0.5) * RING_SPACING, 1.0)
+    min_angles = [
+        (2 * _node_radius(nodes.get(k, {}).get("type", "EndDevice")) + COLLISION_GAP) / r_at_depth
+        for k in sorted_kids
+    ]
 
     # First pass: compute raw proportional spans
     raw_spans = [span * leaf_counts.get(k, 1) / total for k in sorted_kids]
 
-    # Second pass: apply minimum floor and rescale the remainder
-    floored = [max(s, min_angle) for s in raw_spans]
+    # Second pass: apply geometry-aware minimum floor per child
+    floored = [max(raw, mn) for raw, mn in zip(raw_spans, min_angles)]
     floored_total = sum(floored)
     if floored_total > span:
         # Scale down so they still fit in the allotted range
@@ -161,8 +173,73 @@ def _assign_angles(
 
     cursor = start
     for kid, kid_span in zip(sorted_kids, floored):
-        _assign_angles(kid, children, leaf_counts, angles, cursor, cursor + kid_span)
+        _assign_angles(
+            kid, children, leaf_counts, angles, cursor, cursor + kid_span, depth_map, nodes
+        )
         cursor += kid_span
+
+
+# ── Collision resolution ──────────────────────────────────────────────────────
+
+
+def _resolve_collisions(
+    positions: dict[str, tuple[float, float]],
+    angles: dict[str, float],
+    depth_map: dict[str, int],
+    nodes: dict[str, dict[str, Any]],
+    cx: float,
+    cy: float,
+) -> None:
+    """Push overlapping nodes apart by nudging their angles within their hop ring.
+
+    Nodes stay on their ring radius — only the angle changes. Uses a Gauss-Seidel
+    approach (positions updated immediately after each pair nudge) for fast convergence.
+    Iterates up to COLLISION_ITERS times; exits early when no overlap remains.
+    """
+    by_depth: dict[int, list[str]] = {}
+    for ieee, depth in depth_map.items():
+        if depth > 0:
+            by_depth.setdefault(depth, []).append(ieee)
+
+    ring_r: dict[str, float] = {
+        ieee: (depth - 0.5) * RING_SPACING for ieee, depth in depth_map.items() if depth > 0
+    }
+
+    for _ in range(COLLISION_ITERS):
+        moved = False
+        for depth_nodes in by_depth.values():
+            n = len(depth_nodes)
+            for i in range(n):
+                a = depth_nodes[i]
+                for j in range(i + 1, n):
+                    b = depth_nodes[j]
+                    ax, ay = positions[a]
+                    bx, by = positions[b]
+                    dist = math.hypot(ax - bx, ay - by)
+                    ra = _node_radius(nodes[a].get("type", "EndDevice"))
+                    rb = _node_radius(nodes[b].get("type", "EndDevice"))
+                    min_dist = ra + rb + COLLISION_GAP
+                    if dist >= min_dist:
+                        continue
+                    moved = True
+                    # Convert linear overlap to angular nudge at the average ring radius
+                    r = (ring_r[a] + ring_r[b]) / 2
+                    angular_overlap = (min_dist - dist) / max(r, 1.0)
+                    # Push apart: determine which direction by signed angle difference
+                    diff = (angles[b] - angles[a] + math.pi) % (2 * math.pi) - math.pi
+                    nudge = angular_overlap / 2
+                    if diff >= 0:
+                        angles[a] -= nudge
+                        angles[b] += nudge
+                    else:
+                        angles[a] += nudge
+                        angles[b] -= nudge
+                    # Recompute positions on their fixed ring radii
+                    rra, rrb = ring_r[a], ring_r[b]
+                    positions[a] = (cx + rra * math.sin(angles[a]), cy - rra * math.cos(angles[a]))
+                    positions[b] = (cx + rrb * math.sin(angles[b]), cy - rrb * math.cos(angles[b]))
+        if not moved:
+            break
 
 
 # ── SVG drawing helpers ───────────────────────────────────────────────────────
@@ -357,16 +434,21 @@ def render_svg(
 
     leaf_counts = _leaf_count(coordinator_ieee, children)
     angles: dict[str, float] = {}
-    _assign_angles(coordinator_ieee, children, leaf_counts, angles, 0.0, 2 * math.pi)
+    _assign_angles(
+        coordinator_ieee, children, leaf_counts, angles, 0.0, 2 * math.pi, depth_map, nodes
+    )
     path_min_lqi = _compute_path_min_lqi(parent_map, lqi_map)
 
     positions: dict[str, tuple[float, float]] = {}
     for ieee, angle in angles.items():
-        r = depth_map.get(ieee, 0) * RING_SPACING
+        depth = depth_map.get(ieee, 0)
+        r = (depth - 0.5) * RING_SPACING if depth > 0 else 0.0
         positions[ieee] = (
             cx + r * math.sin(angle),
             cy - r * math.cos(angle),
         )
+
+    _resolve_collisions(positions, angles, depth_map, nodes, cx, cy)
 
     # ── Drawing ───────────────────────────────────────────────────────────────
     dwg = svgwrite.Drawing(
