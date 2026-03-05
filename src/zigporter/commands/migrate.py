@@ -27,12 +27,20 @@ from zigporter.models import ZHADevice, ZHAExport
 from zigporter.ui import QUESTIONARY_STYLE
 from zigporter.utils import normalize_ieee
 from zigporter.z2m_client import Z2MClient
+from zigporter.commands.rename_device import (
+    build_device_rename_plan,
+    compute_entity_pairs,
+    display_device_plan,
+    execute_device_rename,
+    resolve_odd_entities,
+    slugify,
+)
 
 console = Console()
 
 _STYLE = QUESTIONARY_STYLE
 
-WIZARD_STEPS = 7
+WIZARD_STEPS = 8
 
 # Zigbee PermitJoin duration is an 8-bit field; 255 = always-on, so 254 is the
 # practical maximum for a timed window.  Requests larger than this are silently
@@ -735,6 +743,109 @@ async def step_validate(device: ZHADevice, ha_client: HAClient, retries: int = 1
 
 
 # ---------------------------------------------------------------------------
+# Post-migration optional rename (step 8)
+# ---------------------------------------------------------------------------
+
+
+async def step_post_migrate_rename(
+    device: ZHADevice,
+    ha_client: HAClient,
+    z2m_client: Z2MClient,
+) -> None:
+    """Optional step 8: offer a full cascading rename after successful migration."""
+    console.print(f"\n[bold cyan][8/{WIZARD_STEPS}] Rename (optional)[/bold cyan]")
+
+    wants_rename = (
+        await questionary.confirm(
+            "Rename this device to a different name?",
+            default=False,
+            style=_STYLE,
+        ).unsafe_ask_async()
+        or False
+    )
+    if not wants_rename:
+        return
+
+    new_name = await questionary.text(
+        "New device name:",
+        default=device.name,
+        style=_STYLE,
+    ).unsafe_ask_async()
+    if not new_name or not new_name.strip():
+        console.print("[dim]Rename skipped.[/dim]")
+        return
+    new_name = new_name.strip()
+
+    if new_name == device.name:
+        console.print("[dim]Name unchanged — skipping.[/dim]")
+        return
+
+    z2m_device_id = await ha_client.get_z2m_device_id(device.ieee)
+    if not z2m_device_id:
+        console.print(
+            "[yellow]Could not locate Z2M device in HA registry. Rename skipped.[/yellow]"
+        )
+        return
+
+    console.print("  Fetching entities...", end=" ")
+    entities = await ha_client.get_entities_for_device(z2m_device_id)
+    console.print(f"[green]{len(entities)} found[/green]")
+
+    if not entities:
+        console.print("[yellow]No entities found for this device — rename skipped.[/yellow]")
+        return
+
+    old_slug = slugify(device.name)
+    new_slug = slugify(new_name)
+    entity_pairs, odd_entities = compute_entity_pairs(entities, old_slug, new_slug)
+
+    if odd_entities:
+        entity_pairs = await resolve_odd_entities(odd_entities, entity_pairs, new_slug)
+
+    if not entity_pairs:
+        console.print("\n[yellow]No entities to rename.[/yellow]")
+        return
+
+    try:
+        device_plan = await build_device_rename_plan(
+            ha_client,
+            {"id": z2m_device_id},
+            device.name,
+            new_name,
+            entity_pairs,
+        )
+    except ValueError:
+        return
+
+    display_device_plan(device_plan)
+
+    confirmed = (
+        await questionary.confirm(
+            "Apply these changes?",
+            default=False,
+            style=_STYLE,
+        ).unsafe_ask_async()
+        or False
+    )
+    if not confirmed:
+        console.print("[dim]Rename aborted.[/dim]")
+        return
+
+    console.print()
+    await execute_device_rename(
+        ha_client,
+        device_plan,
+        z2m_client=z2m_client,
+        z2m_friendly_name=device.name,
+    )
+    console.print(
+        f"\n[green]✓[/green] Renamed device [bold]{device.name}[/bold]"
+        f" → [bold cyan]{new_name}[/bold cyan]"
+        f" ([bold]{len(device_plan.plans)}[/bold] entities updated)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main wizard orchestrator
 # ---------------------------------------------------------------------------
 
@@ -750,7 +861,7 @@ async def run_wizard(
 
     console.print(
         "\nThis wizard will migrate [bold]{name}[/bold] from ZHA to Zigbee2MQTT "
-        "in 7 steps:\n"
+        "in 7 steps (+ 1 optional):\n"
         "\n"
         "  [cyan]1[/cyan]  Remove from ZHA    Unpair the device from ZHA [red](cannot be undone)[/red]\n"
         "  [cyan]2[/cyan]  Reset device       Factory-reset to clear the old ZHA pairing\n"
@@ -759,6 +870,7 @@ async def run_wizard(
         "  [cyan]5[/cyan]  Restore entity IDs Rename IEEE-hex entity IDs back to friendly names\n"
         "  [cyan]6[/cyan]  Review             Inspect entities and dashboard cards\n"
         "  [cyan]7[/cyan]  Validate           Confirm entities come back online\n"
+        "  [cyan]8[/cyan]  Rename (optional)  Rename to a different name with full HA cascade\n"
         "\n"
         "[dim]You can abort safely at step 1. After that, the device must complete\n"
         "pairing with Z2M before it can be used again.[/dim]".format(name=device.name)
@@ -814,6 +926,7 @@ async def run_wizard(
                 f"Progress: [bold]{migrated}/{total}[/bold] devices migrated."
             )
             await step_show_test_checklist(device, ha_client, console)
+            await step_post_migrate_rename(device, ha_client, z2m_client)
         else:
             mark_failed(state, device.ieee)
             save_state(state, state_path)

@@ -1,6 +1,6 @@
 """Tests for the rename-device command."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -373,6 +373,45 @@ def test_display_device_plan_shows_yaml_mode_dashboards_inline(mocker):
     all_output = "\n".join(printed)
     assert "Overview" in all_output
     assert "YAML mode" in all_output
+
+
+# ---------------------------------------------------------------------------
+# resolve_odd_entities (previously _resolve_odd_entities)
+# ---------------------------------------------------------------------------
+
+
+async def test_resolve_odd_entities_suggested():
+    """Choosing 'suggested' appends the suggested entity pair."""
+    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+
+    odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
+    with (
+        patch("sys.stdin.isatty", return_value=True),
+        patch(
+            "zigporter.commands.rename_device._prompt_odd_entity_action",
+            new=AsyncMock(return_value=("suggested", "sensor.bedroom_lamp_power")),
+        ),
+    ):
+        result = await resolve_odd_entities(odd, [], "bedroom_lamp")
+
+    assert result == [("sensor.custom_power", "sensor.bedroom_lamp_power")]
+
+
+async def test_resolve_odd_entities_skip():
+    """Choosing 'skip' leaves entity_pairs unchanged."""
+    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+
+    odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
+    with (
+        patch("sys.stdin.isatty", return_value=True),
+        patch(
+            "zigporter.commands.rename_device._prompt_odd_entity_action",
+            new=AsyncMock(return_value=("skip", None)),
+        ),
+    ):
+        result = await resolve_odd_entities(odd, [], "bedroom_lamp")
+
+    assert result == []
 
 
 # ---------------------------------------------------------------------------

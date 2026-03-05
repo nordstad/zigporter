@@ -547,7 +547,7 @@ async def _resolve_device_and_name(
     return device, actual_name, new_name
 
 
-async def _resolve_odd_entities(
+async def resolve_odd_entities(
     odd_entities: list[dict[str, Any]],
     entity_pairs: list[tuple[str, str]],
     new_slug: str,
@@ -578,22 +578,17 @@ async def _resolve_odd_entities(
     return result
 
 
-async def _build_device_rename_plan(
+async def build_device_rename_plan(
     ha_client: HAClient,
-    ha_url: str,
-    token: str,
-    verify_ssl: bool,
     device: dict[str, Any],
     actual_name: str,
     new_name: str,
     entity_pairs: list[tuple[str, str]],
-    apply: bool,
-) -> tuple[DeviceRenamePlan, "Z2MClient | None", str | None]:
-    """Fetch HA config snapshot, build per-entity plans, and optionally prepare Z2M sync.
+) -> DeviceRenamePlan:
+    """Fetch HA config snapshot and build per-entity plans.
 
-    Returns (device_plan, z2m_client, z2m_friendly_name).
-    z2m_client / z2m_friendly_name are None when Z2M is not configured, unreachable,
-    or when --apply was passed (Z2M sync requires interactive confirmation).
+    Returns a DeviceRenamePlan ready for display and execution.
+    Raises ValueError("no_valid_plans") when no entity renames can be applied.
     """
     console.print("\nScanning for references...", end=" ")
     snapshot = await fetch_ha_snapshot(ha_client)
@@ -643,7 +638,7 @@ async def _build_device_rename_plan(
     if dashboard_names:
         scanned_names["dashboards"] = dashboard_names
 
-    device_plan = DeviceRenamePlan(
+    return DeviceRenamePlan(
         device_id=device["id"],
         old_device_name=actual_name,
         new_device_name=new_name,
@@ -651,6 +646,28 @@ async def _build_device_rename_plan(
         scanned_names=scanned_names,
         failed_dashboards=failed_dashboard_names,
         failed_dashboard_paths=failed_dashboard_paths,
+    )
+
+
+async def _build_device_rename_plan(
+    ha_client: HAClient,
+    ha_url: str,
+    token: str,
+    verify_ssl: bool,
+    device: dict[str, Any],
+    actual_name: str,
+    new_name: str,
+    entity_pairs: list[tuple[str, str]],
+    apply: bool,
+) -> tuple[DeviceRenamePlan, "Z2MClient | None", str | None]:
+    """Fetch HA config snapshot, build per-entity plans, and optionally prepare Z2M sync.
+
+    Returns (device_plan, z2m_client, z2m_friendly_name).
+    z2m_client / z2m_friendly_name are None when Z2M is not configured, unreachable,
+    or when --apply was passed (Z2M sync requires interactive confirmation).
+    """
+    device_plan = await build_device_rename_plan(
+        ha_client, device, actual_name, new_name, entity_pairs
     )
 
     # Optional Z2M sync — best-effort, skipped silently if Z2M is not configured
@@ -717,7 +734,7 @@ async def run_rename_device(
     entity_pairs, odd_entities = compute_entity_pairs(entities, old_slug, new_slug)
 
     if odd_entities:
-        entity_pairs = await _resolve_odd_entities(odd_entities, entity_pairs, new_slug)
+        entity_pairs = await resolve_odd_entities(odd_entities, entity_pairs, new_slug)
 
     if not entity_pairs:
         console.print("\n[yellow]No entities to rename.[/yellow]")
