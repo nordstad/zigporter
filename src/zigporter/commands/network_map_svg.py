@@ -1,0 +1,520 @@
+"""SVG export for the network-map command — radial layout with LQI visual encoding."""
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
+from typing import Any
+
+import svgwrite
+
+# ── Visual constants ──────────────────────────────────────────────────────────
+
+RING_SPACING = 160  # px between concentric rings
+LABEL_MARGIN = 340  # extra canvas padding beyond outermost ring (for labels)
+
+NODE_R_COORD = 28
+NODE_R_ROUTER = 20
+NODE_R_END = 14
+
+BG = "#0f172a"
+RING_STROKE = "#1e293b"
+RING_LABEL = "#94a3b8"
+
+COORD_FILL = "#f59e0b"
+ROUTER_FILL = "#0ea5e9"
+END_FILL = "#475569"
+
+TEXT_PRIMARY = "#e2e8f0"
+TEXT_DIM = "#64748b"
+
+EDGE_GOOD = "#22c55e"
+EDGE_WARN = "#f59e0b"
+EDGE_CRIT = "#ef4444"
+EDGE_OPACITY = 0.55
+
+LABEL_FS = "11px"
+DIM_FS = "11px"
+LEGEND_FS = "11px"
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _edge_color(lqi: int, warn: int, crit: int) -> str:
+    if lqi < crit:
+        return EDGE_CRIT
+    if lqi < warn:
+        return EDGE_WARN
+    return EDGE_GOOD
+
+
+def _edge_width(lqi: int) -> float:
+    return round(0.8 + (lqi / 255) * 2.8, 2)
+
+
+def _node_fill(node_type: str) -> str:
+    if node_type == "Coordinator":
+        return COORD_FILL
+    if node_type == "Router":
+        return ROUTER_FILL
+    return END_FILL
+
+
+def _node_radius(node_type: str) -> int:
+    if node_type == "Coordinator":
+        return NODE_R_COORD
+    if node_type == "Router":
+        return NODE_R_ROUTER
+    return NODE_R_END
+
+
+# ── Angular layout ────────────────────────────────────────────────────────────
+
+
+def _leaf_count(ieee: str, children: dict[str, list[str]]) -> dict[str, int]:
+    """Return leaf count for each node: 1 for leaves, sum-of-leaves for hubs.
+
+    Using leaf count (instead of total subtree size) as the angular weight
+    gives terminal-only nodes equal visual space and prevents large hubs from
+    claiming most of the circle's circumference.
+    """
+    counts: dict[str, int] = {}
+
+    def _calc(n: str) -> int:
+        kids = children.get(n, [])
+        if not kids:
+            counts[n] = 1
+        else:
+            counts[n] = sum(_calc(k) for k in kids)
+        return counts[n]
+
+    _calc(ieee)
+    return counts
+
+
+def _compute_path_min_lqi(
+    parent_map: dict[str, str | None],
+    lqi_map: dict[str, int],
+) -> dict[str, int]:
+    """Min LQI along the full chain from coordinator to each device."""
+    cache: dict[str, int] = {}
+
+    def _min(ieee: str) -> int:
+        if ieee in cache:
+            return cache[ieee]
+        parent = parent_map.get(ieee)
+        if parent is None:  # coordinator
+            cache[ieee] = 255
+            return 255
+        link = lqi_map.get(ieee, 0)
+        cache[ieee] = min(link, _min(parent))
+        return cache[ieee]
+
+    for ieee in parent_map:
+        _min(ieee)
+    return cache
+
+
+def _assign_angles(
+    ieee: str,
+    children: dict[str, list[str]],
+    leaf_counts: dict[str, int],
+    angles: dict[str, float],
+    start: float,
+    end: float,
+) -> None:
+    """Recursively assign angular midpoints using leaf-count-proportional slices.
+
+    A minimum angle floor of ``2π / (N_children * 4)`` prevents any node from
+    being squished below ~15°, which avoids visual overlap in dense branches.
+    """
+    angles[ieee] = (start + end) / 2
+    kids = children.get(ieee, [])
+    if not kids:
+        return
+
+    # Alternate large/small children for visual balance
+    sorted_kids = sorted(kids, key=lambda k: -leaf_counts.get(k, 1))
+    n_kids = len(sorted_kids)
+    total = sum(leaf_counts.get(k, 1) for k in sorted_kids)
+    span = end - start
+    min_angle = span / (n_kids * 4)
+
+    # First pass: compute raw proportional spans
+    raw_spans = [span * leaf_counts.get(k, 1) / total for k in sorted_kids]
+
+    # Second pass: apply minimum floor and rescale the remainder
+    floored = [max(s, min_angle) for s in raw_spans]
+    floored_total = sum(floored)
+    if floored_total > span:
+        # Scale down so they still fit in the allotted range
+        floored = [s * span / floored_total for s in floored]
+
+    cursor = start
+    for kid, kid_span in zip(sorted_kids, floored):
+        _assign_angles(kid, children, leaf_counts, angles, cursor, cursor + kid_span)
+        cursor += kid_span
+
+
+# ── SVG drawing helpers ───────────────────────────────────────────────────────
+
+
+def _label_anchor(angle: float) -> str:
+    """Text anchor based on which half of the circle the node is on."""
+    # angle=0 → north, increases clockwise
+    x_component = math.sin(angle)
+    if abs(x_component) < 0.25:
+        return "middle"
+    return "start" if x_component > 0 else "end"
+
+
+def _add_defs_filters(dwg: svgwrite.Drawing) -> None:
+    """Inject glow filters for WEAK and CRITICAL nodes into <defs>.
+
+    Each filter blurs the source alpha, floods it with the glow colour, and
+    merges the result behind the original shape.
+    """
+    for fid, color, std_dev in [
+        ("glow-warn", EDGE_WARN, "6"),
+        ("glow-crit", EDGE_CRIT, "8"),
+    ]:
+        f = dwg.filter(id=fid, x="-60%", y="-60%", width="220%", height="220%")
+        f.feGaussianBlur(in_="SourceAlpha", stdDeviation=std_dev, result="blur")
+        f.feFlood(flood_color=color, flood_opacity="0.85", result="flood")
+        f.feComposite(in_="flood", in2="blur", operator="in", result="glow")
+        f.feMerge(layernames=["glow", "SourceGraphic"])
+        dwg.defs.add(f)
+
+
+def _draw_legend(
+    dwg: svgwrite.Drawing,
+    canvas: int,
+    warn_lqi: int,
+    critical_lqi: int,
+) -> None:
+    lx, ly = 20, 20
+    lw, lh = 220, 270
+    row = 24
+
+    g = dwg.g(id="legend")
+    g.add(
+        dwg.rect(
+            insert=(lx, ly),
+            size=(lw, lh),
+            rx=8,
+            fill="#1e293b",
+            stroke="#334155",
+            stroke_width=1,
+        )
+    )
+    g.add(
+        dwg.text(
+            "Legend",
+            insert=(lx + lw // 2, ly + 18),
+            fill=TEXT_PRIMARY,
+            font_size="12px",
+            text_anchor="middle",
+            font_weight="bold",
+        )
+    )
+
+    y = ly + 42
+
+    # Node types
+    for fill, r, label in [
+        (COORD_FILL, 9, "Coordinator"),
+        (ROUTER_FILL, 7, "Router"),
+        (END_FILL, 5, "End device"),
+    ]:
+        g.add(dwg.circle(center=(lx + 16, y - 3), r=r, fill=fill))
+        g.add(dwg.text(label, insert=(lx + 30, y), fill=TEXT_PRIMARY, font_size=LEGEND_FS))
+        y += row
+
+    y += 6
+
+    # Glow indicators for problem nodes
+    g.add(
+        dwg.circle(
+            center=(lx + 16, y - 3),
+            r=7,
+            fill=ROUTER_FILL,
+            stroke=EDGE_WARN,
+            stroke_width=2,
+            filter="url(#glow-warn)",
+        )
+    )
+    g.add(
+        dwg.text(
+            f"Weak node  (LQI < {warn_lqi})",
+            insert=(lx + 30, y),
+            fill=EDGE_WARN,
+            font_size=LEGEND_FS,
+        )
+    )
+    y += row
+
+    g.add(
+        dwg.circle(
+            center=(lx + 16, y - 3),
+            r=7,
+            fill=ROUTER_FILL,
+            stroke=EDGE_CRIT,
+            stroke_width=2,
+            filter="url(#glow-crit)",
+        )
+    )
+    g.add(
+        dwg.text(
+            f"Critical node  (LQI < {critical_lqi})",
+            insert=(lx + 30, y),
+            fill=EDGE_CRIT,
+            font_size=LEGEND_FS,
+        )
+    )
+    y += row + 6
+
+    # Sub-label explanation
+    g.add(
+        dwg.text(
+            "\u25b8 = path min LQI (worst hop in chain)",
+            insert=(lx + lw // 2, y),
+            fill=TEXT_DIM,
+            font_size="9px",
+            text_anchor="middle",
+        )
+    )
+    y += row
+
+    # Edge quality
+    for color, label in [
+        (EDGE_GOOD, f"LQI \u2265 {warn_lqi}  (good)"),
+        (EDGE_WARN, f"LQI {critical_lqi}\u2013{warn_lqi}  (weak)"),
+        (EDGE_CRIT, f"LQI < {critical_lqi}  (critical)"),
+    ]:
+        g.add(dwg.line(start=(lx + 8, y - 4), end=(lx + 26, y - 4), stroke=color, stroke_width=2))
+        g.add(dwg.text(label, insert=(lx + 32, y), fill=TEXT_PRIMARY, font_size=LEGEND_FS))
+        y += row - 4
+
+    dwg.add(g)
+
+
+# ── Public entry point ────────────────────────────────────────────────────────
+
+
+def render_svg(
+    nodes: dict[str, dict[str, Any]],
+    parent_map: dict[str, str | None],
+    lqi_map: dict[str, int],
+    depth_map: dict[str, int],
+    children: dict[str, list[str]],
+    output_path: Path,
+    warn_lqi: int = 80,
+    critical_lqi: int = 30,
+) -> None:
+    """Render a radial Zigbee network map to *output_path* as SVG."""
+    coordinator_ieee = next(
+        (ieee for ieee, n in nodes.items() if n.get("type") == "Coordinator"), None
+    )
+    if coordinator_ieee is None:
+        return
+
+    # ── Layout geometry ───────────────────────────────────────────────────────
+    max_hops = max(depth_map.values(), default=1)
+    half = max_hops * RING_SPACING + LABEL_MARGIN
+    canvas = int(half * 2)
+    cx, cy = half, half
+
+    leaf_counts = _leaf_count(coordinator_ieee, children)
+    angles: dict[str, float] = {}
+    _assign_angles(coordinator_ieee, children, leaf_counts, angles, 0.0, 2 * math.pi)
+    path_min_lqi = _compute_path_min_lqi(parent_map, lqi_map)
+
+    positions: dict[str, tuple[float, float]] = {}
+    for ieee, angle in angles.items():
+        r = depth_map.get(ieee, 0) * RING_SPACING
+        positions[ieee] = (
+            cx + r * math.sin(angle),
+            cy - r * math.cos(angle),
+        )
+
+    # ── Drawing ───────────────────────────────────────────────────────────────
+    dwg = svgwrite.Drawing(
+        str(output_path),
+        size=(canvas, canvas),
+        profile="full",
+        **{"font-family": "system-ui, -apple-system, sans-serif"},
+    )
+    _add_defs_filters(dwg)
+    dwg.add(dwg.rect(insert=(0, 0), size=(canvas, canvas), fill=BG))
+
+    # Ring guides
+    ring_group = dwg.g(id="rings")
+    for h in range(1, max_hops + 1):
+        ring_r = h * RING_SPACING
+        ring_group.add(
+            dwg.circle(
+                center=(cx, cy),
+                r=ring_r,
+                fill="none",
+                stroke=RING_STROKE,
+                stroke_width=1,
+                stroke_dasharray="5,4",
+            )
+        )
+        ring_group.add(
+            dwg.text(
+                f"Hop {h}",
+                insert=(cx, cy - ring_r + 14),
+                fill=RING_LABEL,
+                font_size="12px",
+                text_anchor="middle",
+                font_weight="bold",
+                letter_spacing="0.5",
+            )
+        )
+    dwg.add(ring_group)
+
+    # Edges + LQI pill badges
+    edge_group = dwg.g(id="edges", opacity=str(EDGE_OPACITY))
+    lqi_label_group = dwg.g(id="lqi-labels")
+    for ieee, parent_ieee in parent_map.items():
+        if parent_ieee is None:
+            continue
+        x1, y1 = positions[ieee]
+        x2, y2 = positions[parent_ieee]
+        lqi = lqi_map.get(ieee, 0)
+        color = _edge_color(lqi, warn_lqi, critical_lqi)
+        edge_group.add(
+            dwg.line(
+                start=(round(x1, 1), round(y1, 1)),
+                end=(round(x2, 1), round(y2, 1)),
+                stroke=color,
+                stroke_width=_edge_width(lqi),
+            )
+        )
+        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+        badge_w = len(str(lqi)) * 7 + 10
+        lqi_label_group.add(
+            dwg.rect(
+                insert=(round(mx - badge_w / 2, 1), round(my - 9, 1)),
+                size=(badge_w, 13),
+                rx=4,
+                fill="#0f172a",
+                opacity="0.85",
+            )
+        )
+        lqi_label_group.add(
+            dwg.text(
+                str(lqi),
+                insert=(round(mx, 1), round(my + 1, 1)),
+                fill=color,
+                font_size=DIM_FS,
+                text_anchor="middle",
+                opacity="0.95",
+            )
+        )
+    dwg.add(edge_group)
+    dwg.add(lqi_label_group)
+
+    # Nodes + labels
+    node_group = dwg.g(id="nodes")
+    label_group = dwg.g(id="labels")
+
+    for ieee, (x, y) in positions.items():
+        node = nodes[ieee]
+        node_type = node.get("type", "EndDevice")
+        name = node.get("friendlyName", ieee)
+        lqi = lqi_map.get(ieee, 0)
+        fill = _node_fill(node_type)
+        nr = _node_radius(node_type)
+        is_coord = node_type == "Coordinator"
+
+        # Status ring + glow filter on problem nodes
+        stroke_color = fill
+        stroke_w = 0
+        glow_filter: str | None = None
+        if not is_coord:
+            if lqi < critical_lqi:
+                stroke_color = EDGE_CRIT
+                stroke_w = 3
+                glow_filter = "url(#glow-crit)"
+            elif lqi < warn_lqi:
+                stroke_color = EDGE_WARN
+                stroke_w = 2
+                glow_filter = "url(#glow-warn)"
+
+        circle_attrs: dict[str, Any] = dict(
+            center=(round(x, 1), round(y, 1)),
+            r=nr,
+            fill=fill,
+            stroke=stroke_color,
+            stroke_width=stroke_w,
+        )
+        if glow_filter:
+            circle_attrs["filter"] = glow_filter
+        node_group.add(dwg.circle(**circle_attrs))
+
+        # Label: radially offset outward from center
+        angle = angles.get(ieee, 0.0)
+        if is_coord:
+            lx, ly_label = x, y + nr + 16
+            anchor = "middle"
+        else:
+            offset = nr + 14
+            lx = x + math.sin(angle) * offset
+            ly_label = y - math.cos(angle) * offset
+            anchor = _label_anchor(angle)
+
+        # Pill background behind name + sub-label
+        has_sub = not is_coord
+        pill_h = 28 if has_sub else 16
+        pill_w = max(len(name) * 7 + 12, 60)
+        if anchor == "start":
+            pill_x = lx - 4
+        elif anchor == "end":
+            pill_x = lx - pill_w + 4
+        else:  # middle
+            pill_x = lx - pill_w / 2
+        pill_y = ly_label - 13
+        label_group.add(
+            dwg.rect(
+                insert=(round(pill_x, 1), round(pill_y, 1)),
+                size=(pill_w, pill_h),
+                rx=5,
+                fill="#0f172a",
+                opacity="0.7",
+            )
+        )
+
+        label_group.add(
+            dwg.text(
+                name,
+                insert=(round(lx, 1), round(ly_label, 1)),
+                fill=TEXT_PRIMARY,
+                font_size=LABEL_FS,
+                text_anchor=anchor,
+            )
+        )
+
+        if not is_coord:
+            path_lqi = path_min_lqi.get(ieee, 0)
+            sub_color = _edge_color(path_lqi, warn_lqi, critical_lqi)
+            label_group.add(
+                dwg.text(
+                    f"\u25b8 {path_lqi}",
+                    insert=(round(lx, 1), round(ly_label + 14, 1)),
+                    fill=sub_color,
+                    font_size=DIM_FS,
+                    text_anchor=anchor,
+                    opacity="0.9",
+                )
+            )
+
+    dwg.add(node_group)
+    dwg.add(label_group)
+
+    # Legend
+    _draw_legend(dwg, canvas, warn_lqi, critical_lqi)
+
+    dwg.save()
