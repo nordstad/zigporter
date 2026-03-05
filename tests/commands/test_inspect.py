@@ -7,6 +7,7 @@ from zigporter.commands.inspect import (
     build_deps,
     show_report,
 )
+from zigporter.ha_client import YAML_MODE
 
 # ---------------------------------------------------------------------------
 # Lovelace walker
@@ -450,4 +451,92 @@ async def test_show_migrate_inspect_summary_discovers_extra_dashboards():
     await show_migrate_inspect_summary(["switch.kitchen_plug"], ha_client)
 
     # default (None) + "mobile"
+    assert ha_client.get_lovelace_config.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# YAML_MODE sentinel handling
+# ---------------------------------------------------------------------------
+
+
+def test_build_deps_yaml_mode_dashboard_does_not_raise():
+    """build_deps must not crash when a lovelace entry is the YAML_MODE sentinel."""
+    data = {
+        **_BASE_DATA,
+        "lovelace": [(None, YAML_MODE)],
+    }
+    deps = build_deps("00:11:22:33:44:55:66:77", data)
+    assert deps is not None
+    # YAML-mode dashboard is silently skipped — no dashboard refs
+    assert deps.dashboard_refs == []
+
+
+def test_build_deps_mixed_yaml_mode_and_real_dashboard():
+    """Only real configs are scanned; YAML_MODE entries are skipped."""
+    real_config = {
+        "views": [
+            {
+                "title": "Home",
+                "cards": [{"type": "entities", "entities": ["switch.kitchen_plug"]}],
+            }
+        ]
+    }
+    data = {
+        **_BASE_DATA,
+        "lovelace": [
+            ("yaml-dash", YAML_MODE),
+            ("real-dash", real_config),
+        ],
+        "dashboard_titles": {"yaml-dash": "YAML Dash", "real-dash": "Real Dash"},
+    }
+    deps = build_deps("00:11:22:33:44:55:66:77", data)
+    assert deps is not None
+    assert len(deps.dashboard_refs) == 1
+    assert deps.dashboard_refs[0].dashboard_title == "Real Dash"
+
+
+async def test_show_migrate_inspect_summary_yaml_mode_does_not_raise():
+    """show_migrate_inspect_summary must not crash when get_lovelace_config returns YAML_MODE."""
+    from unittest.mock import AsyncMock, MagicMock  # noqa: PLC0415
+
+    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+
+    ha_client = MagicMock()
+    ha_client.get_panels = AsyncMock(return_value={})
+    ha_client.get_lovelace_config = AsyncMock(return_value=YAML_MODE)
+
+    # Must not raise AttributeError: '_YamlMode' object has no attribute 'get'
+    await show_migrate_inspect_summary(["switch.kitchen_plug"], ha_client)
+
+    ha_client.get_lovelace_config.assert_called_once_with(None)
+
+
+async def test_show_migrate_inspect_summary_yaml_mode_skipped_multiple_dashboards():
+    """YAML_MODE dashboards are skipped; real ones are still scanned."""
+    from unittest.mock import AsyncMock, MagicMock  # noqa: PLC0415
+
+    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+
+    real_config = {
+        "views": [
+            {
+                "title": "Main",
+                "cards": [{"type": "entities", "entities": ["switch.kitchen_plug"]}],
+            }
+        ]
+    }
+
+    ha_client = MagicMock()
+    ha_client.get_panels = AsyncMock(
+        return_value={
+            "lovelace": {"component_name": "lovelace", "url_path": ""},
+            "mobile": {"component_name": "lovelace", "url_path": "mobile"},
+        }
+    )
+    # First call (default) returns YAML_MODE; second call (mobile) returns a real config
+    ha_client.get_lovelace_config = AsyncMock(side_effect=[YAML_MODE, real_config])
+
+    # Must not raise
+    await show_migrate_inspect_summary(["switch.kitchen_plug"], ha_client)
+
     assert ha_client.get_lovelace_config.call_count == 2

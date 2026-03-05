@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from zigporter.entity_refs import collect_config_entity_ids
-from zigporter.ha_client import HAClient
+from zigporter.ha_client import HAClient, is_yaml_mode
 from zigporter.lovelace import cards_from_view as _cards_from_view
 from zigporter.lovelace import discover_dashboards
 from zigporter.ui import QUESTIONARY_STYLE
@@ -151,7 +151,7 @@ async def show_migrate_inspect_summary(
 
     dashboard_refs: list[DashboardRef] = []
     for url_path, config in zip(dashboard_url_paths, lovelace_configs, strict=True):
-        if config is None:
+        if config is None or is_yaml_mode(config):
             continue
         title = dashboard_titles.get(url_path, url_path or "Default")
         dashboard_refs.extend(_scan_dashboard(config, title, target))
@@ -222,7 +222,7 @@ def build_deps(
     # Lovelace dashboard refs
     dashboard_refs: list[DashboardRef] = []
     for url_path, config in all_data["lovelace"]:
-        if config is None:
+        if config is None or is_yaml_mode(config):
             continue
         title = all_data["dashboard_titles"].get(url_path, url_path or "Default")
         dashboard_refs.extend(_scan_dashboard(config, title, target))
@@ -405,6 +405,8 @@ def _debug_lovelace(all_data: dict[str, Any]) -> None:
         label = url_path or "Default"
         if config is None:
             console.print(f"  [red]✗[/red]  {label}  (fetch failed)")
+        elif is_yaml_mode(config):
+            console.print(f"  [yellow]~[/yellow]  {label}  (YAML mode — skipped)")
         else:
             views = config.get("views", [])
             card_count = sum(len(_cards_from_view(v)) for v in views)
