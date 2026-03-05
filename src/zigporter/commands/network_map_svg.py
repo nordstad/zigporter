@@ -194,7 +194,7 @@ def _draw_legend(
     critical_lqi: int,
 ) -> None:
     lx, ly = 20, 20
-    lw, lh = 220, 270
+    lw, lh = 220, 290
     row = 24
 
     g = dwg.g(id="legend")
@@ -274,14 +274,36 @@ def _draw_legend(
     )
     y += row + 6
 
-    # Sub-label explanation
+    # In-circle LQI explanation: small annotated circle
+    ex = lx + 16
+    ey = y - 3
+    g.add(dwg.circle(center=(ex, ey), r=7, fill=ROUTER_FILL))
+    badge_w_ex = 14
+    g.add(
+        dwg.rect(
+            insert=(ex - badge_w_ex / 2, ey - 5),
+            size=(badge_w_ex, 10),
+            rx=3,
+            fill="#0f172a",
+            opacity="0.82",
+        )
+    )
     g.add(
         dwg.text(
-            "\u25b8 = path min LQI (worst hop in chain)",
-            insert=(lx + lw // 2, y),
-            fill=TEXT_DIM,
-            font_size="9px",
+            "42",
+            insert=(ex, ey + 3),
+            fill=EDGE_GOOD,
+            font_size="8px",
+            font_weight="bold",
             text_anchor="middle",
+        )
+    )
+    g.add(
+        dwg.text(
+            "path min LQI (worst hop)",
+            insert=(lx + 30, y),
+            fill=TEXT_DIM,
+            font_size=LEGEND_FS,
         )
     )
     y += row
@@ -455,6 +477,35 @@ def render_svg(
             circle_attrs["filter"] = glow_filter
         node_group.add(dwg.circle(**circle_attrs))
 
+        # Path-min LQI badge centered inside the node circle
+        if not is_coord:
+            path_lqi = path_min_lqi.get(ieee, 0)
+            lqi_color = _edge_color(path_lqi, warn_lqi, critical_lqi)
+            is_router = node_type == "Router"
+            badge_fs = "9px" if is_router else "8px"
+            char_w = 6 if is_router else 5
+            badge_h = 11 if is_router else 10
+            badge_w = len(str(path_lqi)) * char_w + 8
+            node_group.add(
+                dwg.rect(
+                    insert=(round(x - badge_w / 2, 1), round(y - badge_h / 2, 1)),
+                    size=(badge_w, badge_h),
+                    rx=3,
+                    fill="#0f172a",
+                    opacity="0.82",
+                )
+            )
+            node_group.add(
+                dwg.text(
+                    str(path_lqi),
+                    insert=(round(x, 1), round(y + badge_h * 0.3, 1)),
+                    fill=lqi_color,
+                    font_size=badge_fs,
+                    font_weight="bold",
+                    text_anchor="middle",
+                )
+            )
+
         # Label: radially offset outward from center
         angle = angles.get(ieee, 0.0)
         if is_coord:
@@ -466,9 +517,8 @@ def render_svg(
             ly_label = y - math.cos(angle) * offset
             anchor = _label_anchor(angle)
 
-        # Pill background behind name + sub-label
-        has_sub = not is_coord
-        pill_h = 28 if has_sub else 16
+        # Pill background behind name
+        pill_h = 16
         pill_w = max(len(name) * 7 + 12, 60)
         if anchor == "start":
             pill_x = lx - 4
@@ -496,20 +546,6 @@ def render_svg(
                 text_anchor=anchor,
             )
         )
-
-        if not is_coord:
-            path_lqi = path_min_lqi.get(ieee, 0)
-            sub_color = _edge_color(path_lqi, warn_lqi, critical_lqi)
-            label_group.add(
-                dwg.text(
-                    f"\u25b8 {path_lqi}",
-                    insert=(round(lx, 1), round(ly_label + 14, 1)),
-                    fill=sub_color,
-                    font_size=DIM_FS,
-                    text_anchor=anchor,
-                    opacity="0.9",
-                )
-            )
 
     dwg.add(node_group)
     dwg.add(label_group)
