@@ -156,7 +156,7 @@ function enterLine(msg) {
 }
 
 function stepHead(n, title) {
-  return hd(`[${n}/7] ${title}`);
+  return hd(`[${n}/8] ${title}`);
 }
 
 // ── Line entry format ─────────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ const DEMO_MIGRATE = [
   // Wizard header
   [rule('Migrating: IKEA TRADFRI bulb', 70), 300],
   [null, 100],
-  [`This wizard will migrate ${bd('IKEA TRADFRI bulb')} from ZHA to Zigbee2MQTT in 7 steps:`, 200],
+  [`This wizard will migrate ${bd('IKEA TRADFRI bulb')} from ZHA to Zigbee2MQTT in 7 steps (+ 1 optional):`, 200],
   [null, 100],
   [`  ${c('1')}  Remove from ZHA    ${d('Unpair the device from ZHA')} ${r('(cannot be undone)')}`, 80],
   [`  ${c('2')}  Reset device       ${d('Factory-reset to clear the old ZHA pairing')}`, 60],
@@ -220,6 +220,7 @@ const DEMO_MIGRATE = [
   [`  ${c('5')}  Restore entity IDs ${d('Rename IEEE-hex entity IDs back to friendly names')}`, 60],
   [`  ${c('6')}  Review             ${d('Inspect entities and dashboard cards')}`, 60],
   [`  ${c('7')}  Validate           ${d('Confirm entities come back online')}`, 60],
+  [`  ${c('8')}  Rename (optional)  ${d('Rename to a different name with full HA cascade')}`, 60],
   [null, 100],
   [d('You can abort safely at step 1. After that, the device must complete'), 150],
   [d('pairing with Z2M before it can be used again.'), 0],
@@ -309,6 +310,28 @@ const DEMO_MIGRATE = [
   [`  ${ok('✓')} Turn the device on/off and verify the state updates in HA`, 300],
   [`  ${ok('✓')} Check the device appears in the Z2M dashboard`, 80],
   [`  ${ok('✓')} Verify any automations still trigger correctly`, 80],
+  [null, 300],
+  // Step 8 (optional rename)
+  [stepHead(8, 'Rename (optional)'), 400],
+  [null, 200],
+  [qline('Rename this device to a different name?', 'Yes'), 700],
+  [qline('New device name:', 'Living Room Ceiling'), 700],
+  [`  Fetching entities... ${g('1 found')}`, 600],
+  [null, 100],
+  [`\nScanning for references... ${ok('✓')}`, 600],
+  [null, 100],
+  [`  Device ${bd('IKEA TRADFRI bulb')}  ${d('→')}  ${c('Living Room Ceiling')}`, 200],
+  [null, 100],
+  [`  ${d('light.living_room_bulb')}                  ${c('→')}  ${c('light.living_room_ceiling')}`, 150],
+  [null, 100],
+  [`  ${d('1 entities to rename')}`, 150],
+  [null, 200],
+  [qline('Apply these changes?', 'Yes'), 700],
+  [null, 100],
+  [`  Renaming device in HA registry... ${ok('✓')}`, 500],
+  [`  Renaming ${d('light.living_room_bulb')} ${c('→')} ${c('light.living_room_ceiling')}... ${ok('✓')}`, 400],
+  [null, 100],
+  [`${ok('✓')} Renamed device ${bd('IKEA TRADFRI bulb')} ${c('→')} ${c('Living Room Ceiling')} (${bd('1')} entities updated)`, 300],
 ];
 
 // ── DEMO: rename-device ───────────────────────────────────────────────────────

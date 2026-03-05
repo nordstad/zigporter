@@ -5,6 +5,7 @@ import pytest
 
 from zigporter.commands.migrate import (
     step_pair_with_z2m,
+    step_post_migrate_rename,
     step_reconcile_entity_ids,
     step_remove_from_zha,
     step_rename,
@@ -75,6 +76,13 @@ def mock_ha_client():
     client.update_automation = AsyncMock(return_value=None)
     client.update_script = AsyncMock(return_value=None)
     client.update_scene = AsyncMock(return_value=None)
+    client.get_entities_for_device = AsyncMock(return_value=[{"entity_id": "switch.kitchen_plug"}])
+    client.rename_device_name = AsyncMock(return_value=None)
+    client.get_automations = AsyncMock(return_value=[])
+    client.get_scripts = AsyncMock(return_value=[])
+    client.get_scenes = AsyncMock(return_value=[])
+    client.get_config_entries = AsyncMock(return_value=[])
+    client.get_z2m_config_entry_id = AsyncMock(return_value=None)
     return client
 
 
@@ -844,6 +852,103 @@ async def test_step_show_inspect_summary_swallows_exceptions(sample_device, mock
 
     # Must not raise
     await step_show_inspect_summary(sample_device, mock_ha_client, MagicMock())
+
+
+# ---------------------------------------------------------------------------
+# step_post_migrate_rename
+# ---------------------------------------------------------------------------
+
+
+async def test_step_post_migrate_rename_declines(sample_device, mock_ha_client, mock_z2m_client):
+    """When the user declines the rename prompt, no HA calls are made."""
+    with patch("questionary.confirm") as mock_confirm:
+        mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=False)
+        await step_post_migrate_rename(sample_device, mock_ha_client, mock_z2m_client)
+
+    mock_ha_client.get_entities_for_device.assert_not_called()
+    mock_ha_client.rename_entity_id.assert_not_called()
+
+
+async def test_step_post_migrate_rename_no_entities(sample_device, mock_ha_client, mock_z2m_client):
+    """When no entities are found for the device, the step prints a note and returns."""
+    mock_ha_client.get_entities_for_device = AsyncMock(return_value=[])
+
+    with patch("questionary.confirm") as mock_confirm:
+        mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=True)
+        with patch("questionary.text") as mock_text:
+            mock_text.return_value.unsafe_ask_async = AsyncMock(return_value="Smart Plug Garage")
+            await step_post_migrate_rename(sample_device, mock_ha_client, mock_z2m_client)
+
+    mock_ha_client.rename_entity_id.assert_not_called()
+
+
+async def test_step_post_migrate_rename_same_name(sample_device, mock_ha_client, mock_z2m_client):
+    """When the user enters the same name, the step skips."""
+    with patch("questionary.confirm") as mock_confirm:
+        mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=True)
+        with patch("questionary.text") as mock_text:
+            mock_text.return_value.unsafe_ask_async = AsyncMock(return_value=sample_device.name)
+            await step_post_migrate_rename(sample_device, mock_ha_client, mock_z2m_client)
+
+    mock_ha_client.get_entities_for_device.assert_not_called()
+
+
+async def test_step_post_migrate_rename_executes(sample_device, mock_ha_client, mock_z2m_client):
+    """When the user accepts, execute_device_rename is called with the correct args."""
+    mock_ha_client.get_entity_registry = AsyncMock(
+        return_value=[
+            {"entity_id": "switch.kitchen_plug", "device_id": "z2m-device-id", "disabled_by": None},
+            {
+                "entity_id": "switch.smart_plug_garage",
+                "device_id": "z2m-device-id",
+                "disabled_by": None,
+            },
+        ]
+    )
+
+    with (
+        patch("questionary.confirm") as mock_confirm,
+        patch("questionary.text") as mock_text,
+        patch(
+            "zigporter.commands.migrate.execute_device_rename", new_callable=AsyncMock
+        ) as mock_exec,
+        patch(
+            "zigporter.commands.migrate.build_device_rename_plan", new_callable=AsyncMock
+        ) as mock_plan,
+    ):
+        from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
+
+        mock_plan.return_value = DeviceRenamePlan(
+            device_id="z2m-device-id",
+            old_device_name="Kitchen Plug",
+            new_device_name="Smart Plug Garage",
+            plans=[],
+        )
+        # First confirm = "yes to rename", second confirm = "apply changes"
+        mock_confirm.return_value.unsafe_ask_async = AsyncMock(side_effect=[True, True])
+        mock_text.return_value.unsafe_ask_async = AsyncMock(return_value="Smart Plug Garage")
+
+        await step_post_migrate_rename(sample_device, mock_ha_client, mock_z2m_client)
+
+    mock_exec.assert_called_once()
+    call_kwargs = mock_exec.call_args[1]
+    assert call_kwargs["z2m_client"] is mock_z2m_client
+    assert call_kwargs["z2m_friendly_name"] == sample_device.name
+
+
+async def test_step_post_migrate_rename_no_z2m_device(
+    sample_device, mock_ha_client, mock_z2m_client
+):
+    """When Z2M device is not found in HA registry, the step prints a warning and returns."""
+    mock_ha_client.get_z2m_device_id = AsyncMock(return_value=None)
+
+    with patch("questionary.confirm") as mock_confirm:
+        mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=True)
+        with patch("questionary.text") as mock_text:
+            mock_text.return_value.unsafe_ask_async = AsyncMock(return_value="Smart Plug Garage")
+            await step_post_migrate_rename(sample_device, mock_ha_client, mock_z2m_client)
+
+    mock_ha_client.get_entities_for_device.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
