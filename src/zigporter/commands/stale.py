@@ -15,6 +15,7 @@ from zigporter.stale_state import (
     load_stale_state,
     mark_ignored,
     mark_stale,
+    mark_suppressed,
     record_first_seen,
     save_stale_state,
     unmark,
@@ -204,12 +205,14 @@ _GROUP_ORDER = {
     StaleDeviceStatus.NEW: 0,
     StaleDeviceStatus.STALE: 1,
     StaleDeviceStatus.IGNORED: 2,
+    StaleDeviceStatus.SUPPRESSED: 3,
 }
 _GROUP_LABEL = {
     None: "New",
     StaleDeviceStatus.NEW: "New",
     StaleDeviceStatus.STALE: "Stale",
     StaleDeviceStatus.IGNORED: "Ignored",
+    StaleDeviceStatus.SUPPRESSED: "Suppressed",
 }
 
 # Sentinel for the "Done" picker choice.  questionary.Choice treats value=None as
@@ -314,6 +317,19 @@ def _handle_clear(device: dict[str, Any], state: StaleState, state_path: Path) -
     console.print("[green]✓ Status cleared[/green]")
 
 
+def _handle_suppress(
+    device: dict[str, Any],
+    state: StaleState,
+    state_path: Path,
+    removed_ids: set[str],
+) -> None:
+    """Permanently hide this device from the picker in all future runs."""
+    mark_suppressed(state, device["device_id"], device["name"])
+    save_stale_state(state, state_path)
+    console.print("[green]✓ Suppressed — will not appear again[/green]")
+    removed_ids.add(device["device_id"])
+
+
 # ---------------------------------------------------------------------------
 # Device detail view
 # ---------------------------------------------------------------------------
@@ -351,6 +367,7 @@ def _show_device_detail(
         questionary.Choice("Remove from Home Assistant", value="remove"),
         questionary.Choice("Mark as stale (note for later)", value="stale"),
         questionary.Choice("Ignore (known offline, no action needed)", value="ignore"),
+        questionary.Choice("Suppress (never show again)", value="suppress"),
     ]
     if entry is not None:
         action_choices.append(questionary.Choice("Clear status", value="clear"))
@@ -368,6 +385,8 @@ def _show_device_detail(
         _handle_mark_stale(device, state, state_path)
     elif action == "ignore":
         _handle_ignore(device, state, state_path)
+    elif action == "suppress":
+        _handle_suppress(device, state, state_path, removed_ids)
     elif action == "clear":
         _handle_clear(device, state, state_path)
     # "back" or None → return to picker
@@ -404,6 +423,18 @@ def stale_command(
     # Record first-seen for all offline devices, then persist
     for device in offline:
         record_first_seen(state, device["device_id"], device["name"])
+
+    # Prune state entries for devices that are no longer offline (resolved or removed from HA)
+    current_ids = {d["device_id"] for d in offline}
+    pruned = [did for did in list(state.devices) if did not in current_ids]
+    for did in pruned:
+        state.devices.pop(did)
+    if pruned:
+        n = len(pruned)
+        console.print(
+            f"[dim](Pruned {n} resolved entr{'y' if n == 1 else 'ies'} from stale.json)[/dim]"
+        )
+
     save_stale_state(state, state_path)
 
     n_stale = sum(
@@ -431,7 +462,26 @@ def stale_command(
             console.print("[green]All offline devices have been handled.[/green]")
             break
 
-        choices = _build_picker_choices(current_offline, state)
+        # Split suppressed devices out of the visible picker
+        suppressed_offline = [
+            d
+            for d in current_offline
+            if state.devices.get(d["device_id"]) is not None
+            and state.devices[d["device_id"]].status == StaleDeviceStatus.SUPPRESSED
+        ]
+        visible_offline = [d for d in current_offline if d not in suppressed_offline]
+
+        if suppressed_offline:
+            n = len(suppressed_offline)
+            console.print(
+                f"[dim]({n} suppressed – use 'Clear status' on a device to un-suppress)[/dim]"
+            )
+
+        if not visible_offline:
+            console.print("[green]All offline devices have been handled.[/green]")
+            break
+
+        choices = _build_picker_choices(visible_offline, state)
         selected = questionary.select(
             "Select a device to review:",
             choices=choices,

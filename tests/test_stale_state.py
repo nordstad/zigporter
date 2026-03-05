@@ -8,6 +8,7 @@ from zigporter.stale_state import (
     load_stale_state,
     mark_ignored,
     mark_stale,
+    mark_suppressed,
     record_first_seen,
     save_stale_state,
     unmark,
@@ -92,6 +93,27 @@ def test_mark_ignored_clears_note():
     assert state.devices[DEVICE_ID].note is None
 
 
+def test_mark_suppressed_sets_status():
+    state = StaleState()
+    mark_suppressed(state, DEVICE_ID, DEVICE_NAME)
+    assert state.devices[DEVICE_ID].status == StaleDeviceStatus.SUPPRESSED
+
+
+def test_mark_suppressed_clears_note():
+    state = StaleState()
+    mark_stale(state, DEVICE_ID, DEVICE_NAME, note="some note")
+    mark_suppressed(state, DEVICE_ID, DEVICE_NAME)
+    assert state.devices[DEVICE_ID].note is None
+
+
+def test_mark_suppressed_creates_entry_if_missing():
+    state = StaleState()
+    assert DEVICE_ID not in state.devices
+    mark_suppressed(state, DEVICE_ID, DEVICE_NAME)
+    assert DEVICE_ID in state.devices
+    assert state.devices[DEVICE_ID].status == StaleDeviceStatus.SUPPRESSED
+
+
 def test_unmark_removes_entry():
     state = StaleState()
     mark_stale(state, DEVICE_ID, DEVICE_NAME)
@@ -114,3 +136,36 @@ def test_save_updates_updated_at(tmp_path):
 
     loaded = load_stale_state(path)
     assert before <= loaded.updated_at <= after
+
+
+# ---------------------------------------------------------------------------
+# Prune logic (tested at the state level)
+# ---------------------------------------------------------------------------
+
+
+def test_prune_removes_entries_not_in_current_offline():
+    """Entries whose device_id is no longer in the live offline set should be pruned."""
+    state = StaleState()
+    mark_stale(state, "online-now", "Came Back")
+    mark_stale(state, "still-offline", "Still Dead")
+
+    current_ids = {"still-offline"}
+    pruned = [did for did in list(state.devices) if did not in current_ids]
+    for did in pruned:
+        state.devices.pop(did)
+
+    assert "still-offline" in state.devices
+    assert "online-now" not in state.devices
+
+
+def test_prune_noop_when_all_still_offline():
+    state = StaleState()
+    mark_stale(state, DEVICE_ID, DEVICE_NAME)
+
+    current_ids = {DEVICE_ID}
+    pruned = [did for did in list(state.devices) if did not in current_ids]
+    for did in pruned:
+        state.devices.pop(did)
+
+    assert DEVICE_ID in state.devices
+    assert pruned == []

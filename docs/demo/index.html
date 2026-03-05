@@ -425,9 +425,11 @@ const DEMO_STALE = [
   [`Fetching device data from Home Assistant...`, 200, 1],
   [`Fetching device data from Home Assistant...  ${ok('✓')}`, 900, 2],
   [null, 100],
-  [`${bd('3 offline device(s) found')}  ${d('(0 stale · 0 ignored)')}`, 200],
+  [d('(Pruned 1 resolved entry from stale.json)'), 200],
+  [null, 100],
+  [`${bd('2 offline device(s) found')}  ${d('(0 stale · 0 ignored)')}`, 200],
   [null, 300],
-  // First device: remove
+  // First device: remove a genuinely dead ZHA bulb
   [qline('Select a device to review:', 'Old TRADFRI Bulb                     Bedroom'), 900],
   [null, 200],
   [`${bd('Old TRADFRI Bulb')}  ${d('·  Area: Bedroom')}`, 150],
@@ -439,27 +441,18 @@ const DEMO_STALE = [
   [`Removing ${bd('Old TRADFRI Bulb')}...`, 200, 1],
   [`Removing ${bd('Old TRADFRI Bulb')}...  ${ok('✓ Removed')}`, 1000, 2],
   [null, 500],
-  // Second device: mark stale with note
-  [qline('Select a device to review:', 'SMLIGHT SLZB-06M                     Garage'), 900],
+  // Second device: ghost entry — suppress it so it never appears again
+  [qline('Select a device to review:', 'Meross Smart Kontakt Ute             Outdoor'), 900],
   [null, 200],
-  [`${bd('SMLIGHT SLZB-06M')}  ${d('·  Area: Garage')}`, 150],
-  [`Integration: ${c('mqtt')}  ·  Entities: ${y('sensor.slzb_uptime')} ${d('(unavailable)')}, ${y('update.slzb_firmware')} ${d('(unavailable)')}`, 100],
+  [`${bd('Meross Smart Kontakt Ute')}  ${d('·  Area: Outdoor')}`, 150],
+  [`Integration: ${c('zha')}  ·  Entities: ${d('(no entities)')}`, 100],
   [null, 100],
-  [qline('What would you like to do?', 'Mark as stale (note for later)'), 700],
-  [qline('Add a note (optional, Enter to skip):', 'replaced by new coordinator'), 800],
-  [`${ok('✓')} Marked as stale`, 300],
-  [null, 500],
-  // Note now visible inline in picker row; user drills in to ignore
-  [qline('Select a device to review:', `SMLIGHT SLZB-06M                     Garage              ${d('· replaced by new coordin…')}`), 900],
-  [null, 200],
-  [`${bd('SMLIGHT SLZB-06M')}  ${d('·  Area: Garage')}`, 100],
-  [`Integration: ${c('mqtt')}  ·  Entities: ${y('sensor.slzb_uptime')} ${d('(unavailable)')}, ${y('update.slzb_firmware')} ${d('(unavailable)')}`, 80],
-  [`${d('Note: replaced by new coordinator')}`, 80],
-  [null, 100],
-  [qline('What would you like to do?', 'Ignore (known offline, no action needed)'), 700],
-  [`${ok('✓')} Marked as ignored`, 300],
+  [qline('What would you like to do?', 'Suppress (never show again)'), 700],
+  [`${ok('✓')} Suppressed — will not appear again`, 300],
   [null, 400],
-  [qline('Select a device to review:', 'Done'), 700],
+  // Suppress adds to removed_ids → visible list now empty
+  [d('(1 suppressed – use \'Clear status\' on a device to un-suppress)'), 300],
+  [`${g('All offline devices have been handled.')}`, 300],
 ];
 
 // ── DEMO: rename-entity ───────────────────────────────────────────────────────

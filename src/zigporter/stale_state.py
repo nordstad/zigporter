@@ -15,6 +15,7 @@ class StaleDeviceStatus(str, Enum):
     NEW = "new"
     STALE = "stale"
     IGNORED = "ignored"
+    SUPPRESSED = "suppressed"
 
 
 class StaleDeviceEntry(BaseModel):
@@ -64,6 +65,13 @@ def mark_ignored(state: StaleState, device_id: str, name: str) -> None:
     """Mark a device as ignored (known offline, no action needed)."""
     record_first_seen(state, device_id, name)
     state.devices[device_id].status = StaleDeviceStatus.IGNORED
+    state.devices[device_id].note = None
+
+
+def mark_suppressed(state: StaleState, device_id: str, name: str) -> None:
+    """Permanently hide this device from the stale picker."""
+    record_first_seen(state, device_id, name)
+    state.devices[device_id].status = StaleDeviceStatus.SUPPRESSED
     state.devices[device_id].note = None
 
 

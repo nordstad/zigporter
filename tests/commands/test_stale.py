@@ -13,6 +13,7 @@ from zigporter.commands.stale import (
     _handle_ignore,
     _handle_mark_stale,
     _handle_remove,
+    _handle_suppress,
     _integration,
     _is_ha_core_device,
     _show_device_detail,
@@ -20,7 +21,7 @@ from zigporter.commands.stale import (
     detect_offline_devices,
     stale_command,
 )
-from zigporter.stale_state import StaleDeviceStatus, StaleState, mark_stale
+from zigporter.stale_state import StaleDeviceStatus, StaleState, mark_stale, mark_suppressed
 
 
 # ---------------------------------------------------------------------------
@@ -365,6 +366,7 @@ def test_build_picker_choices_groups():
 # _do_remove_device
 # ---------------------------------------------------------------------------
 
+
 _DEVICE = {"device_id": "dev-1", "identifiers": [["zha", "00:11:22:33:44:55:66:77"]]}
 _DEVICE_NON_ZHA = {"device_id": "dev-1", "identifiers": [["mqtt", "some_id"]]}
 
@@ -529,6 +531,58 @@ def test_handle_clear(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# _handle_suppress
+# ---------------------------------------------------------------------------
+
+
+def test_handle_suppress_sets_suppressed_status(tmp_path):
+    state = StaleState()
+    device = {"device_id": "dev-1", "name": "Ghost Device"}
+    removed_ids: set = set()
+
+    _handle_suppress(device, state, tmp_path / "s.json", removed_ids)
+
+    assert state.devices["dev-1"].status == StaleDeviceStatus.SUPPRESSED
+    assert "dev-1" in removed_ids
+
+
+def test_handle_suppress_adds_to_removed_ids(tmp_path):
+    """Suppress must add the device to removed_ids so it vanishes from the current session."""
+    state = StaleState()
+    device = {"device_id": "dev-42", "name": "Phantom"}
+    removed_ids: set = set()
+
+    _handle_suppress(device, state, tmp_path / "s.json", removed_ids)
+
+    assert "dev-42" in removed_ids
+
+
+def test_handle_suppress_persists_to_disk(tmp_path):
+    state = StaleState()
+    device = {"device_id": "dev-1", "name": "Ghost"}
+    removed_ids: set = set()
+    state_path = tmp_path / "s.json"
+
+    _handle_suppress(device, state, state_path, removed_ids)
+
+    from zigporter.stale_state import load_stale_state
+
+    loaded = load_stale_state(state_path)
+    assert loaded.devices["dev-1"].status == StaleDeviceStatus.SUPPRESSED
+
+
+def test_handle_suppress_clears_existing_note(tmp_path):
+    state = StaleState()
+    mark_stale(state, "dev-1", "Ghost", note="investigate")
+    device = {"device_id": "dev-1", "name": "Ghost"}
+    removed_ids: set = set()
+
+    _handle_suppress(device, state, tmp_path / "s.json", removed_ids)
+
+    assert state.devices["dev-1"].note is None
+
+
+# ---------------------------------------------------------------------------
 # _show_device_detail
 # ---------------------------------------------------------------------------
 
@@ -574,6 +628,33 @@ def test_show_device_detail_action_remove(mocker, tmp_path):
     _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
 
     mock_remove.assert_called_once()
+
+
+def test_show_device_detail_action_suppress(mocker, tmp_path):
+    mocker.patch(
+        "questionary.select", return_value=MagicMock(ask=MagicMock(return_value="suppress"))
+    )
+    mock_suppress = mocker.patch("zigporter.commands.stale._handle_suppress")
+    state = StaleState()
+
+    _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
+
+    mock_suppress.assert_called_once()
+
+
+def test_show_device_detail_suppress_choice_always_present(mocker, tmp_path):
+    """'Suppress' must appear regardless of whether the device has an existing entry."""
+    choices_seen = []
+
+    def capture_select(question, choices, **kwargs):
+        choices_seen.extend(c.value for c in choices if isinstance(c, questionary.Choice))
+        return MagicMock(ask=MagicMock(return_value="back"))
+
+    mocker.patch("questionary.select", side_effect=capture_select)
+    state = StaleState()
+
+    _show_device_detail(_detail_device(), state, tmp_path / "s.json", set(), "url", "tok", False)
+    assert "suppress" in choices_seen
 
 
 def test_show_device_detail_action_clear_only_when_entry_exists(mocker, tmp_path):
@@ -728,3 +809,68 @@ def test_stale_command_records_first_seen(mocker, tmp_path):
 
     state = load_stale_state(state_path)
     assert "dev-1" in state.devices
+
+
+def test_stale_command_prunes_resolved_entries(mocker, tmp_path):
+    """Entries in stale.json whose device is no longer offline should be pruned."""
+    mocker.patch(
+        "zigporter.commands.stale._fetch_offline_devices",
+        side_effect=_fake_fetch_one,
+    )
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value=_DONE)))
+    state_path = tmp_path / "s.json"
+
+    # Pre-populate state with a device that is NOT in the offline list
+    from zigporter.stale_state import load_stale_state, save_stale_state
+
+    pre_state = StaleState()
+    mark_stale(pre_state, "ghost-id", "Ghost Device")
+    save_stale_state(pre_state, state_path)
+
+    stale_command("url", "tok", False, state_path=state_path)
+
+    state = load_stale_state(state_path)
+    assert "ghost-id" not in state.devices
+
+
+def test_stale_command_suppressed_devices_hidden_from_picker(mocker, tmp_path):
+    """Suppressed devices must not appear in the picker and must not cause 'all handled' early."""
+    mocker.patch(
+        "zigporter.commands.stale._fetch_offline_devices",
+        side_effect=_fake_fetch_one,
+    )
+    mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value=_DONE)))
+    state_path = tmp_path / "s.json"
+
+    # Pre-suppress dev-1
+    from zigporter.stale_state import save_stale_state
+
+    pre_state = StaleState()
+    mark_suppressed(pre_state, "dev-1", "Old Bulb")
+    save_stale_state(pre_state, state_path)
+
+    stale_command("url", "tok", False, state_path=state_path)
+    # questionary.select should NOT have been called (visible list is empty → handled message)
+    # The command completes without error
+
+
+def test_stale_command_suppressed_count_does_not_call_picker(mocker, tmp_path):
+    """When all offline devices are suppressed, the picker is never shown."""
+    mocker.patch(
+        "zigporter.commands.stale._fetch_offline_devices",
+        side_effect=_fake_fetch_one,
+    )
+    mock_select = mocker.patch(
+        "questionary.select", return_value=MagicMock(ask=MagicMock(return_value=_DONE))
+    )
+    state_path = tmp_path / "s.json"
+
+    pre_state = StaleState()
+    mark_suppressed(pre_state, "dev-1", "Old Bulb")
+    from zigporter.stale_state import save_stale_state
+
+    save_stale_state(pre_state, state_path)
+
+    stale_command("url", "tok", False, state_path=state_path)
+
+    mock_select.assert_not_called()

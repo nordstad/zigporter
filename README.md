@@ -28,7 +28,7 @@
     <tr><td nowrap><code>export</code></td><td>Snapshot your ZHA device inventory to JSON</td></tr>
     <tr><td nowrap><code>list&#x2011;z2m</code></td><td>List all devices currently paired with Zigbee2MQTT</td></tr>
     <tr><td nowrap><code>fix&#x2011;device</code></td><td>Post-migration cleanup: remove stale ZHA device entries, delete their entities, and rename any <code>_2</code>/<code>_3</code> suffixed Z2M entities back to their original IDs</td></tr>
-    <tr><td nowrap><code>stale</code></td><td>Scan all integrations for offline devices and interactively remove, annotate, or ignore them</td></tr>
+    <tr><td nowrap><code>stale</code></td><td>Scan all integrations for offline devices and interactively remove, annotate, ignore, or permanently suppress them</td></tr>
   </tbody>
 </table>
 
@@ -128,9 +128,12 @@ device you can:
 
 - **Remove** — delete the entry from the HA registry
 - **Mark as stale** — add a note and come back later
-- **Ignore** — suppress devices you know are intentionally offline
+- **Ignore** — mark devices you know are intentionally offline
+- **Suppress** — permanently hide a ghost entry or false positive from all future runs
+- **Clear status** — reset to New (also un-suppresses a suppressed device)
 
-Decisions persist across runs. Hub and gateway devices with active children (e.g. a Plejd
+Resolved entries (devices that came back online since your last run) are pruned from the
+state file automatically. Hub and gateway devices with active children (e.g. a Plejd
 GWY-01 whose lights are responsive) are automatically excluded to avoid false positives.
 
 ## Rename an Entity
