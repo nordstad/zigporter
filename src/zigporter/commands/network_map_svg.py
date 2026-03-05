@@ -378,6 +378,23 @@ def render_svg(
     _add_defs_filters(dwg)
     dwg.add(dwg.rect(insert=(0, 0), size=(canvas, canvas), fill=BG))
 
+    # Ring band fills (outermost → innermost so each disc overwrites its interior)
+    ring_fill_group = dwg.g(id="ring-fills")
+    for h in range(max_hops, 0, -1):
+        t = (h - 1) / max(max_hops - 1, 1)
+        band_fill = _lerp_color(t, "#0e1e1a", "#1e0e0e")
+        ring_fill_group.add(
+            dwg.circle(
+                center=(cx, cy),
+                r=h * RING_SPACING,
+                fill=band_fill,
+                stroke="none",
+            )
+        )
+    # Restore the coordinator centre area to background
+    ring_fill_group.add(dwg.circle(center=(cx, cy), r=NODE_R_COORD + 10, fill=BG, stroke="none"))
+    dwg.add(ring_fill_group)
+
     # Ring guides
     ring_group = dwg.g(id="rings")
     for h in range(1, max_hops + 1):
