@@ -122,6 +122,21 @@ git push origin vx.y.z
 Use the `/bump-version` skill to automate step 1 (analyses unreleased commits, moves
 `[Unreleased]` entries, fixes comparison links, commits — does NOT tag or push).
 
+## network-map SVG layout
+
+`network_map_svg.py` uses a content-aware radial layout. Key constants and their roles:
+
+| Constant | Value | Role |
+|---|---|---|
+| `MIN_RING_GAP` | 200 | Minimum px between consecutive ring **boundaries**. Must be > `nr + label_offset + label_width` (≈196px) to prevent outer-ring node circles from overlapping inner-ring label text at 90°/270° angles. |
+| `ANGULAR_PADDING` | 50 | Extra arc per device added on top of the label-width arc floor. |
+| `COLLISION_GAP` | 100 | Minimum px gap between node circle **edges** in the collision resolver. Also used as the minimum-angle floor in `_assign_angles`. Must be large enough that a neighboring circle can't land inside the 34px label-offset zone. |
+| `COLLISION_ITERS` | 200 | Max Gauss-Seidel passes in `_resolve_collisions`. Needed for densely-packed rings where many nodes start close together. |
+
+**`_compute_ring_radii` formula**: nodes sit at `(ring_radii[h-1] + ring_radii[h]) / 2` (midpoint). The formula inverts this: `ring_radii[h] = max(2 * required_node_r - prev_r + LABEL_OFFSET, prev_r + MIN_RING_GAP)` where `required_node_r = n * arc_per_device / (2π)` and `arc_per_device = max(node_diameter, label_arc) + ANGULAR_PADDING`.
+
+**Cross-ring label/node conflict**: for nodes near angle 90°/270° (east/west), labels extend horizontally into adjacent rings. `MIN_RING_GAP = 200` ensures the outer node's circle clears the inner label's full extent.
+
 ## network-map LQI semantics
 
 The `network-map` command displays two distinct LQI values per device.  Understanding

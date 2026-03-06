@@ -14,15 +14,24 @@ from zigporter.commands.network_map import (
     run_network_map,
 )
 from zigporter.commands.network_map_svg import (
+    ANGULAR_PADDING,
+    COLLISION_GAP,
     EDGE_CRIT,
     EDGE_GOOD,
     EDGE_WARN,
     MAX_LABEL_LEN,
+    MIN_RING_GAP,
+    NODE_R_ROUTER,
+    _compute_ring_radii,
     _edge_color,
     _label_anchor,
     _subtree_weights,
     render_svg,
 )
+
+# Pre-compute arc_per_device used by _compute_ring_radii for assertions
+_LABEL_ARC = MAX_LABEL_LEN * 6 + 10
+_ARC_PER_DEVICE = max(2 * NODE_R_ROUTER + COLLISION_GAP, _LABEL_ARC) + ANGULAR_PADDING
 
 
 HA_URL = "https://ha.test"
@@ -522,3 +531,73 @@ def test_svg_two_children_cover_start_and_end_pill_anchors():
     content = out.read_text()
     assert "East Child" in content
     assert "West Child" in content
+
+
+# ── _compute_ring_radii tests ─────────────────────────────────────────────────
+
+
+def _make_depth_map(counts: list[int]) -> dict[str, int]:
+    """Build a flat depth_map from a list of device counts per hop."""
+    dm: dict[str, int] = {"0xcoord": 0}
+    idx = 1
+    for hop, n in enumerate(counts, start=1):
+        for _ in range(n):
+            dm[f"0x{idx:04x}"] = hop
+            idx += 1
+    return dm
+
+
+def _make_nodes(depth_map: dict[str, int]) -> dict[str, dict]:
+    return {
+        ieee: {"type": "Coordinator" if d == 0 else "Router", "friendlyName": ieee}
+        for ieee, d in depth_map.items()
+    }
+
+
+def test_compute_ring_radii_single_device_uses_min_gap():
+    """A single hop-1 device must still produce a ring at least MIN_RING_GAP wide."""
+    dm = _make_depth_map([1])
+    radii = _compute_ring_radii(dm, _make_nodes(dm))
+    assert radii[1] >= MIN_RING_GAP
+
+
+def test_compute_ring_radii_monotonically_increasing():
+    """Each successive ring boundary must be strictly larger than the previous."""
+    dm = _make_depth_map([10, 5, 2, 1])
+    radii = _compute_ring_radii(dm, _make_nodes(dm))
+    values = [radii[h] for h in sorted(radii)]
+    assert all(values[i] < values[i + 1] for i in range(len(values) - 1))
+
+
+def test_compute_ring_radii_node_placement_meets_label_arc():
+    """Node placement radius (midpoint of ring band) gives enough circumference per device.
+
+    Each device must have at least _ARC_PER_DEVICE px of arc at its placement radius.
+    """
+    import math
+
+    n = 12
+    dm = _make_depth_map([n])
+    radii = _compute_ring_radii(dm, _make_nodes(dm))
+    node_r = radii[1] / 2  # prev_r=0, midpoint = ring[1] / 2
+    arc_available = 2 * math.pi * node_r / n
+    assert arc_available >= _ARC_PER_DEVICE, (
+        f"arc per device {arc_available:.1f}px < required {_ARC_PER_DEVICE}px"
+    )
+
+
+def test_compute_ring_radii_crowded_ring_grows_beyond_min_gap():
+    """A ring with many devices must exceed MIN_RING_GAP to fit them all."""
+    n = 20
+    dm = _make_depth_map([n])
+    radii = _compute_ring_radii(dm, _make_nodes(dm))
+    assert radii[1] > MIN_RING_GAP, "crowded ring must grow beyond the floor"
+
+
+def test_compute_ring_radii_sparse_outer_hops_respect_min_gap():
+    """Outer hops with 1 device each must still be MIN_RING_GAP apart."""
+    dm = _make_depth_map([8, 1, 1, 1])
+    radii = _compute_ring_radii(dm, _make_nodes(dm))
+    for h in range(2, 5):
+        gap = radii[h] - radii[h - 1]
+        assert gap >= MIN_RING_GAP, f"hop {h} gap {gap:.1f}px < MIN_RING_GAP {MIN_RING_GAP}"
