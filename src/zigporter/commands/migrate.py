@@ -232,6 +232,16 @@ async def step_reset_device(device: ZHADevice) -> None:
     ).unsafe_ask_async()
 
 
+async def _permit_join_refresh_loop(z2m_client: Z2MClient) -> None:
+    """Re-open permit join every 244 s so the Zigbee 254-second window never expires."""
+    while True:
+        await asyncio.sleep(_PERMIT_JOIN_MAX - 10)
+        try:
+            await z2m_client.enable_permit_join(seconds=_PERMIT_JOIN_MAX)
+        except (RuntimeError, OSError):
+            pass
+
+
 async def step_pair_with_z2m(
     device: ZHADevice,
     z2m_client: Z2MClient,
@@ -239,7 +249,6 @@ async def step_pair_with_z2m(
 ) -> dict[str, Any] | None:
     _print_step(3, "Pair with Zigbee2MQTT")
 
-    # Zigbee spec caps PermitJoin at 254 s per request; we refresh automatically.
     pj_secs = min(timeout, _PERMIT_JOIN_MAX)
     console.print("\nEnabling permit join...")
     try:
@@ -252,7 +261,7 @@ async def step_pair_with_z2m(
     console.print(f"\nTrigger [bold]{device.name}[/bold] to join now...")
     console.print(f"Waiting for device [dim]{device.ieee}[/dim] to appear in Z2M...\n")
 
-    # Snapshot the device list before polling so we can detect unexpected joiners.
+    # Snapshot existing devices so we can detect unexpected joiners.
     try:
         known_iees: set[str] = {
             normalize_ieee(d.get("ieee_address", "")) for d in await z2m_client.get_devices()
@@ -261,66 +270,110 @@ async def step_pair_with_z2m(
         known_iees = set()
     target_ieee = normalize_ieee(device.ieee)
 
-    elapsed = 0
-    poll_interval = 3
-    pj_started_at = 0  # elapsed seconds when permit join was last issued
+    def _on_event(event_type: str, data: dict[str, Any]) -> None:
+        event_ieee = normalize_ieee(data.get("ieee_address", ""))
+        if event_ieee == target_ieee:
+            if event_type == "device_joined":
+                console.print("\n  Device found — waiting for interview...         ", end="\r")
+            elif event_type == "device_interview" and data.get("status") == "started":
+                console.print("\n  Device found — interview in progress...         ", end="\r")
+        elif event_type == "device_joined" and event_ieee and event_ieee not in known_iees:
+            known_iees.add(event_ieee)
+            console.print(
+                f"\n  [yellow]⚠ A different device joined Z2M:[/yellow] "
+                f"[dim]{data.get('ieee_address')}[/dim] "
+                f"([bold]{data.get('friendly_name')}[/bold])\n"
+                f"  This is NOT [bold]{device.name}[/bold]. "
+                f"Put the correct device in pairing mode."
+            )
 
-    while elapsed < timeout:
-        await asyncio.sleep(poll_interval)
-        elapsed += poll_interval
-        remaining = timeout - elapsed
+    loop = asyncio.get_running_loop()
+    start_mono = loop.time()
 
-        # Refresh permit join 10 s before the current window expires.
-        if elapsed >= pj_started_at + pj_secs - 10 and remaining > 0:
-            refresh_secs = min(remaining + poll_interval, _PERMIT_JOIN_MAX)
-            try:
-                await z2m_client.enable_permit_join(seconds=refresh_secs)
-            except (RuntimeError, OSError):
-                pass
-            pj_started_at = elapsed
+    async def _ticker() -> None:
+        while True:
+            remaining = max(0, timeout - int(loop.time() - start_mono))
+            console.print(
+                f"  ⠸ Listening for new device  [{remaining:03d}s remaining]",
+                end="\r",
+            )
+            await asyncio.sleep(1)
 
-        console.print(
-            f"  ⠸ Listening for new device  [{remaining:03d}s remaining]",
-            end="\r",
-        )
-        try:
-            all_devices = await z2m_client.get_devices()
-        except (RuntimeError, OSError):
-            all_devices = []
+    pj_task = asyncio.create_task(_permit_join_refresh_loop(z2m_client))
+    ticker_task = asyncio.create_task(_ticker())
 
-        # Detect unexpected joiners: a new device appeared but it's not the one we want.
-        for d in all_devices:
-            d_ieee = normalize_ieee(d.get("ieee_address", ""))
-            if d_ieee and d_ieee not in known_iees and d_ieee != target_ieee:
-                console.print(
-                    f"\n  [yellow]⚠ A different device joined Z2M:[/yellow] "
-                    f"[dim]{d.get('ieee_address')}[/dim] "
-                    f"([bold]{d.get('friendly_name')}[/bold])\n"
-                    f"  This is NOT [bold]{device.name}[/bold]. "
-                    f"Put the correct device in pairing mode."
-                )
-                known_iees.add(d_ieee)  # suppress repeat warnings for the same interloper
+    status = "timeout"
+    try:
+        status, _ = await z2m_client.wait_for_interview(device.ieee, timeout, on_event=_on_event)
+    except (RuntimeError, OSError):
+        pass  # WS failure — fall through to the timeout prompt
+    finally:
+        pj_task.cancel()
+        ticker_task.cancel()
+        await asyncio.gather(pj_task, ticker_task, return_exceptions=True)
 
-        z2m_device = next(
-            (d for d in all_devices if normalize_ieee(d.get("ieee_address", "")) == target_ieee),
-            None,
-        )
+    ieee_hex = f"0x{target_ieee}"
+
+    if status == "successful":
+        console.print("\n[green]✓ Interview complete![/green]")
+        await z2m_client.disable_permit_join()
+        z2m_device = await z2m_client.get_device_by_ieee(device.ieee)
         if z2m_device:
             console.print(
-                f"\n[green]✓ Device found in Z2M:[/green] "
-                f"[bold]{z2m_device.get('friendly_name')}[/bold]"
+                f"[green]✓ Device in Z2M:[/green] [bold]{z2m_device.get('friendly_name')}[/bold]"
             )
-            await z2m_client.disable_permit_join()
             return z2m_device
+        # Registry hasn't caught up yet — use IEEE hex; rename step corrects it.
+        console.print(
+            f"[yellow]Proceeding with fallback name:[/yellow] {ieee_hex}\n"
+            f"[dim]The rename step will set the correct name.[/dim]"
+        )
+        return {"ieee_address": ieee_hex, "friendly_name": ieee_hex}
 
     await z2m_client.disable_permit_join()
+
+    if status == "failed":
+        console.print(
+            f"\n[yellow]⚠ Device joined but interview failed:[/yellow] [dim]{ieee_hex}[/dim]"
+        )
+        choice = await questionary.select(
+            "How would you like to proceed?",
+            choices=[
+                questionary.Choice("Retry — wait for Z2M to retry the interview", value="retry"),
+                questionary.Choice(
+                    "Force continue — device joined but interview did not complete",
+                    value="force",
+                ),
+                questionary.Choice("Mark as failed — revisit this device later", value="fail"),
+            ],
+            style=_STYLE,
+        ).unsafe_ask_async()
+
+        if choice == "retry":
+            return await step_pair_with_z2m(device, z2m_client, timeout)
+        if choice == "force":
+            z2m_device = await z2m_client.get_device_by_ieee(device.ieee)
+            if z2m_device:
+                console.print(
+                    f"[yellow]Proceeding with incomplete interview:[/yellow] "
+                    f"[bold]{z2m_device.get('friendly_name')}[/bold]"
+                )
+                return z2m_device
+            console.print(
+                f"[yellow]Proceeding with fallback name:[/yellow] {ieee_hex}\n"
+                f"[dim]The rename step will set the correct name.[/dim]"
+            )
+            return {"ieee_address": ieee_hex, "friendly_name": ieee_hex}
+        return None
+
+    # Timeout path
     console.print(f"\n[yellow]Timed out waiting for[/yellow] [dim]{device.ieee}[/dim]")
     choice = await questionary.select(
         "How would you like to proceed?",
         choices=[
             questionary.Choice("Retry — poll for another 5 minutes", value="retry"),
             questionary.Choice(
-                "Force continue — I can see the device joined Z2M (green interview)",
+                "Force continue — device joined but interview did not complete",
                 value="force",
             ),
             questionary.Choice("Mark as failed — revisit this device later", value="fail"),
@@ -331,7 +384,6 @@ async def step_pair_with_z2m(
     if choice == "retry":
         return await step_pair_with_z2m(device, z2m_client, timeout)
     if choice == "force":
-        # One final attempt to pick up the device from the Z2M API
         try:
             z2m_device = await z2m_client.get_device_by_ieee(device.ieee)
         except (RuntimeError, OSError):
@@ -342,9 +394,7 @@ async def step_pair_with_z2m(
                 f"[bold]{z2m_device.get('friendly_name')}[/bold]"
             )
             return z2m_device
-        # Z2M names a newly joined device by its IEEE hex by default; the rename
-        # step will correct this to the original ZHA name.
-        ieee_hex = f"0x{normalize_ieee(device.ieee)}"
+        # Z2M names a newly joined device by its IEEE hex by default.
         console.print(
             f"[yellow]Proceeding with fallback name:[/yellow] {ieee_hex}\n"
             f"[dim]The rename step will set the correct name.[/dim]"
