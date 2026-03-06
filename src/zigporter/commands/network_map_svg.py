@@ -16,12 +16,12 @@ LABEL_OFFSET = 30  # padding so node midpoint sits inside its ring boundary
 LABEL_MARGIN = 340  # extra canvas padding beyond outermost ring (for labels)
 
 HOP_COLORS = [
-    "#5eead4",  # teal
-    "#60a5fa",  # blue
-    "#a78bfa",  # violet
-    "#f472b6",  # pink
-    "#fb923c",  # orange
-    "#a3e635",  # lime
+    "#facc15",  # yellow   (hop 1)
+    "#4ade80",  # green    (hop 2)
+    "#60a5fa",  # blue     (hop 3)
+    "#f472b6",  # pink     (hop 4)
+    "#fb923c",  # orange   (hop 5)
+    "#a78bfa",  # violet   (hop 6)
 ]
 
 NODE_R_COORD = 28
