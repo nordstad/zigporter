@@ -17,6 +17,7 @@ nav = [
     { "Z2M authentication" = "guide/authentication.md" },
     { "Offline devices" = "guide/stale.md" },
     { "Fix a device" = "guide/fix-device.md" },
+    { "Network map" = "guide/network-map.md" },
     { "Utilities" = "guide/utilities.md" },
   ] },
   { "API Reference" = [

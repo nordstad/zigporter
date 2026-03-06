@@ -1,0 +1,43 @@
+{
+  "skill_name": "network-map-demo-svg",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I just changed RING_SPACING from 160 to 180 in network_map_svg.py to space nodes further apart. Regenerate the demo SVG so the docs stay in sync.",
+      "expected_output": "Runs gen_demo_svg.py with uv, lints the script, verifies the SVG output has the right visual features (3 hop rings, 12 nodes, badges, glows), and stages + commits docs/assets/network-map-demo.svg with the correct commit message.",
+      "files": [],
+      "assertions": [
+        "Runs the script using 'uv run python scripts/gen_demo_svg.py' (not bare python)",
+        "Runs ruff check on scripts/gen_demo_svg.py",
+        "Verifies the SVG file exists at docs/assets/network-map-demo.svg after generation",
+        "Checks that the SVG contains 3 hop rings or references ring structure",
+        "Stages docs/assets/network-map-demo.svg with git add",
+        "Commits with message matching 'docs(network-map): regenerate demo SVG'"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The network map docs page shows a stale SVG image — it still has the old 2-ring layout. Update docs/assets/network-map-demo.svg to reflect the current rendering code.",
+      "expected_output": "Identifies and runs the generator script, verifies the output, and commits with the standard message.",
+      "files": [],
+      "assertions": [
+        "Runs 'uv run python scripts/gen_demo_svg.py' to regenerate",
+        "Verifies the SVG was updated (checks file exists, or inspects content)",
+        "Does NOT use bare 'python scripts/gen_demo_svg.py' without uv",
+        "Stages and commits docs/assets/network-map-demo.svg"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I updated the mock topology in gen_demo_svg.py to add a fourth hop ring. Please run the network-map-demo-svg skill to regenerate the docs SVG.",
+      "expected_output": "Explicitly triggered skill: runs script, lints, verifies, commits.",
+      "files": [],
+      "assertions": [
+        "Runs the generator script with uv",
+        "Lints scripts/gen_demo_svg.py with ruff check",
+        "Verifies the SVG at docs/assets/network-map-demo.svg",
+        "Commits with the conventional commit message format 'docs(network-map): ...'"
+      ]
+    }
+  ]
+}

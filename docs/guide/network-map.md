@@ -14,6 +14,14 @@ zigporter network-map
 | `--format table` | Flat table sorted by LQI ascending (weakest links first) |
 | `--svg <file>` | Also export an SVG diagram |
 
+## SVG export example
+
+```bash
+zigporter network-map --output network.svg
+```
+
+![Zigbee network map SVG example](../assets/network-map-demo.svg)
+
 ## LQI thresholds
 
 | Flag | Default | Meaning |
