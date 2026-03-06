@@ -135,9 +135,13 @@ even though its direct coordinator link may be weak.
 
 **Direct coordinator LQI** (`coord_lqi_map`, shown as `(coord: N)` annotation)
 : LQI measured by the coordinator when receiving a direct frame from this device during
-the network scan.  This is the value shown in the Z2M device card badge
-(`last_linkquality`).  Only annotated for depth > 1 devices where it is below
-`warn_lqi`, to flag poor fallback connectivity if the routing parent fails.
+the network scan.  Only annotated for depth > 1 devices where it is below `warn_lqi`,
+to flag poor fallback connectivity if the routing parent fails.
+Note: the Z2M device card badge (`last_linkquality`) is **not** the same value — it
+reflects the LQI of the last routing-hop router → coordinator link from the most
+recently received application message.  For mesh-routed devices (depth > 1) the two
+will diverge significantly: `coord_lqi_map` measures the direct RF path (often 0 when
+out of range), while the badge measures the final router→coordinator hop quality.
 
 **Z2M link direction convention**: in the raw network-map data, `source` = neighbor
 being measured, `target` = scanning device, `lqi` = measured **by the scanner receiving
