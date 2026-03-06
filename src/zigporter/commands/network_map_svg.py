@@ -10,7 +10,7 @@ import svgwrite
 
 # ── Visual constants ──────────────────────────────────────────────────────────
 
-MIN_RING_GAP = 90  # minimum px separation between consecutive ring boundaries
+MIN_RING_GAP = 200  # minimum px separation between consecutive ring boundaries
 ANGULAR_PADDING = 50  # extra arc per device beyond collision minimum
 LABEL_OFFSET = 30  # padding so node midpoint sits inside its ring boundary
 LABEL_MARGIN = 340  # extra canvas padding beyond outermost ring (for labels)
@@ -46,8 +46,8 @@ LABEL_FS = "11px"
 DIM_FS = "11px"
 LEGEND_FS = "11px"
 
-COLLISION_GAP = 6  # px padding between node edges after nudge
-COLLISION_ITERS = 40  # max angle-nudge iterations before giving up
+COLLISION_GAP = 100  # px padding between node edges after nudge (must clear label zones)
+COLLISION_ITERS = 200  # max angle-nudge iterations before giving up
 
 MAX_LABEL_LEN = 22  # truncate long labels; full name available via SVG <title> tooltip
 
@@ -91,7 +91,10 @@ def _compute_ring_radii(
     prev_r = 0.0
     for h in range(1, max_hops + 1):
         n = count_at_depth.get(h, 1)
-        arc_per_device = 2 * NODE_R_ROUTER + COLLISION_GAP + ANGULAR_PADDING
+        # Label width dominates over node diameter — use it as the arc floor.
+        # MAX_LABEL_LEN chars × ~6px/char + pill padding matches the pill_w formula below.
+        label_arc = MAX_LABEL_LEN * 6 + 10
+        arc_per_device = max(2 * NODE_R_ROUTER + COLLISION_GAP, label_arc) + ANGULAR_PADDING
         # Nodes are placed at the midpoint: (prev_r + ring_radii[h]) / 2.
         # Invert to find ring_radii[h] that gives the required node-placement radius.
         required_node_r = (n * arc_per_device) / (2 * math.pi)
@@ -592,7 +595,7 @@ def render_svg(
                 stroke_width=_edge_width(lqi),
             )
         )
-        mx, my = x1 * 0.65 + x2 * 0.35, y1 * 0.65 + y2 * 0.35
+        mx, my = x1 * 0.3 + x2 * 0.7, y1 * 0.3 + y2 * 0.7
         badge_w = len(str(lqi)) * 7 + 10
         lqi_label_group.add(
             dwg.rect(
