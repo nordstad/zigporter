@@ -38,6 +38,8 @@ LEGEND_FS = "11px"
 COLLISION_GAP = 6  # px padding between node edges after nudge
 COLLISION_ITERS = 40  # max angle-nudge iterations before giving up
 
+MAX_LABEL_LEN = 22  # truncate long labels; full name available via SVG <title> tooltip
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -83,25 +85,27 @@ def _node_radius(node_type: str) -> int:
 # ── Angular layout ────────────────────────────────────────────────────────────
 
 
-def _leaf_count(ieee: str, children: dict[str, list[str]]) -> dict[str, int]:
-    """Return leaf count for each node: 1 for leaves, sum-of-leaves for hubs.
+def _subtree_weights(ieee: str, children: dict[str, list[str]]) -> dict[str, int]:
+    """Angular weight = max(leaf count, subtree depth).
 
-    Using leaf count (instead of total subtree size) as the angular weight
-    gives terminal-only nodes equal visual space and prevents large hubs from
-    claiming most of the circle's circumference.
+    Pure leaf-count under-allocates linear chains: a 3-hop chain gets weight 1
+    (same as a leaf) even though its nodes span 3 rings.
     """
-    counts: dict[str, int] = {}
+    weights: dict[str, int] = {}
 
-    def _calc(n: str) -> int:
+    def _calc(n: str) -> tuple[int, int]:  # (leaf_count, depth)
         kids = children.get(n, [])
         if not kids:
-            counts[n] = 1
-        else:
-            counts[n] = sum(_calc(k) for k in kids)
-        return counts[n]
+            weights[n] = 1
+            return 1, 1
+        results = [_calc(k) for k in kids]
+        leaves = sum(lc for lc, _ in results)
+        depth = max(d for _, d in results) + 1
+        weights[n] = max(leaves, depth)
+        return leaves, depth
 
     _calc(ieee)
-    return counts
+    return weights
 
 
 def _compute_path_min_lqi(
@@ -432,7 +436,7 @@ def render_svg(
     canvas = int(half * 2)
     cx, cy = half, half
 
-    leaf_counts = _leaf_count(coordinator_ieee, children)
+    leaf_counts = _subtree_weights(coordinator_ieee, children)
     angles: dict[str, float] = {}
     _assign_angles(
         coordinator_ieee, children, leaf_counts, angles, 0.0, 2 * math.pi, depth_map, nodes
@@ -628,8 +632,9 @@ def render_svg(
             anchor = _label_anchor(angle)
 
         # Pill background behind name
+        display_name = (name[: MAX_LABEL_LEN - 1] + "…") if len(name) > MAX_LABEL_LEN else name
         pill_h = 16
-        pill_w = len(name) * 6 + 10
+        pill_w = len(display_name) * 6 + 10
         if anchor == "start":
             pill_x = lx - 4
         elif anchor == "end":
@@ -647,15 +652,16 @@ def render_svg(
             )
         )
 
-        label_group.add(
-            dwg.text(
-                name,
-                insert=(round(lx, 1), round(ly_label, 1)),
-                fill=TEXT_PRIMARY,
-                font_size=LABEL_FS,
-                text_anchor=anchor,
-            )
+        lbl = dwg.text(
+            display_name,
+            insert=(round(lx, 1), round(ly_label, 1)),
+            fill=TEXT_PRIMARY,
+            font_size=LABEL_FS,
+            text_anchor=anchor,
         )
+        if display_name != name:
+            lbl.add(dwg.title(name))
+        label_group.add(lbl)
 
     dwg.add(node_group)
     dwg.add(label_group)
