@@ -330,7 +330,11 @@ async def test_summary_counts():
 import tempfile  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-from zigporter.commands.network_map_svg import MAX_LABEL_LEN, _subtree_weights, render_svg  # noqa: E402
+from zigporter.commands.network_map_svg import (  # noqa: E402
+    MAX_LABEL_LEN,
+    _subtree_weights,
+    render_svg,
+)
 
 _SVG_NODES = {
     "0x0": {"type": "Coordinator", "friendlyName": "Coordinator"},
@@ -408,3 +412,114 @@ def test_subtree_weights_wide_hub_uses_leaf_count():
     weights = _subtree_weights("root", children)
     # hub: leaf_count=5, depth=2 → weight=5
     assert weights["hub"] == 5
+
+
+# ── _edge_color helper ────────────────────────────────────────────────────────
+
+from zigporter.commands.network_map_svg import EDGE_CRIT, EDGE_GOOD, EDGE_WARN, _edge_color  # noqa: E402
+
+
+def test_edge_color_good():
+    assert _edge_color(200, 80, 30) == EDGE_GOOD
+
+
+def test_edge_color_warn():
+    assert _edge_color(60, 80, 30) == EDGE_WARN
+
+
+def test_edge_color_crit():
+    assert _edge_color(10, 80, 30) == EDGE_CRIT
+
+
+# ── _label_anchor helper ─────────────────────────────────────────────────────
+
+import math  # noqa: E402
+
+from zigporter.commands.network_map_svg import _label_anchor  # noqa: E402
+
+
+def test_label_anchor_east_returns_start():
+    assert _label_anchor(math.pi / 2) == "start"  # due east, sin=1
+
+
+def test_label_anchor_west_returns_end():
+    assert _label_anchor(3 * math.pi / 2) == "end"  # due west, sin=-1
+
+
+def test_label_anchor_north_returns_middle():
+    assert _label_anchor(0.0) == "middle"  # due north, sin=0
+
+
+# ── render_svg branch coverage ───────────────────────────────────────────────
+
+
+def test_svg_no_coordinator_returns_early():
+    """render_svg must return silently when no coordinator is present."""
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+        out = Path(f.name)
+    nodes = {"0x1": {"type": "Router", "friendlyName": "Router"}}
+    render_svg(nodes, {"0x1": None}, {"0x1": 200}, {"0x1": 1}, {}, out)
+    # File should be empty / unchanged (early return before writing)
+    assert out.stat().st_size == 0 or "svg" not in out.read_text().lower()
+
+
+def test_svg_warn_and_crit_nodes_render_glow_filters():
+    """Devices with LQI below warn/crit thresholds trigger glow filter markup."""
+    nodes = {
+        "0x0": {"type": "Coordinator", "friendlyName": "Coordinator"},
+        "0x1": {"type": "Router", "friendlyName": "Weak Router"},
+        "0x2": {"type": "Router", "friendlyName": "Critical Router"},
+    }
+    parent_map: dict[str, str | None] = {"0x0": None, "0x1": "0x0", "0x2": "0x0"}
+    lqi_map = {"0x1": 60, "0x2": 20}  # 60 < warn=80; 20 < crit=30
+    depth_map = {"0x0": 0, "0x1": 1, "0x2": 1}
+    children = {"0x0": ["0x1", "0x2"]}
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+        out = Path(f.name)
+    render_svg(nodes, parent_map, lqi_map, depth_map, children, out)
+    content = out.read_text()
+    assert "glow-warn" in content, "warn glow filter should be referenced"
+    assert "glow-crit" in content, "crit glow filter should be referenced"
+
+
+def test_svg_crowded_ring_triggers_arc_floor_scaling_and_collision_resolution():
+    """15 end-device children crowd depth-1 ring, forcing arc-floor scaling
+    (line 176) and collision nudging in _resolve_collisions (lines 228-244)."""
+    n = 15
+    nodes: dict = {"0x0": {"type": "Coordinator", "friendlyName": "Coordinator"}}
+    parent_map: dict[str, str | None] = {"0x0": None}
+    lqi_map: dict = {}
+    depth_map: dict = {"0x0": 0}
+    children: dict = {"0x0": []}
+    for i in range(1, n + 1):
+        ieee = f"0x{i:02x}"
+        nodes[ieee] = {"type": "EndDevice", "friendlyName": f"Device {i}"}
+        parent_map[ieee] = "0x0"
+        lqi_map[ieee] = 200
+        depth_map[ieee] = 1
+        children["0x0"].append(ieee)
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+        out = Path(f.name)
+    render_svg(nodes, parent_map, lqi_map, depth_map, children, out)
+    content = out.read_text()
+    assert "Device 1" in content
+    assert "Device 15" in content
+
+
+def test_svg_two_children_cover_start_and_end_pill_anchors():
+    """Coordinator with two children places nodes on east and west sides."""
+    nodes = {
+        "0x0": {"type": "Coordinator", "friendlyName": "Coordinator"},
+        "0x1": {"type": "Router", "friendlyName": "East Child"},
+        "0x2": {"type": "Router", "friendlyName": "West Child"},
+    }
+    parent_map: dict[str, str | None] = {"0x0": None, "0x1": "0x0", "0x2": "0x0"}
+    lqi_map = {"0x1": 200, "0x2": 200}
+    depth_map = {"0x0": 0, "0x1": 1, "0x2": 1}
+    children = {"0x0": ["0x1", "0x2"]}
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+        out = Path(f.name)
+    render_svg(nodes, parent_map, lqi_map, depth_map, children, out)
+    content = out.read_text()
+    assert "East Child" in content
+    assert "West Child" in content
