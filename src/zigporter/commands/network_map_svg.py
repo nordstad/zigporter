@@ -660,7 +660,7 @@ def render_svg(
             text_anchor=anchor,
         )
         if display_name != name:
-            lbl.add(dwg.title(name))
+            lbl.set_desc(title=name)  # renders as <title> child for SVG tooltip
         label_group.add(lbl)
 
     dwg.add(node_group)

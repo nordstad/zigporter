@@ -321,3 +321,90 @@ async def test_summary_counts():
     # 1 weak (Sensor C, lqi=65), 1 critical (Sensor D, lqi=25)
     assert "1 WEAK" in output
     assert "1 CRITICAL" in output
+
+
+# ---------------------------------------------------------------------------
+# SVG renderer tests
+# ---------------------------------------------------------------------------
+
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from zigporter.commands.network_map_svg import MAX_LABEL_LEN, _subtree_weights, render_svg  # noqa: E402
+
+_SVG_NODES = {
+    "0x0": {"type": "Coordinator", "friendlyName": "Coordinator"},
+    "0x1": {"type": "Router", "friendlyName": "Short Name"},
+    "0x2": {"type": "EndDevice", "friendlyName": "A Very Long Device Name That Exceeds Limit"},
+}
+_SVG_PARENT_MAP: dict[str, str | None] = {"0x0": None, "0x1": "0x0", "0x2": "0x1"}
+_SVG_LQI_MAP = {"0x1": 200, "0x2": 150}
+_SVG_DEPTH_MAP = {"0x0": 0, "0x1": 1, "0x2": 2}
+_SVG_CHILDREN = {"0x0": ["0x1"], "0x1": ["0x2"]}
+
+
+def test_svg_label_truncated_in_output():
+    """Long names are truncated in the SVG text content."""
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+        out = Path(f.name)
+    render_svg(_SVG_NODES, _SVG_PARENT_MAP, _SVG_LQI_MAP, _SVG_DEPTH_MAP, _SVG_CHILDREN, out)
+    content = out.read_text()
+    long_name = "A Very Long Device Name That Exceeds Limit"
+    truncated = long_name[: MAX_LABEL_LEN - 1] + "…"
+    assert truncated in content, "truncated label should appear in SVG"
+    # The full name must not appear as a bare <text> node value
+    import re
+
+    bare_text_values = re.findall(r"<text\b[^>]*>([^<]+)</text>", content)
+    assert long_name not in bare_text_values, "full name should not be a bare <text> value"
+
+
+def test_svg_title_tooltip_contains_full_name():
+    """Full name is preserved in a <title> tooltip for truncated labels."""
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+        out = Path(f.name)
+    render_svg(_SVG_NODES, _SVG_PARENT_MAP, _SVG_LQI_MAP, _SVG_DEPTH_MAP, _SVG_CHILDREN, out)
+    content = out.read_text()
+    long_name = "A Very Long Device Name That Exceeds Limit"
+    assert f"<title>{long_name}</title>" in content, "<title> tooltip should contain full name"
+
+
+def test_svg_short_name_not_truncated():
+    """Names within the limit are rendered verbatim with no tooltip."""
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+        out = Path(f.name)
+    render_svg(_SVG_NODES, _SVG_PARENT_MAP, _SVG_LQI_MAP, _SVG_DEPTH_MAP, _SVG_CHILDREN, out)
+    content = out.read_text()
+    assert "Short Name" in content
+    assert "<title>Short Name</title>" not in content
+
+
+def test_subtree_weights_leaf_gets_one():
+    """A pure leaf node has weight 1."""
+    children: dict[str, list[str]] = {"root": ["child"], "child": []}
+    weights = _subtree_weights("root", children)
+    assert weights["child"] == 1
+
+
+def test_subtree_weights_linear_chain_uses_depth():
+    """A 3-hop linear chain (root→A→B→C) gets weight 3, not 1."""
+    children: dict[str, list[str]] = {"root": ["a"], "a": ["b"], "b": ["c"], "c": []}
+    weights = _subtree_weights("root", children)
+    # 'a' subtree: leaf_count=1, depth=3 → weight=3
+    assert weights["a"] == 3
+
+
+def test_subtree_weights_wide_hub_uses_leaf_count():
+    """A hub with 5 direct children keeps its leaf count as the weight."""
+    children: dict[str, list[str]] = {
+        "root": ["hub"],
+        "hub": ["c1", "c2", "c3", "c4", "c5"],
+        "c1": [],
+        "c2": [],
+        "c3": [],
+        "c4": [],
+        "c5": [],
+    }
+    weights = _subtree_weights("root", children)
+    # hub: leaf_count=5, depth=2 → weight=5
+    assert weights["hub"] == 5
