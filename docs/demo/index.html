@@ -497,6 +497,28 @@ const DEMO_RENAME_ENTITY = [
   [`${ok('✓')} Renamed ${bd('light.morning_light')} ${c('→')} ${c('light.bedroom_ceiling')}`, 300],
 ];
 
+// ── DEMO: network-map ─────────────────────────────────────────────────────────
+const DEMO_NETMAP = [
+  [`<span class="ps">$</span> <span class="cmd">zigporter network-map</span>`, 0],
+  [`${d('⠸')} Fetching network map...`, 400, 1],
+  [`${d('⠼')} Fetching network map... 1s`, 900, 1],
+  [`${d('⠴')} Fetching network map... 2s`, 900, 1],
+  [`${d('⠦')} Done`, 300, 2],
+  [null, 200],
+  [`Zigbee Network Map  [8 devices: 3 routers, 5 end-devices]  ${y('2 WEAK')}`, 100],
+  [null, 100],
+  [bd('Coordinator'), 100],
+  [`├── IKEA Outlet  [router]  ${g('LQI: 212')}  hops: 1  (2 children)`, 80],
+  [`│    ├── Aqara Door Sensor  [end]  ${g('LQI: 185')}  hops: 2`, 80],
+  [`│    └── Hue Motion  [end]  ${y('LQI:  58')}  hops: 2  ${y('WEAK')}  ${y('(direct coord: 42)')}`, 80],
+  [`├── Sonoff ZBMINI  [router]  ${g('LQI: 198')}  hops: 1  (2 children)`, 80],
+  [`│    ├── Aqara Temp  [end]  ${g('LQI: 176')}  hops: 2`, 80],
+  [`│    └── Aqara Vibration  [end]  ${g('LQI: 142')}  hops: 2`, 80],
+  [`├── TRADFRI Bulb  [router]  ${g('LQI: 167')}  hops: 1`, 80],
+  [`└── Smoke Detector  [end]  ${y('LQI:  45')}  hops: 1  ${y('WEAK')}`, 80],
+  [null, 200],
+];
+
 // ── DEMO: setup ───────────────────────────────────────────────────────────────
 const DEMO_SETUP = [
   [`<span class="ps">$</span> <span class="cmd">zigporter setup</span>`, 0],
@@ -530,6 +552,7 @@ const DEMOS = [
   { key:'inspect',       label:'inspect',       desc:'Show a device\'s full state',            script:DEMO_INSPECT },
   { key:'list-z2m',      label:'list-z2m',      desc:'List all Zigbee2MQTT devices',           script:DEMO_LISTZ2M },
   { key:'migrate',       label:'migrate',       desc:'Interactive ZHA → Z2M wizard (1 device)',script:DEMO_MIGRATE },
+  { key:'network-map',   label:'network-map',   desc:'Visualise Zigbee mesh topology and LQI',  script:DEMO_NETMAP },
   { key:'rename',        label:'rename-device', desc:'Rename device, cascade all references',  script:DEMO_RENAME },
   { key:'rename-entity', label:'rename-entity', desc:'Rename entity ID, cascade all references',script:DEMO_RENAME_ENTITY },
   { key:'setup',         label:'setup',         desc:'Create or update zigporter config',       script:DEMO_SETUP },
