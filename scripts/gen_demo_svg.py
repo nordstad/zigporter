@@ -6,9 +6,7 @@ Run with:
 Topology is intentionally designed to exercise every visual feature:
   - Warn glow  (LQI < 80):  Sonoff ZBMINI, Hue Motion, Hall Outlet
   - Crit glow  (LQI < 30):  Smoke Detector
-  - Path-min badge (upstream bottleneck):
-      Aqara Temp & Aqara Vibration  → parent Sonoff ZBMINI is weak (65)
-      Bedroom Sensor & Living Motion → grandparent Hall Outlet is weak (70)
+  - Path-min badge: every non-coordinator node displays its path-min LQI (worst hop to coordinator)
   - 3 hop rings for visual depth
 """
 
@@ -34,17 +32,17 @@ LIVING_MOTION = "0xaabbccddeeff000b"
 # ── Topology ──────────────────────────────────────────────────────────────────
 #
 # Coordinator                              hop 0
-# ├── IKEA Outlet        router  hop 1  LQI 212
-# │    ├── Aqara Door Sensor  end hop 2  LQI 185  (no badge — path_min = own)
-# │    └── Hue Motion         end hop 2  LQI  58  WEAK
-# ├── Sonoff ZBMINI      router  hop 1  LQI  65   WEAK
-# │    ├── Aqara Temp         end hop 2  LQI 176  badge "65" (path_min=65 < own=176, 65<80)
-# │    └── Aqara Vibration    end hop 2  LQI 142  badge "65"
-# ├── TRADFRI Bulb       router  hop 1  LQI 155
-# │    └── Hall Outlet         router  hop 2  LQI  70  WEAK
-# │         ├── Bedroom Sensor   end  hop 3  LQI 195  badge "70" (path_min=70<195, 70<80)
-# │         └── Living Motion    end  hop 3  LQI 210  badge "70"
-# └── Smoke Detector     end     hop 1  LQI  22   CRITICAL
+# ├── IKEA Outlet        router  hop 1  LQI 212  badge "212"
+# │    ├── Aqara Door Sensor  end hop 2  LQI 185  badge "185"
+# │    └── Hue Motion         end hop 2  LQI  58  WEAK  badge "58"
+# ├── Sonoff ZBMINI      router  hop 1  LQI  65   WEAK  badge "65"
+# │    ├── Aqara Temp         end hop 2  LQI 176  badge "65" (path_min=65)
+# │    └── Aqara Vibration    end hop 2  LQI 142  badge "65" (path_min=65)
+# ├── TRADFRI Bulb       router  hop 1  LQI 155  badge "155"
+# │    └── Hall Outlet         router  hop 2  LQI  70  WEAK  badge "70"
+# │         ├── Bedroom Sensor   end  hop 3  LQI 195  badge "70" (path_min=70)
+# │         └── Living Motion    end  hop 3  LQI 210  badge "70" (path_min=70)
+# └── Smoke Detector     end     hop 1  LQI  22   CRITICAL  badge "22"
 
 nodes = {
     COORD: {"friendlyName": "Coordinator", "type": "Coordinator"},

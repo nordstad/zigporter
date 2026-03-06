@@ -279,7 +279,7 @@ def _draw_legend(
     critical_lqi: int,
 ) -> None:
     lx, ly = 20, 20
-    lw, lh = 220, 290
+    lw, lh = 280, 290
     row = 24
 
     g = dwg.g(id="legend")
@@ -385,7 +385,7 @@ def _draw_legend(
     )
     g.add(
         dwg.text(
-            "upstream bottleneck (hidden weak hop)",
+            "path min LQI (worst hop)",
             insert=(lx + 30, y),
             fill=TEXT_DIM,
             font_size=LEGEND_FS,
@@ -525,7 +525,7 @@ def render_svg(
                 stroke_width=_edge_width(lqi),
             )
         )
-        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+        mx, my = x1 * 0.65 + x2 * 0.35, y1 * 0.65 + y2 * 0.35
         badge_w = len(str(lqi)) * 7 + 10
         lqi_label_group.add(
             dwg.rect(
@@ -547,7 +547,6 @@ def render_svg(
             )
         )
     dwg.add(edge_group)
-    dwg.add(lqi_label_group)
 
     # Nodes + labels
     node_group = dwg.g(id="nodes")
@@ -587,13 +586,10 @@ def render_svg(
             circle_attrs["filter"] = glow_filter
         node_group.add(dwg.circle(**circle_attrs))
 
-        # Path-min LQI badge — only drawn when the bottleneck is upstream (hidden weak hop).
-        # Condition: path_min_lqi < own link LQI  AND  path_min_lqi < warn_lqi.
-        # When visible it always means: "your own link looks fine but something further
-        # up the chain toward the coordinator is weak."
-        own_lqi = lqi_map.get(ieee, 0)
+        # Path-min LQI badge — shown inside every non-coordinator device node.
+        # Displays the worst-hop LQI on the path from coordinator to this device.
         path_lqi = path_min_lqi.get(ieee, 0)
-        if not is_coord and path_lqi < own_lqi and path_lqi < warn_lqi:
+        if not is_coord:
             lqi_color = _edge_color(path_lqi, warn_lqi, critical_lqi)
             is_router = node_type == "Router"
             badge_fs = "9px" if is_router else "8px"
@@ -663,6 +659,7 @@ def render_svg(
 
     dwg.add(node_group)
     dwg.add(label_group)
+    dwg.add(lqi_label_group)
 
     # Legend
     _draw_legend(dwg, canvas, warn_lqi, critical_lqi)
