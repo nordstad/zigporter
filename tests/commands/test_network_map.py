@@ -1,6 +1,10 @@
 """Tests for the network-map command."""
 
 import io
+import math
+import re
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from rich.console import Console
@@ -8,6 +12,16 @@ from rich.console import Console
 from zigporter.commands.network_map import (
     _build_routing_tree,
     run_network_map,
+)
+from zigporter.commands.network_map_svg import (
+    EDGE_CRIT,
+    EDGE_GOOD,
+    EDGE_WARN,
+    MAX_LABEL_LEN,
+    _edge_color,
+    _label_anchor,
+    _subtree_weights,
+    render_svg,
 )
 
 
@@ -327,14 +341,6 @@ async def test_summary_counts():
 # SVG renderer tests
 # ---------------------------------------------------------------------------
 
-import tempfile  # noqa: E402
-from pathlib import Path  # noqa: E402
-
-from zigporter.commands.network_map_svg import (  # noqa: E402
-    MAX_LABEL_LEN,
-    _subtree_weights,
-    render_svg,
-)
 
 _SVG_NODES = {
     "0x0": {"type": "Coordinator", "friendlyName": "Coordinator"},
@@ -357,7 +363,6 @@ def test_svg_label_truncated_in_output():
     truncated = long_name[: MAX_LABEL_LEN - 1] + "…"
     assert truncated in content, "truncated label should appear in SVG"
     # The full name must not appear as a bare <text> node value
-    import re
 
     bare_text_values = re.findall(r"<text\b[^>]*>([^<]+)</text>", content)
     assert long_name not in bare_text_values, "full name should not be a bare <text> value"
@@ -416,8 +421,6 @@ def test_subtree_weights_wide_hub_uses_leaf_count():
 
 # ── _edge_color helper ────────────────────────────────────────────────────────
 
-from zigporter.commands.network_map_svg import EDGE_CRIT, EDGE_GOOD, EDGE_WARN, _edge_color  # noqa: E402
-
 
 def test_edge_color_good():
     assert _edge_color(200, 80, 30) == EDGE_GOOD
@@ -432,10 +435,6 @@ def test_edge_color_crit():
 
 
 # ── _label_anchor helper ─────────────────────────────────────────────────────
-
-import math  # noqa: E402
-
-from zigporter.commands.network_map_svg import _label_anchor  # noqa: E402
 
 
 def test_label_anchor_east_returns_start():

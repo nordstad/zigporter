@@ -194,11 +194,13 @@ class Z2MClient:
         request_topic = f"{self._mqtt_topic}/bridge/request/networkmap"
 
         async with ha._ws_session() as ws:
+            # Send both commands before reading any responses so that we
+            # dispatch by id/type in a single loop.  This avoids an ordering
+            # assumption: if HA buffers an early event before the publish ACK,
+            # the sequential read approach would misinterpret it.
+
             # 1. Subscribe to the networkmap response topic (id=1)
             await ws.send(json.dumps({"id": 1, "type": "mqtt/subscribe", "topic": response_topic}))
-            msg = json.loads(await ws.recv())
-            if not msg.get("success"):
-                raise RuntimeError(f"mqtt/subscribe failed: {msg}")
 
             # 2. Publish the network map request via call_service (id=2)
             await ws.send(
@@ -215,11 +217,8 @@ class Z2MClient:
                     }
                 )
             )
-            msg = json.loads(await ws.recv())
-            if not msg.get("success"):
-                raise RuntimeError(f"mqtt.publish call_service failed: {msg}")
 
-            # 3. Wait for the event carrying the networkmap response
+            # 3. Process all messages: validate ACKs and wait for the Z2M response event.
             deadline = time.monotonic() + timeout
             while True:
                 remaining = deadline - time.monotonic()
@@ -231,8 +230,24 @@ class Z2MClient:
                     raise RuntimeError(f"Timed out after {timeout}s waiting for Z2M network map")
 
                 msg = json.loads(raw)
-                if msg.get("type") != "event" or msg.get("id") != 1:
-                    continue  # skip confirmations and unrelated events
+                msg_id = msg.get("id")
+                msg_type = msg.get("type")
+
+                # Validate subscribe ACK (id=1, type=result)
+                if msg_id == 1 and msg_type == "result":
+                    if not msg.get("success"):
+                        raise RuntimeError(f"mqtt/subscribe failed: {msg}")
+                    continue
+
+                # Validate publish ACK (id=2, type=result)
+                if msg_id == 2 and msg_type == "result":
+                    if not msg.get("success"):
+                        raise RuntimeError(f"mqtt.publish call_service failed: {msg}")
+                    continue
+
+                # Network map response event arrives on subscription id=1
+                if msg_type != "event" or msg_id != 1:
+                    continue
 
                 event = msg.get("event", {})
                 payload_str = event.get("payload", "{}")

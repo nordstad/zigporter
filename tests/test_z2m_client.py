@@ -300,3 +300,48 @@ async def test_get_device_by_ieee_not_found(client):
     result = await client.get_device_by_ieee("ff:ff:ff:ff:ff:ff:ff:ff")
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# get_network_map HTTP → MQTT fallback
+# ---------------------------------------------------------------------------
+
+
+async def test_get_network_map_falls_back_to_mqtt_on_http_error(client):
+    """When the Z2M REST endpoint returns an HTTP error (Z2M 2.x removed it),
+    get_network_map must fall back to the MQTT path."""
+    from unittest.mock import AsyncMock, patch
+
+    mock_response = {"data": {"nodes": [], "links": []}}
+    http_error = httpx.HTTPStatusError(
+        "404 Not Found",
+        request=httpx.Request("GET", f"{Z2M_URL}/api/networkmap"),
+        response=httpx.Response(404),
+    )
+
+    with (
+        patch.object(client, "_get", new=AsyncMock(side_effect=http_error)),
+        patch.object(
+            client, "_get_network_map_via_mqtt", new=AsyncMock(return_value=mock_response)
+        ) as mock_mqtt,
+    ):
+        result = await client.get_network_map()
+
+    assert result == mock_response
+    mock_mqtt.assert_awaited_once()
+
+
+async def test_get_network_map_http_success_does_not_call_mqtt(client):
+    """When HTTP succeeds, the MQTT fallback must not be invoked."""
+    from unittest.mock import AsyncMock, patch
+
+    http_response = {"data": {"nodes": [], "links": []}}
+
+    with (
+        patch.object(client, "_get", new=AsyncMock(return_value=http_response)),
+        patch.object(client, "_get_network_map_via_mqtt", new=AsyncMock()) as mock_mqtt,
+    ):
+        result = await client.get_network_map()
+
+    assert result == http_response
+    mock_mqtt.assert_not_awaited()

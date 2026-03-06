@@ -258,7 +258,7 @@ async def run_network_map(
         t = progress.add_task("Fetching network map...", total=None)
         start = time.monotonic()
         try:
-            fetch = asyncio.ensure_future(client.get_network_map())
+            fetch = asyncio.create_task(client.get_network_map())
             while not fetch.done():
                 await asyncio.sleep(1)
                 elapsed = int(time.monotonic() - start)
