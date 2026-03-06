@@ -32,8 +32,9 @@ description: >
    Also confirm path-min badges appear for the 4 devices behind a weak parent
    (Aqara Temp, Aqara Vibration, Bedroom Sensor, Living Motion).
 
-4. Stage and commit:
+4. Stage, commit, and push:
    ```bash
    git add docs/assets/network-map-demo.svg
    git commit -m "docs(network-map): regenerate demo SVG"
+   git push origin main
    ```

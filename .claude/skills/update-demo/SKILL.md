@@ -14,6 +14,7 @@ source tree. It is edited directly in place. `site/` is the build output and is 
 
 ```bash
 git log --oneline -- docs/demo/index.html | head -1   # last demo commit SHA
+# If the demo has never been committed, use: git rev-list --max-parents=0 HEAD
 git log <demo-sha>..HEAD --oneline -- src/zigporter/main.py src/zigporter/commands/
 ```
 
