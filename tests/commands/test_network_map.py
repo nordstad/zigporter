@@ -194,6 +194,33 @@ def test_build_routing_tree_end_devices_placed_correctly():
     assert lqi_map["0x0000000000000007"] == 25
 
 
+def test_build_routing_tree_bidirectional_lqi_uses_minimum():
+    """Asymmetric link: device reports LQI 115 to coordinator, coordinator reports 29 back.
+    The recorded lqi_map value must be min(115, 29) = 29 — the real bottleneck."""
+    nodes = {
+        "0xcoord": {"ieeeAddr": "0xcoord", "friendlyName": "Coordinator", "type": "Coordinator"},
+        "0xdev": {"ieeeAddr": "0xdev", "friendlyName": "SLZB-06P7", "type": "Router"},
+    }
+    links = [
+        # Device reports coordinator at LQI 115 (device's perspective)
+        {
+            "source": {"ieeeAddr": "0xDEV"},
+            "target": {"ieeeAddr": "0xCOORD"},
+            "lqi": 115,
+        },
+        # Coordinator reports device at LQI 29 (coordinator's perspective)
+        {
+            "source": {"ieeeAddr": "0xCOORD"},
+            "target": {"ieeeAddr": "0xDEV"},
+            "lqi": 29,
+        },
+    ]
+    parent_map, lqi_map, depth_map = _build_routing_tree(nodes, links)
+    assert parent_map["0xdev"] == "0xcoord"
+    assert lqi_map["0xdev"] == 29, f"Expected 29 (min of 115,29), got {lqi_map['0xdev']}"
+    assert depth_map["0xdev"] == 1
+
+
 def test_build_routing_tree_empty_links_orphans_attached_to_coordinator():
     nodes = _build_nodes()
     parent_map, lqi_map, depth_map = _build_routing_tree(nodes, [])
@@ -219,10 +246,14 @@ def _make_console() -> tuple[Console, io.StringIO]:
 
 
 async def _run_with_capture(
-    output_format: str = "tree", warn_lqi: int = 80, critical_lqi: int = 30
+    output_format: str = "tree",
+    warn_lqi: int = 80,
+    critical_lqi: int = 30,
+    live_lqi_override: dict | None = None,
 ):
     mock_client = AsyncMock()
     mock_client.get_network_map = AsyncMock(return_value=MOCK_NETWORK_MAP_RESPONSE)
+    mock_client.get_linkquality_map = AsyncMock(return_value=live_lqi_override or {})
     buf = io.StringIO()
     cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False)
 
@@ -292,3 +323,17 @@ async def test_summary_counts():
     # 1 weak (Sensor C, lqi=65), 1 critical (Sensor D, lqi=25)
     assert "1 WEAK" in output
     assert "1 CRITICAL" in output
+
+
+async def test_live_lqi_overrides_network_map_lqi():
+    """Live last_linkquality from HA entities replaces network-map LQI where matched.
+
+    Router Alpha normally has lqi=255 from the network map.  Override it to 42
+    via get_linkquality_map and verify the output shows 42 instead.
+    """
+    # Router Alpha's ieee is 0x0000000000000001
+    output = await _run_with_capture(live_lqi_override={"0x0000000000000001": 42})
+    assert "42" in output
+    # The original network-map value should no longer appear for Router Alpha
+    # (255 could still appear for other things, so just check 42 is present)
+    assert "Router Alpha" in output

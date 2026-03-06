@@ -1,6 +1,7 @@
 """Zigbee mesh topology visualiser — tree and table views with LQI signal strength."""
 
 import asyncio
+import time
 from pathlib import Path
 from typing import Any
 
@@ -25,19 +26,24 @@ def _build_routing_tree(
     """Build a routing tree via iterative BFS.
 
     For each non-coordinator node, the parent is the already-placed tree node
-    it can hear with the highest LQI.
+    with the best *bidirectional* LQI — min(lqi_out, lqi_in).  Using only the
+    device's outgoing LQI is misleading because Zigbee links are asymmetric:
+    SLZB-06P7 might report LQI 115 to the coordinator while the coordinator
+    only reports LQI 29 back.  The weaker direction is the real bottleneck.
 
     Returns:
         parent_map:  ieee → parent_ieee  (None for coordinator)
-        lqi_map:     ieee → lqi to parent
+        lqi_map:     ieee → min(lqi_out, lqi_in) to parent
         depth_map:   ieee → hops from coordinator
     """
-    # Build outgoing adjacency: source → [(target_ieee, lqi)]
+    # Build per-directed-pair LQI: (source, target) → lqi
+    pair_lqi: dict[tuple[str, str], int] = {}
     outgoing: dict[str, list[tuple[str, int]]] = {}
     for link in links:
-        src = link["source"]["ieeeAddr"]
-        tgt = link["target"]["ieeeAddr"]
+        src = link["source"]["ieeeAddr"].lower()
+        tgt = link["target"]["ieeeAddr"].lower()
         lqi = link.get("lqi", 0)
+        pair_lqi[(src, tgt)] = lqi
         outgoing.setdefault(src, []).append((tgt, lqi))
 
     # Locate coordinator
@@ -64,9 +70,15 @@ def _build_routing_tree(
                 continue
             best_parent: str | None = None
             best_lqi = -1
-            for tgt, lqi in outgoing.get(ieee, []):
-                if tgt in visited and lqi > best_lqi:
-                    best_lqi = lqi
+            for tgt, lqi_out in outgoing.get(ieee, []):
+                if tgt not in visited:
+                    continue
+                # Use the weaker of the two directions — Zigbee links are asymmetric
+                # and the bottleneck is whichever side has the lower receive quality.
+                lqi_in = pair_lqi.get((tgt, ieee), lqi_out)
+                effective_lqi = min(lqi_out, lqi_in)
+                if effective_lqi > best_lqi:
+                    best_lqi = effective_lqi
                     best_parent = tgt
             if best_parent is not None:
                 parent_map[ieee] = best_parent
@@ -106,12 +118,31 @@ def _status_markup(lqi: int, warn_lqi: int, critical_lqi: int) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _coord_annotation(
+    ieee: str, depth: int, coord_lqi_map: dict[str, int], warn_lqi: int, critical_lqi: int
+) -> str:
+    """Return a Rich-markup annotation when a routed device has a weak direct coordinator link.
+
+    Only emitted for depth > 1 nodes (devices not directly connected to the coordinator)
+    whose direct-coordinator LQI is below warn_lqi.  This surfaces the "fallback path"
+    quality without replacing the routing-path LQI shown on the tree edge.
+    """
+    if depth <= 1 or ieee not in coord_lqi_map:
+        return ""
+    clqi = coord_lqi_map[ieee]
+    if clqi >= warn_lqi:
+        return ""
+    color = "red" if clqi < critical_lqi else "yellow"
+    return f"  [{color}](coord: {clqi})[/{color}]"
+
+
 def _render_tree(
     ieee: str,
     nodes: dict[str, dict[str, Any]],
     children: dict[str, list[str]],
     lqi_map: dict[str, int],
     depth_map: dict[str, int],
+    coord_lqi_map: dict[str, int],
     warn_lqi: int,
     critical_lqi: int,
     out: Console,
@@ -137,9 +168,10 @@ def _render_tree(
         status = _status_markup(lqi, warn_lqi, critical_lqi)
         children_info = f"  ({len(node_children)} children)" if node_children else ""
         status_str = f"  {status}" if status else ""
+        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, warn_lqi, critical_lqi)
         out.print(
             f"{prefix}{connector} {name}  [{role}]  {lqi_str}  hops: {depth}"
-            f"{children_info}{status_str}"
+            f"{children_info}{status_str}{coord_str}"
         )
 
     child_list = sorted(node_children, key=lambda x: -lqi_map.get(x, 0))
@@ -151,6 +183,7 @@ def _render_tree(
             children,
             lqi_map,
             depth_map,
+            coord_lqi_map,
             warn_lqi,
             critical_lqi,
             out,
@@ -164,6 +197,7 @@ def _render_table(
     parent_map: dict[str, str | None],
     lqi_map: dict[str, int],
     depth_map: dict[str, int],
+    coord_lqi_map: dict[str, int],
     warn_lqi: int,
     critical_lqi: int,
     out: Console,
@@ -190,7 +224,8 @@ def _render_table(
             parent_node = nodes[parent_ieee]
             parent_name = parent_node.get("friendlyName", parent_ieee)
         status = _status_markup(lqi, warn_lqi, critical_lqi)
-        rows.append((lqi, name, role, parent_name, str(lqi), str(depth), status))
+        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, warn_lqi, critical_lqi)
+        rows.append((lqi, name, role, parent_name, str(lqi), str(depth), status + coord_str))
 
     rows.sort(key=lambda r: r[0])
     for _, name, role, parent, lqi_str, hops, status in rows:
@@ -219,8 +254,14 @@ async def run_network_map(
 
     with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
         t = progress.add_task("Fetching network map...", total=None)
+        start = time.monotonic()
         try:
-            response = await client.get_network_map()
+            fetch = asyncio.ensure_future(client.get_network_map())
+            while not fetch.done():
+                await asyncio.sleep(1)
+                elapsed = int(time.monotonic() - start)
+                progress.update(t, description=f"Fetching network map... {elapsed}s")
+            response = fetch.result()
         except Exception as exc:  # noqa: BLE001
             progress.update(t, description="Failed")
             console.print(f"\n[red]Error:[/red] Could not fetch network map — {exc}")
@@ -237,11 +278,34 @@ async def run_network_map(
 
     nodes: dict[str, dict[str, Any]] = {}
     for n in raw_nodes:
-        ieee = n.get("ieeeAddr", "")
+        ieee = n.get("ieeeAddr", "").lower()
         if ieee:
             nodes[ieee] = n
 
     parent_map, lqi_map, depth_map = _build_routing_tree(nodes, links)
+
+    # Overlay live last_linkquality values from Z2M MQTT retained messages.
+    try:
+        live_lqi = await client.get_linkquality_map()
+        lqi_map.update(live_lqi)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[dim]Note: live LQI overlay unavailable ({exc})[/dim]")
+
+    # Build direct-to-coordinator LQI map.
+    # Z2M link convention: source=neighbor, target=scanning device, lqi=measured by scanner.
+    # Links where target=coordinator give the LQI the coordinator measured from each device.
+    # Used to annotate routed devices whose direct coordinator link is weaker than their
+    # routing path — these would have poor fallback connectivity if their parent router fails.
+    coordinator_ieee = next(
+        (ieee for ieee, n in nodes.items() if n.get("type") == "Coordinator"), None
+    )
+    coord_lqi_map: dict[str, int] = {}
+    if coordinator_ieee:
+        for link in links:
+            src = link["source"]["ieeeAddr"].lower()
+            tgt = link["target"]["ieeeAddr"].lower()
+            if tgt == coordinator_ieee and src != coordinator_ieee:
+                coord_lqi_map[src] = link.get("lqi", 0)
 
     children: dict[str, list[str]] = {ieee: [] for ieee in nodes}
     for ieee, parent in parent_map.items():
@@ -275,11 +339,10 @@ async def run_network_map(
     console.print(f"\n{summary}\n")
 
     if output_format == "table":
-        _render_table(nodes, parent_map, lqi_map, depth_map, warn_lqi, critical_lqi, console)
-    else:
-        coordinator_ieee = next(
-            (ieee for ieee, n in nodes.items() if n.get("type") == "Coordinator"), None
+        _render_table(
+            nodes, parent_map, lqi_map, depth_map, coord_lqi_map, warn_lqi, critical_lqi, console
         )
+    else:
         if coordinator_ieee:
             _render_tree(
                 coordinator_ieee,
@@ -287,6 +350,7 @@ async def run_network_map(
                 children,
                 lqi_map,
                 depth_map,
+                coord_lqi_map,
                 warn_lqi,
                 critical_lqi,
                 console,

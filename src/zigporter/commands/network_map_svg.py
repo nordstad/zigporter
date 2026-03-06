@@ -629,7 +629,7 @@ def render_svg(
 
         # Pill background behind name
         pill_h = 16
-        pill_w = max(len(name) * 7 + 12, 60)
+        pill_w = len(name) * 6 + 10
         if anchor == "start":
             pill_x = lx - 4
         elif anchor == "end":

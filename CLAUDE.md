@@ -122,6 +122,34 @@ git push origin vx.y.z
 Use the `/bump-version` skill to automate step 1 (analyses unreleased commits, moves
 `[Unreleased]` entries, fixes comparison links, commits — does NOT tag or push).
 
+## network-map LQI semantics
+
+The `network-map` command displays two distinct LQI values per device.  Understanding
+the difference is important when modifying the rendering or comparing output to Z2M.
+
+**Routing path LQI** (`lqi_map`, shown as `LQI: N` in the tree)
+: `min(parent→device, device→parent)` from the Z2M network-map scan.  Represents the
+quality of the actual link the device uses to forward traffic.  A device at depth 2
+correctly shows a high value here if it routes through a strong intermediate router,
+even though its direct coordinator link may be weak.
+
+**Direct coordinator LQI** (`coord_lqi_map`, shown as `(coord: N)` annotation)
+: LQI measured by the coordinator when receiving a direct frame from this device during
+the network scan.  This is the value shown in the Z2M device card badge
+(`last_linkquality`).  Only annotated for depth > 1 devices where it is below
+`warn_lqi`, to flag poor fallback connectivity if the routing parent fails.
+
+**Z2M link direction convention**: in the raw network-map data, `source` = neighbor
+being measured, `target` = scanning device, `lqi` = measured **by the scanner receiving
+from the neighbor**.  So `{source: A, target: Coordinator, lqi: 29}` means the
+coordinator measured 29 when receiving from A — this is the direct coordinator LQI for
+A that ends up in `coord_lqi_map`.
+
+**Why Z2M 2.x live overlay does not work**: Z2M 2.x does not publish retained messages
+on device state topics, and HA disables the `Linkquality` diagnostic sensor entity by
+default (`"disabled_by": "integration"`).  The `get_linkquality_map()` MQTT subscriber
+returns an empty dict in practice; all LQI values come from the network-map scan.
+
 ## Demo
 
 `docs/demo/index.html` is a self-contained browser terminal emulator with hardcoded playback scripts.

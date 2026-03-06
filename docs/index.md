@@ -21,6 +21,7 @@ rename entities and devices with full cascade across automations, scripts, and d
     <tr><td style="white-space: nowrap"><a href="guide/utilities/#list-z2m"><code>list&#x2011;z2m</code></a></td><td>List all devices currently paired with Zigbee2MQTT</td></tr>
     <tr><td style="white-space: nowrap"><a href="guide/fix-device/"><code>fix&#x2011;device</code></a></td><td>Post-migration cleanup: remove stale ZHA device entries, delete their entities, and rename any <code>_2</code>/<code>_3</code> suffixed Z2M entities back to their original IDs</td></tr>
     <tr><td style="white-space: nowrap"><a href="guide/stale/"><code>stale</code></a></td><td>Scan all integrations for offline devices and interactively remove, annotate, or ignore them</td></tr>
+    <tr><td style="white-space: nowrap"><a href="guide/network-map/"><code>network&#x2011;map</code></a></td><td>Visualise the Zigbee mesh topology with per-link LQI signal strength and direct coordinator fallback quality</td></tr>
   </tbody>
 </table>
 
