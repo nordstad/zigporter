@@ -10,8 +10,19 @@ import svgwrite
 
 # ── Visual constants ──────────────────────────────────────────────────────────
 
-RING_SPACING = 160  # px between concentric rings
+MIN_RING_GAP = 90  # minimum px separation between consecutive ring boundaries
+ANGULAR_PADDING = 20  # extra arc per device beyond collision minimum
+LABEL_OFFSET = 30  # padding so node midpoint sits inside its ring boundary
 LABEL_MARGIN = 340  # extra canvas padding beyond outermost ring (for labels)
+
+HOP_COLORS = [
+    "#5eead4",  # teal
+    "#60a5fa",  # blue
+    "#a78bfa",  # violet
+    "#f472b6",  # pink
+    "#fb923c",  # orange
+    "#a3e635",  # lime
+]
 
 NODE_R_COORD = 28
 NODE_R_ROUTER = 20
@@ -64,6 +75,27 @@ def _lerp_color(t: float, near: str, far: str) -> str:
     g = round(g1 + (g2 - g1) * t)
     b = round(b1 + (b2 - b1) * t)
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _compute_ring_radii(
+    depth_map: dict[str, int], nodes: dict[str, dict[str, Any]]
+) -> dict[int, float]:
+    """Compute per-hop ring boundary radii so each ring has enough circumference for its devices."""
+    max_hops = max((d for d in depth_map.values()), default=1)
+    count_at_depth: dict[int, int] = {}
+    for ieee, depth in depth_map.items():
+        if depth > 0:
+            count_at_depth[depth] = count_at_depth.get(depth, 0) + 1
+
+    ring_radii: dict[int, float] = {}
+    prev_r = 0.0
+    for h in range(1, max_hops + 1):
+        n = count_at_depth.get(h, 1)
+        arc_per_device = 2 * NODE_R_ROUTER + COLLISION_GAP + ANGULAR_PADDING
+        min_r_for_devices = (n * arc_per_device) / (2 * math.pi)
+        ring_radii[h] = max(min_r_for_devices + LABEL_OFFSET, prev_r + MIN_RING_GAP)
+        prev_r = ring_radii[h]
+    return ring_radii
 
 
 def _node_fill(node_type: str) -> str:
@@ -140,6 +172,7 @@ def _assign_angles(
     end: float,
     depth_map: dict[str, int],
     nodes: dict[str, dict[str, Any]],
+    ring_radii: dict[int, float],
 ) -> None:
     """Recursively assign angular midpoints using leaf-count-proportional slices.
 
@@ -159,7 +192,9 @@ def _assign_angles(
 
     # Geometry-aware per-child minimum angle: enough arc to fit the node circle
     child_depth = depth_map.get(ieee, 0) + 1
-    r_at_depth = max((child_depth - 0.5) * RING_SPACING, 1.0)
+    prev_r = ring_radii.get(child_depth - 1, 0.0)
+    curr_r = ring_radii.get(child_depth, prev_r + MIN_RING_GAP)
+    r_at_depth = max((prev_r + curr_r) / 2, 1.0)
     min_angles = [
         (2 * _node_radius(nodes.get(k, {}).get("type", "EndDevice")) + COLLISION_GAP) / r_at_depth
         for k in sorted_kids
@@ -178,7 +213,15 @@ def _assign_angles(
     cursor = start
     for kid, kid_span in zip(sorted_kids, floored):
         _assign_angles(
-            kid, children, leaf_counts, angles, cursor, cursor + kid_span, depth_map, nodes
+            kid,
+            children,
+            leaf_counts,
+            angles,
+            cursor,
+            cursor + kid_span,
+            depth_map,
+            nodes,
+            ring_radii,
         )
         cursor += kid_span
 
@@ -193,6 +236,7 @@ def _resolve_collisions(
     nodes: dict[str, dict[str, Any]],
     cx: float,
     cy: float,
+    ring_radii: dict[int, float],
 ) -> None:
     """Push overlapping nodes apart by nudging their angles within their hop ring.
 
@@ -206,7 +250,9 @@ def _resolve_collisions(
             by_depth.setdefault(depth, []).append(ieee)
 
     ring_r: dict[str, float] = {
-        ieee: (depth - 0.5) * RING_SPACING for ieee, depth in depth_map.items() if depth > 0
+        ieee: (ring_radii.get(depth - 1, 0.0) + ring_radii.get(depth, depth * MIN_RING_GAP)) / 2
+        for ieee, depth in depth_map.items()
+        if depth > 0
     }
 
     for _ in range(COLLISION_ITERS):
@@ -432,27 +478,41 @@ def render_svg(
 
     # ── Layout geometry ───────────────────────────────────────────────────────
     max_hops = max(depth_map.values(), default=1)
-    half = max_hops * RING_SPACING + LABEL_MARGIN
+    ring_radii = _compute_ring_radii(depth_map, nodes)
+    half = max(ring_radii.values()) + LABEL_MARGIN
     canvas = int(half * 2)
     cx, cy = half, half
 
     leaf_counts = _subtree_weights(coordinator_ieee, children)
     angles: dict[str, float] = {}
     _assign_angles(
-        coordinator_ieee, children, leaf_counts, angles, 0.0, 2 * math.pi, depth_map, nodes
+        coordinator_ieee,
+        children,
+        leaf_counts,
+        angles,
+        0.0,
+        2 * math.pi,
+        depth_map,
+        nodes,
+        ring_radii,
     )
     path_min_lqi = _compute_path_min_lqi(parent_map, lqi_map)
 
     positions: dict[str, tuple[float, float]] = {}
     for ieee, angle in angles.items():
         depth = depth_map.get(ieee, 0)
-        r = (depth - 0.5) * RING_SPACING if depth > 0 else 0.0
+        if depth > 0:
+            prev_r = ring_radii.get(depth - 1, 0.0)
+            curr_r = ring_radii.get(depth, depth * MIN_RING_GAP)
+            r = (prev_r + curr_r) / 2
+        else:
+            r = 0.0
         positions[ieee] = (
             cx + r * math.sin(angle),
             cy - r * math.cos(angle),
         )
 
-    _resolve_collisions(positions, angles, depth_map, nodes, cx, cy)
+    _resolve_collisions(positions, angles, depth_map, nodes, cx, cy, ring_radii)
 
     # ── Drawing ───────────────────────────────────────────────────────────────
     dwg = svgwrite.Drawing(
@@ -468,11 +528,11 @@ def render_svg(
     ring_fill_group = dwg.g(id="ring-fills")
     for h in range(max_hops, 0, -1):
         t = (h - 1) / max(max_hops - 1, 1)
-        band_fill = _lerp_color(t, "#0e1e1a", "#1e0e0e")
+        band_fill = _lerp_color(t, "#0d2420", "#201018")
         ring_fill_group.add(
             dwg.circle(
                 center=(cx, cy),
-                r=h * RING_SPACING,
+                r=ring_radii[h],
                 fill=band_fill,
                 stroke="none",
             )
@@ -485,9 +545,9 @@ def render_svg(
     ring_group = dwg.g(id="rings")
     for h in range(1, max_hops + 1):
         t = (h - 1) / max(max_hops - 1, 1)  # 0.0 at hop 1, 1.0 at outermost
-        ring_stroke = _lerp_color(t, "#1a2e24", "#2e1a1a")
-        ring_label_c = _lerp_color(t, "#7ec4a8", "#c48a8a")
-        ring_r = h * RING_SPACING
+        ring_stroke = _lerp_color(t, "#1e4035", "#3d1e2e")
+        ring_label_c = HOP_COLORS[(h - 1) % len(HOP_COLORS)]
+        ring_r = ring_radii[h]
         ring_group.add(
             dwg.circle(
                 center=(cx, cy),
