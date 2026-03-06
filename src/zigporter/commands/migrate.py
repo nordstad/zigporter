@@ -359,59 +359,113 @@ async def step_rename(
     z2m_client: Z2MClient,
     ha_client: HAClient,
 ) -> bool:
-    _print_step(4, "Rename device in Z2M")
+    _print_step(4, "Rename & area")
 
     current_name = z2m_device.get("friendly_name", "")
     target_name = device.name
+    renamed = True
 
     if current_name == target_name:
         console.print(f"[green]✓ Already named correctly:[/green] {target_name}")
-        return True
+    else:
+        console.print(f"\n  Z2M assigned:   [dim]{current_name}[/dim]")
+        console.print(f"  Will rename to: [bold]{target_name}[/bold]\n")
 
-    console.print(f"\n  Z2M assigned:   [dim]{current_name}[/dim]")
-    console.print(f"  Will rename to: [bold]{target_name}[/bold]\n")
+        console.print()
 
-    console.print()
+        confirm = await questionary.confirm(
+            f'Apply rename to "{target_name}"?', default=True, style=_STYLE
+        ).unsafe_ask_async()
+        if not confirm:
+            console.print("[yellow]Rename skipped.[/yellow]")
+            renamed = False
+        else:
+            try:
+                await z2m_client.rename_device(current_name, target_name)
+                console.print(f"[green]✓ Renamed to {target_name}[/green]")
+            except (RuntimeError, OSError) as exc:
+                console.print(f"[red]Rename failed: {exc}[/red]")
+                return False
 
-    confirm = await questionary.confirm(
-        f'Apply rename to "{target_name}"?', default=True, style=_STYLE
-    ).unsafe_ask_async()
-    if not confirm:
-        console.print("[yellow]Rename skipped.[/yellow]")
-        return False
+    await _step_assign_area(device, ha_client)
+    return renamed
 
-    try:
-        await z2m_client.rename_device(current_name, target_name)
-        console.print(f"[green]✓ Renamed to {target_name}[/green]")
-    except (RuntimeError, OSError) as exc:
-        console.print(f"[red]Rename failed: {exc}[/red]")
-        return False
 
-    # Set area in HA if device has one — must use the new Z2M device_id.
-    # Z2M may take a moment to register in HA after renaming, so we poll briefly.
-    if device.area_id:
-        z2m_device_id = await _wait_for_z2m_device_in_ha(device, ha_client, timeout=30)
-        if z2m_device_id:
-            for attempt in range(4):  # up to 4 attempts: 0, 3, 6, 9 s after rename
-                try:
-                    await ha_client.update_device_area(z2m_device_id, device.area_id)
-                    console.print(f"[green]✓ Area set to {device.area_name}[/green]")
-                    break
-                except (RuntimeError, OSError):
-                    if attempt < 3:
-                        await asyncio.sleep(3)
-            else:
-                console.print(
-                    f"[yellow]Note:[/yellow] Could not set area automatically. "
-                    f"Set [bold]{device.area_name}[/bold] manually in HA."
-                )
+async def _prompt_area(device: ZHADevice, areas: list[dict[str, Any]]) -> str | None:
+    """Show an area picker and return the chosen area_id, or None for no area."""
+    _NO_AREA = "__no_area__"
+
+    areas_sorted = sorted(areas, key=lambda a: a.get("name", "").lower())
+    original_area = next((a for a in areas_sorted if a.get("area_id") == device.area_id), None)
+
+    if device.area_name:
+        if original_area:
+            console.print(f"\n  Area (from ZHA): [bold]{device.area_name}[/bold]")
         else:
             console.print(
-                f"[yellow]Note:[/yellow] Z2M device not yet in HA registry. "
-                f"Set area [bold]{device.area_name}[/bold] manually in HA."
+                f"\n  Area (from ZHA): [dim]{device.area_name}[/dim] "
+                f"[yellow](no longer exists in HA)[/yellow]"
             )
+    else:
+        console.print("\n  No area was assigned in ZHA.")
 
-    return True
+    choices = [
+        questionary.Choice(title=a.get("name", a["area_id"]), value=a["area_id"])
+        for a in areas_sorted
+    ]
+    choices.append(questionary.Choice(title="── No area ──", value=_NO_AREA))
+
+    default_value = original_area["area_id"] if original_area else _NO_AREA
+
+    selected = await questionary.select(
+        "Assign area:",
+        choices=choices,
+        default=default_value,
+        style=_STYLE,
+    ).unsafe_ask_async()
+
+    return None if selected == _NO_AREA else selected
+
+
+async def _step_assign_area(device: ZHADevice, ha_client: HAClient) -> None:
+    """Prompt for area assignment and apply it to the Z2M device in HA."""
+    z2m_device_id = await _wait_for_z2m_device_in_ha(device, ha_client, timeout=30)
+    if not z2m_device_id:
+        console.print(
+            "[yellow]Note:[/yellow] Z2M device not yet in HA registry — area assignment skipped."
+        )
+        return
+
+    try:
+        areas = await ha_client.get_area_registry()
+    except (RuntimeError, OSError) as exc:
+        console.print(f"[yellow]Could not fetch area list: {exc}[/yellow]")
+        # Graceful fallback: silently restore original area
+        if device.area_id:
+            try:
+                await ha_client.update_device_area(z2m_device_id, device.area_id)
+                console.print(f"[green]✓ Area restored: {device.area_name}[/green]")
+            except (RuntimeError, OSError):
+                console.print(
+                    f"[yellow]Note:[/yellow] Could not set area. "
+                    f"Set [bold]{device.area_name}[/bold] manually in HA."
+                )
+        return
+
+    chosen_area_id = await _prompt_area(device, areas)
+
+    area_id_to_set = chosen_area_id or ""
+    try:
+        await ha_client.update_device_area(z2m_device_id, area_id_to_set)
+        if chosen_area_id:
+            area_name = next(
+                (a["name"] for a in areas if a.get("area_id") == chosen_area_id), chosen_area_id
+            )
+            console.print(f"[green]✓ Area set: {area_name}[/green]")
+        elif device.area_id:
+            console.print("[green]✓ Area cleared[/green]")
+    except (RuntimeError, OSError) as exc:
+        console.print(f"[yellow]Could not set area: {exc}[/yellow]")
 
 
 _IEEE_PATTERN = re.compile(r"0x[0-9a-fA-F]{16}")
@@ -866,7 +920,7 @@ async def run_wizard(
         "  [cyan]1[/cyan]  Remove from ZHA    Unpair the device from ZHA [red](cannot be undone)[/red]\n"
         "  [cyan]2[/cyan]  Reset device       Factory-reset to clear the old ZHA pairing\n"
         "  [cyan]3[/cyan]  Pair with Z2M      Put device in pairing mode and join Zigbee2MQTT\n"
-        "  [cyan]4[/cyan]  Rename             Restore original name and area in Z2M\n"
+        "  [cyan]4[/cyan]  Rename & area      Restore name and choose an area in HA\n"
         "  [cyan]5[/cyan]  Restore entity IDs Rename IEEE-hex entity IDs back to friendly names\n"
         "  [cyan]6[/cyan]  Review             Inspect entities and dashboard cards\n"
         "  [cyan]7[/cyan]  Validate           Confirm entities come back online\n"

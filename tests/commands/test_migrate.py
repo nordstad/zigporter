@@ -83,6 +83,12 @@ def mock_ha_client():
     client.get_scenes = AsyncMock(return_value=[])
     client.get_config_entries = AsyncMock(return_value=[])
     client.get_z2m_config_entry_id = AsyncMock(return_value=None)
+    client.get_area_registry = AsyncMock(
+        return_value=[
+            {"area_id": "kitchen", "name": "Kitchen"},
+            {"area_id": "living_room", "name": "Living Room"},
+        ]
+    )
     return client
 
 
@@ -150,7 +156,8 @@ async def test_step_remove_from_zha_falls_back_to_manual_on_error(sample_device,
 async def test_step_rename_skips_when_names_match(sample_device, mock_z2m_client, mock_ha_client):
     z2m_device = {"friendly_name": "Kitchen Plug"}
 
-    result = await step_rename(sample_device, z2m_device, mock_z2m_client, mock_ha_client)
+    with patch("zigporter.commands.migrate._step_assign_area", new_callable=AsyncMock):
+        result = await step_rename(sample_device, z2m_device, mock_z2m_client, mock_ha_client)
 
     assert result is True
     mock_z2m_client.rename_device.assert_not_called()
@@ -161,7 +168,10 @@ async def test_step_rename_applies_rename_on_confirm(
 ):
     z2m_device = {"friendly_name": "0xaabbccddeeff0011"}
 
-    with patch("questionary.confirm") as mock_confirm:
+    with (
+        patch("questionary.confirm") as mock_confirm,
+        patch("zigporter.commands.migrate._step_assign_area", new_callable=AsyncMock),
+    ):
         mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=True)
         result = await step_rename(sample_device, z2m_device, mock_z2m_client, mock_ha_client)
 
@@ -172,12 +182,143 @@ async def test_step_rename_applies_rename_on_confirm(
 async def test_step_rename_skips_on_cancel(sample_device, mock_z2m_client, mock_ha_client):
     z2m_device = {"friendly_name": "0xaabbccddeeff0011"}
 
-    with patch("questionary.confirm") as mock_confirm:
+    with (
+        patch("questionary.confirm") as mock_confirm,
+        patch("zigporter.commands.migrate._step_assign_area", new_callable=AsyncMock),
+    ):
         mock_confirm.return_value.unsafe_ask_async = AsyncMock(return_value=False)
         result = await step_rename(sample_device, z2m_device, mock_z2m_client, mock_ha_client)
 
     assert result is False
     mock_z2m_client.rename_device.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _step_assign_area / _prompt_area
+# ---------------------------------------------------------------------------
+
+
+async def test_step_assign_area_keeps_original_area(sample_device, mock_ha_client):
+    """When the user picks the original area, update_device_area is called with that area."""
+    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="kitchen")
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await _step_assign_area(sample_device, mock_ha_client)
+
+    mock_ha_client.update_device_area.assert_called_once_with("z2m-device-id", "kitchen")
+
+
+async def test_step_assign_area_changes_area(sample_device, mock_ha_client):
+    """When the user selects a different area, update_device_area is called with the new area."""
+    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="living_room")
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await _step_assign_area(sample_device, mock_ha_client)
+
+    mock_ha_client.update_device_area.assert_called_once_with("z2m-device-id", "living_room")
+
+
+async def test_step_assign_area_no_area_device_assigns_area(mock_ha_client):
+    """Device with no ZHA area: user can pick an area and it is applied."""
+    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+
+    device_no_area = ZHADevice(
+        device_id="dev-x",
+        ieee="00:11:22:33:44:55:66:88",
+        name="Hallway Motion",
+        device_type="EndDevice",
+        entities=[],
+    )
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="living_room")
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await _step_assign_area(device_no_area, mock_ha_client)
+
+    mock_ha_client.update_device_area.assert_called_once_with("z2m-device-id", "living_room")
+
+
+async def test_step_assign_area_clears_area(sample_device, mock_ha_client):
+    """When the user selects 'No area', update_device_area is called with an empty string."""
+    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="__no_area__")
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await _step_assign_area(sample_device, mock_ha_client)
+
+    mock_ha_client.update_device_area.assert_called_once_with("z2m-device-id", "")
+
+
+async def test_step_assign_area_registry_fetch_fails_restores_original(
+    sample_device, mock_ha_client
+):
+    """When get_area_registry raises, the original ZHA area is restored silently."""
+    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+
+    mock_ha_client.get_area_registry = AsyncMock(side_effect=RuntimeError("WS error"))
+
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        await _step_assign_area(sample_device, mock_ha_client)
+
+    mock_ha_client.update_device_area.assert_called_once_with("z2m-device-id", "kitchen")
+
+
+async def test_step_assign_area_skips_when_no_z2m_device(sample_device, mock_ha_client):
+    """When Z2M device is not yet in HA, area assignment is skipped gracefully."""
+    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+
+    mock_ha_client.get_z2m_device_id = AsyncMock(return_value=None)
+
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        await _step_assign_area(sample_device, mock_ha_client)
+
+    mock_ha_client.get_area_registry.assert_not_called()
+    mock_ha_client.update_device_area.assert_not_called()
+
+
+async def test_prompt_area_returns_none_for_no_area():
+    """Selecting '── No area ──' returns None."""
+    from zigporter.commands.migrate import _prompt_area  # noqa: PLC0415
+
+    device = ZHADevice(
+        device_id="d",
+        ieee="00:11:22:33:44:55:66:77",
+        name="Lamp",
+        device_type="EndDevice",
+        entities=[],
+    )
+    areas = [{"area_id": "bedroom", "name": "Bedroom"}]
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="__no_area__")
+        result = await _prompt_area(device, areas)
+
+    assert result is None
+
+
+async def test_prompt_area_returns_selected_area_id():
+    """Selecting a named area returns its area_id."""
+    from zigporter.commands.migrate import _prompt_area  # noqa: PLC0415
+
+    device = ZHADevice(
+        device_id="d",
+        ieee="00:11:22:33:44:55:66:77",
+        name="Lamp",
+        device_type="EndDevice",
+        entities=[],
+    )
+    areas = [{"area_id": "bedroom", "name": "Bedroom"}]
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="bedroom")
+        result = await _prompt_area(device, areas)
+
+    assert result == "bedroom"
 
 
 async def test_step_validate_all_entities_live(sample_device, mock_ha_client):
