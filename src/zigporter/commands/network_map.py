@@ -284,13 +284,6 @@ async def run_network_map(
 
     parent_map, lqi_map, depth_map = _build_routing_tree(nodes, links)
 
-    # Overlay live last_linkquality values from Z2M MQTT retained messages.
-    try:
-        live_lqi = await client.get_linkquality_map()
-        lqi_map.update(live_lqi)
-    except Exception as exc:  # noqa: BLE001
-        console.print(f"[dim]Note: live LQI overlay unavailable ({exc})[/dim]")
-
     # Build direct-to-coordinator LQI map.
     # Z2M link convention: source=neighbor, target=scanning device, lqi=measured by scanner.
     # Links where target=coordinator give the LQI the coordinator measured from each device.

@@ -92,21 +92,6 @@ class HAClient:
                 raise RuntimeError(f"WebSocket authentication failed: {msg}")
             yield ws
 
-    async def get_linkquality_registries(self) -> tuple[list[dict], list[dict]]:
-        """Fetch entity registry and device registry in one WebSocket connection."""
-        async with self._ws_session() as ws:
-            await ws.send(json.dumps({"id": 1, "type": "config/entity_registry/list"}))
-            msg1 = json.loads(await ws.recv())
-            if not msg1.get("success"):
-                raise RuntimeError(f"entity_registry failed: {msg1}")
-
-            await ws.send(json.dumps({"id": 2, "type": "config/device_registry/list"}))
-            msg2 = json.loads(await ws.recv())
-            if not msg2.get("success"):
-                raise RuntimeError(f"device_registry failed: {msg2}")
-
-        return msg1["result"], msg2["result"]
-
     async def get_stale_check_data(self) -> dict[str, Any]:
         """Batch-fetch device registry, entity registry, and area registry.
 

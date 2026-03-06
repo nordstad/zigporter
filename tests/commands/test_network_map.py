@@ -249,11 +249,9 @@ async def _run_with_capture(
     output_format: str = "tree",
     warn_lqi: int = 80,
     critical_lqi: int = 30,
-    live_lqi_override: dict | None = None,
 ):
     mock_client = AsyncMock()
     mock_client.get_network_map = AsyncMock(return_value=MOCK_NETWORK_MAP_RESPONSE)
-    mock_client.get_linkquality_map = AsyncMock(return_value=live_lqi_override or {})
     buf = io.StringIO()
     cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False)
 
@@ -323,17 +321,3 @@ async def test_summary_counts():
     # 1 weak (Sensor C, lqi=65), 1 critical (Sensor D, lqi=25)
     assert "1 WEAK" in output
     assert "1 CRITICAL" in output
-
-
-async def test_live_lqi_overrides_network_map_lqi():
-    """Live last_linkquality from HA entities replaces network-map LQI where matched.
-
-    Router Alpha normally has lqi=255 from the network map.  Override it to 42
-    via get_linkquality_map and verify the output shows 42 instead.
-    """
-    # Router Alpha's ieee is 0x0000000000000001
-    output = await _run_with_capture(live_lqi_override={"0x0000000000000001": 42})
-    assert "42" in output
-    # The original network-map value should no longer appear for Router Alpha
-    # (255 could still appear for other things, so just check 42 is present)
-    assert "Router Alpha" in output
