@@ -1,7 +1,6 @@
 # zigporter
 
-Home Assistant device management from the command line — migrate from ZHA to Zigbee2MQTT,
-rename entities and devices with full cascade across automations, scripts, and dashboards.
+CLI toolkit for Home Assistant Zigbee — migrate ZHA → Z2M, cascade-rename entities and devices, and map your mesh.
 
 > **Try it before you run it** — [Interactive demo →](interactive-demo.md) walks through a full ZHA → Z2M migration with simulated devices, right in your browser.
 
