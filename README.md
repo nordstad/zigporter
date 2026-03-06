@@ -29,6 +29,7 @@
     <tr><td nowrap><code>list&#x2011;z2m</code></td><td>List all devices currently paired with Zigbee2MQTT</td></tr>
     <tr><td nowrap><code>fix&#x2011;device</code></td><td>Post-migration cleanup: remove stale ZHA device entries, delete their entities, and rename any <code>_2</code>/<code>_3</code> suffixed Z2M entities back to their original IDs</td></tr>
     <tr><td nowrap><code>stale</code></td><td>Scan all integrations for offline devices and interactively remove, annotate, ignore, or permanently suppress them</td></tr>
+    <tr><td nowrap><code>network&#x2011;map</code></td><td>Render a radial SVG map of the Zigbee mesh with LQI-coloured edges, hop rings, and path-quality badges</td></tr>
   </tbody>
 </table>
 
@@ -189,6 +190,24 @@ zigporter rename-device "Living Room 1" "Living Room Ceiling" --apply
 If `Z2M_URL` is configured and the device is managed by Zigbee2MQTT, the command also
 offers to rename the Z2M friendly name in a separate prompt — so you stay in control of
 whether HA and Z2M names are kept in sync.
+
+## Visualise the Zigbee Mesh
+
+Generate a radial SVG map of your network with LQI-coloured edges and per-device
+path-quality badges:
+
+```bash
+# Default: tree view printed to terminal + SVG file
+zigporter network-map --output z2m_network.svg
+
+# Table view (sortable columns) instead of tree
+zigporter network-map --format table
+
+# Adjust LQI thresholds (edges and glows change colour accordingly)
+zigporter network-map --output network.svg --warn-lqi 100 --critical-lqi 50
+```
+
+Open the `.svg` in any browser — hover over truncated device names to see the full name.
 
 ## Confirmed Working
 
