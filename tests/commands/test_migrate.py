@@ -99,6 +99,8 @@ def mock_z2m_client():
     client.enable_permit_join = AsyncMock(return_value=None)
     client.disable_permit_join = AsyncMock(return_value=None)
     client.get_device_by_ieee = AsyncMock(return_value=None)
+    client.get_devices = AsyncMock(return_value=[])
+    client.wait_for_interview = AsyncMock(return_value=("successful", {}))
     return client
 
 
@@ -1110,52 +1112,125 @@ def pair_device() -> ZHADevice:
     )
 
 
-async def test_step_pair_detects_correct_device(pair_device, mock_z2m_client):
-    """When the expected device joins Z2M it is returned and permit join is closed."""
-    z2m_entry = {"ieee_address": "0xc4d8c8fffe3ee5cf", "friendly_name": "0xc4d8c8fffe3ee5cf"}
-    # First call (pre-snapshot) returns empty; second (first poll) returns the device.
-    mock_z2m_client.get_devices = AsyncMock(side_effect=[[], [z2m_entry]])
+async def test_step_pair_successful_interview(pair_device, mock_z2m_client):
+    """Happy path: interview succeeds, device returned from registry."""
+    device_entry = {"ieee_address": "0xc4d8c8fffe3ee5cf", "friendly_name": "Hallway Dimmer"}
+    mock_z2m_client.wait_for_interview = AsyncMock(return_value=("successful", {}))
+    mock_z2m_client.get_device_by_ieee = AsyncMock(return_value=device_entry)
 
-    with patch("questionary.select"), patch("questionary.confirm"):
-        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=10)
+    result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=30)
 
-    assert result is not None
-    assert result["ieee_address"] == "0xc4d8c8fffe3ee5cf"
+    assert result == device_entry
     mock_z2m_client.disable_permit_join.assert_called_once()
 
 
-async def test_step_pair_warns_on_wrong_device(pair_device, mock_z2m_client, capsys):
-    """When an unexpected device joins, a warning is printed and polling continues."""
-    wrong_device = {"ieee_address": "0xd44867fffe150421", "friendly_name": "0xd44867fffe150421"}
-    correct_device = {"ieee_address": "0xc4d8c8fffe3ee5cf", "friendly_name": "Hallway Dimmer"}
+async def test_step_pair_successful_interview_registry_fallback(pair_device, mock_z2m_client):
+    """Interview succeeds but get_device_by_ieee returns None — fallback dict returned."""
+    mock_z2m_client.wait_for_interview = AsyncMock(return_value=("successful", {}))
+    mock_z2m_client.get_device_by_ieee = AsyncMock(return_value=None)
 
-    # Call 0: pre-snapshot (empty), Call 1: wrong device joined, Call 2: correct device joined
-    mock_z2m_client.get_devices = AsyncMock(
-        side_effect=[[], [wrong_device], [wrong_device, correct_device]]
-    )
-
-    with patch("questionary.select"), patch("questionary.confirm"):
-        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=20)
-
-    captured = capsys.readouterr()
-    assert "different device joined Z2M" in captured.out
-    assert "0xd44867fffe150421" in captured.out
-    assert result is not None
-    assert result["ieee_address"] == "0xc4d8c8fffe3ee5cf"
-
-
-async def test_step_pair_force_continue_constructs_fallback(pair_device, mock_z2m_client):
-    """Force-continue with device still not found returns an IEEE-based fallback entry."""
-    # Pre-snapshot returns empty; all polls also return empty — device never appears.
-    mock_z2m_client.get_devices = AsyncMock(return_value=[])
-
-    with (
-        patch("questionary.select") as mock_select,
-        patch("zigporter.commands.migrate.asyncio.sleep", new_callable=AsyncMock),
-    ):
-        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="force")
-        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=1)
+    result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=30)
 
     assert result is not None
     assert result["ieee_address"] == "0xc4d8c8fffe3ee5cf"
     assert result["friendly_name"] == "0xc4d8c8fffe3ee5cf"
+
+
+async def test_step_pair_warns_on_wrong_device(pair_device, mock_z2m_client, capsys):
+    """Unexpected joiner triggers a warning via the on_event callback."""
+    device_entry = {"ieee_address": "0xc4d8c8fffe3ee5cf", "friendly_name": "Hallway Dimmer"}
+    mock_z2m_client.get_device_by_ieee = AsyncMock(return_value=device_entry)
+
+    async def _wait_with_events(ieee, timeout, on_event=None):
+        if on_event:
+            on_event(
+                "device_joined",
+                {"ieee_address": "0xd44867fffe150421", "friendly_name": "0xd44867fffe150421"},
+            )
+        return "successful", {}
+
+    mock_z2m_client.wait_for_interview.side_effect = _wait_with_events
+
+    result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=30)
+
+    captured = capsys.readouterr()
+    assert "different device joined Z2M" in captured.out
+    assert "0xd44867fffe150421" in captured.out
+    assert result == device_entry
+
+
+async def test_step_pair_timeout_force_continue_with_device(pair_device, mock_z2m_client):
+    """Timeout + force: device found in registry, returned."""
+    device_entry = {"ieee_address": "0xc4d8c8fffe3ee5cf", "friendly_name": "Hallway Dimmer"}
+    mock_z2m_client.wait_for_interview = AsyncMock(return_value=("timeout", None))
+    mock_z2m_client.get_device_by_ieee = AsyncMock(return_value=device_entry)
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="force")
+        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=30)
+
+    assert result == device_entry
+
+
+async def test_step_pair_timeout_force_continue_fallback(pair_device, mock_z2m_client):
+    """Timeout + force: device not in registry — IEEE-hex fallback dict returned."""
+    mock_z2m_client.wait_for_interview = AsyncMock(return_value=("timeout", None))
+    mock_z2m_client.get_device_by_ieee = AsyncMock(return_value=None)
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="force")
+        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=30)
+
+    assert result is not None
+    assert result["ieee_address"] == "0xc4d8c8fffe3ee5cf"
+    assert result["friendly_name"] == "0xc4d8c8fffe3ee5cf"
+
+
+async def test_step_pair_interview_failed_retry_then_succeeds(pair_device, mock_z2m_client):
+    """Interview fails → user retries → second attempt succeeds."""
+    device_entry = {"ieee_address": "0xc4d8c8fffe3ee5cf", "friendly_name": "Hallway Dimmer"}
+    mock_z2m_client.wait_for_interview = AsyncMock(side_effect=[("failed", {}), ("successful", {})])
+    mock_z2m_client.get_device_by_ieee = AsyncMock(return_value=device_entry)
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="retry")
+        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=30)
+
+    assert result == device_entry
+
+
+async def test_step_pair_interview_failed_force_continue(pair_device, mock_z2m_client):
+    """Interview fails → user force-continues → device from registry returned."""
+    device_entry = {"ieee_address": "0xc4d8c8fffe3ee5cf", "friendly_name": "Hallway Dimmer"}
+    mock_z2m_client.wait_for_interview = AsyncMock(return_value=("failed", {}))
+    mock_z2m_client.get_device_by_ieee = AsyncMock(return_value=device_entry)
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="force")
+        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=30)
+
+    assert result == device_entry
+
+
+async def test_step_pair_interview_failed_mark_as_failed(pair_device, mock_z2m_client):
+    """Interview fails → user marks as failed → None returned."""
+    mock_z2m_client.wait_for_interview = AsyncMock(return_value=("failed", {}))
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="fail")
+        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=30)
+
+    assert result is None
+
+
+async def test_step_pair_ws_error_falls_through_to_timeout(pair_device, mock_z2m_client):
+    """WebSocket error in wait_for_interview → timeout prompt shown."""
+    mock_z2m_client.wait_for_interview = AsyncMock(side_effect=RuntimeError("WS failed"))
+
+    with patch("questionary.select") as mock_select:
+        mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="fail")
+        result = await step_pair_with_z2m(pair_device, mock_z2m_client, timeout=30)
+
+    assert result is None
+    # Timeout prompt was shown (select was called)
+    mock_select.assert_called_once()

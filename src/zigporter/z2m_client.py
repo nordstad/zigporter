@@ -331,3 +331,82 @@ class Z2MClient:
                 f"{self._mqtt_topic}/bridge/request/device/rename",
                 json.dumps({"from": current_name, "to": new_name, "homeassistant_rename": True}),
             )
+
+    async def wait_for_interview(
+        self,
+        ieee: str,
+        timeout: int = 300,
+        on_event: Any = None,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Subscribe to Z2M bridge events and wait for device interview completion.
+
+        Subscribes to ``zigbee2mqtt/bridge/event`` via HA WebSocket and streams
+        events until the target device's interview completes, fails, or the
+        timeout expires.
+
+        ``on_event(event_type, data)`` is called for every bridge event received
+        so the caller can display status updates or detect unexpected joiners.
+
+        Returns a tuple ``(status, data)``:
+
+        - ``("successful", data)`` — interview completed (or device re-announced)
+        - ``("failed", data)``    — interview failed
+        - ``("timeout", None)``   — timed out without a result
+        """
+        target = normalize_ieee(ieee)
+        event_topic = f"{self._mqtt_topic}/bridge/event"
+        ha = self._ha_client()
+        deadline = time.monotonic() + timeout
+
+        async with ha._ws_session() as ws:
+            await ws.send(json.dumps({"id": 1, "type": "mqtt/subscribe", "topic": event_topic}))
+
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return "timeout", None
+
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=min(remaining, 2.0))
+                except asyncio.TimeoutError:
+                    continue
+
+                try:
+                    msg = json.loads(raw)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+
+                # Validate subscribe ACK
+                if msg.get("id") == 1 and msg.get("type") == "result":
+                    if not msg.get("success"):
+                        raise RuntimeError(f"mqtt/subscribe to bridge/event failed: {msg}")
+                    continue
+
+                if msg.get("type") != "event" or msg.get("id") != 1:
+                    continue
+
+                try:
+                    payload = json.loads(msg.get("event", {}).get("payload", "{}"))
+                except (json.JSONDecodeError, ValueError):
+                    continue
+
+                event_type = payload.get("type")
+                data = payload.get("data") or {}
+
+                if on_event is not None:
+                    on_event(event_type, data)
+
+                event_ieee = normalize_ieee(data.get("ieee_address", ""))
+                if event_ieee != target:
+                    continue
+
+                # A device_announce means the device is already paired and working.
+                if event_type == "device_announce":
+                    return "successful", data
+
+                if event_type == "device_interview":
+                    interview_status = data.get("status")
+                    if interview_status == "successful":
+                        return "successful", data
+                    if interview_status == "failed":
+                        return "failed", data
