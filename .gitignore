@@ -26,3 +26,4 @@ zha-export-*.json
 zha-migration-state.json
 progress.md
 process.md
+.DS_Store

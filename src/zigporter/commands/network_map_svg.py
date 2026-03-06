@@ -385,7 +385,7 @@ def _draw_legend(
     )
     g.add(
         dwg.text(
-            "path min LQI (worst hop)",
+            "upstream bottleneck (hidden weak hop)",
             insert=(lx + 30, y),
             fill=TEXT_DIM,
             font_size=LEGEND_FS,
@@ -587,9 +587,13 @@ def render_svg(
             circle_attrs["filter"] = glow_filter
         node_group.add(dwg.circle(**circle_attrs))
 
-        # Path-min LQI badge centered inside the node circle
-        if not is_coord:
-            path_lqi = path_min_lqi.get(ieee, 0)
+        # Path-min LQI badge — only drawn when the bottleneck is upstream (hidden weak hop).
+        # Condition: path_min_lqi < own link LQI  AND  path_min_lqi < warn_lqi.
+        # When visible it always means: "your own link looks fine but something further
+        # up the chain toward the coordinator is weak."
+        own_lqi = lqi_map.get(ieee, 0)
+        path_lqi = path_min_lqi.get(ieee, 0)
+        if not is_coord and path_lqi < own_lqi and path_lqi < warn_lqi:
             lqi_color = _edge_color(path_lqi, warn_lqi, critical_lqi)
             is_router = node_type == "Router"
             badge_fs = "9px" if is_router else "8px"

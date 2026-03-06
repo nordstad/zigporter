@@ -132,8 +132,10 @@ def _coord_annotation(
     clqi = coord_lqi_map[ieee]
     if clqi >= warn_lqi:
         return ""
+    if clqi == 0:
+        return "  [red][no direct path to coordinator][/red]"
     color = "red" if clqi < critical_lqi else "yellow"
-    return f"  [{color}](coord: {clqi})[/{color}]"
+    return f"  [{color}](direct coord: {clqi})[/{color}]"
 
 
 def _render_tree(
