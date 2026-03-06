@@ -11,7 +11,7 @@ import svgwrite
 # ── Visual constants ──────────────────────────────────────────────────────────
 
 MIN_RING_GAP = 90  # minimum px separation between consecutive ring boundaries
-ANGULAR_PADDING = 20  # extra arc per device beyond collision minimum
+ANGULAR_PADDING = 50  # extra arc per device beyond collision minimum
 LABEL_OFFSET = 30  # padding so node midpoint sits inside its ring boundary
 LABEL_MARGIN = 340  # extra canvas padding beyond outermost ring (for labels)
 
@@ -92,8 +92,11 @@ def _compute_ring_radii(
     for h in range(1, max_hops + 1):
         n = count_at_depth.get(h, 1)
         arc_per_device = 2 * NODE_R_ROUTER + COLLISION_GAP + ANGULAR_PADDING
-        min_r_for_devices = (n * arc_per_device) / (2 * math.pi)
-        ring_radii[h] = max(min_r_for_devices + LABEL_OFFSET, prev_r + MIN_RING_GAP)
+        # Nodes are placed at the midpoint: (prev_r + ring_radii[h]) / 2.
+        # Invert to find ring_radii[h] that gives the required node-placement radius.
+        required_node_r = (n * arc_per_device) / (2 * math.pi)
+        min_for_content = 2 * required_node_r - prev_r + LABEL_OFFSET
+        ring_radii[h] = max(min_for_content, prev_r + MIN_RING_GAP)
         prev_r = ring_radii[h]
     return ring_radii
 
