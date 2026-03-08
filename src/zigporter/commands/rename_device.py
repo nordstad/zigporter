@@ -551,8 +551,13 @@ async def resolve_odd_entities(
     odd_entities: list[dict[str, Any]],
     entity_pairs: list[tuple[str, str]],
     new_slug: str,
+    *,
+    apply: bool = False,
 ) -> list[tuple[str, str]]:
     """Interactively prompt the user to handle entities that don't follow the device name pattern.
+
+    When *apply* is True and stdin is not a TTY, automatically accepts the suggested entity ID
+    for each odd entity instead of skipping them.
 
     Returns an extended entity_pairs list (odd entities appended according to user choices).
     """
@@ -560,6 +565,16 @@ async def resolve_odd_entities(
         f"\n  [yellow]{len(odd_entities)} entity(ies) don't follow the device name pattern:[/yellow]"
     )
     if not sys.stdin.isatty():
+        if apply:
+            result = list(entity_pairs)
+            for entity in odd_entities:
+                suggested = _suggest_entity_id(entity, new_slug)
+                console.print(
+                    f"  [dim]Auto-accepting suggested rename (--apply):[/dim] "
+                    f"[bold]{entity['entity_id']}[/bold] → [cyan]{suggested}[/cyan]"
+                )
+                result.append((entity["entity_id"], suggested))
+            return result
         console.print("  [dim]Skipping odd entities (no TTY for interactive prompt).[/dim]")
         return entity_pairs
 
@@ -734,7 +749,7 @@ async def run_rename_device(
     entity_pairs, odd_entities = compute_entity_pairs(entities, old_slug, new_slug)
 
     if odd_entities:
-        entity_pairs = await resolve_odd_entities(odd_entities, entity_pairs, new_slug)
+        entity_pairs = await resolve_odd_entities(odd_entities, entity_pairs, new_slug, apply=apply)
 
     if not entity_pairs:
         console.print("\n[yellow]No entities to rename.[/yellow]")
