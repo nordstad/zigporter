@@ -21,11 +21,15 @@ available it is selected silently.  If both are available, you are prompted to c
 
 ### ZHA topology availability
 
-ZHA topology scanning (multi-hop routing paths) requires a HA version that exposes the
-`zha/topology/scan_now` WebSocket command.  When that endpoint is not available, zigporter
-automatically falls back to a **flat view**: all devices appear at depth 1 under the
-coordinator, using the per-device LQI stored in ZHA's device registry.  A note is printed
-when the flat view is active.
+Multi-hop routing paths are read from the **neighbor tables** embedded in each device's
+`zha/devices` response.  ZHA populates these via its periodic ZDO topology scan.  When
+no device has neighbor data yet (e.g. ZHA has never completed a topology scan on this
+installation), zigporter automatically falls back to a **flat view**: all devices appear
+at depth 1 under the coordinator, using the per-device LQI stored in ZHA's device
+registry.  A note is printed when the flat view is active.
+
+To get multi-hop routing data, trigger a scan from ZHA settings
+(**Network visualisation → Scan**), wait for it to complete, then re-run.
 
 Flat-view limitations:
 
@@ -113,9 +117,10 @@ network-map scan data.  This is the quality of the edge drawn in the tree and re
 the link the device actually uses to forward traffic.
 
 !!! note "ZHA flat view"
-    When ZHA's topology scan endpoint is unavailable, the tree is always one hop deep and
-    LQI comes from ZHA's per-device last-observed value rather than a fresh bidirectional
-    scan.  The `(coord: N)` annotation is not shown in flat view.
+    When no device has neighbor data from a ZHA topology scan, the tree is always one hop
+    deep and LQI comes from ZHA's per-device last-observed value.  The `(coord: N)`
+    annotation is not shown in flat view.  Trigger a scan from ZHA settings
+    (**Network visualisation → Scan**) to get full routing paths.
 
 Using the minimum of both directions matters because Zigbee links are asymmetric: a
 device may hear the coordinator at LQI 115 while the coordinator only hears the device
