@@ -11,6 +11,7 @@ from rich.console import Console
 
 from zigporter.commands.network_map import (
     _build_routing_tree,
+    _build_zha_topology_from_devices,
     _normalize_zha_topology,
     run_network_map,
 )
@@ -800,14 +801,183 @@ def test_build_flat_zha_topology_no_coordinator_skips_links():
 
 
 # ---------------------------------------------------------------------------
+# _build_zha_topology_from_devices unit tests
+# ---------------------------------------------------------------------------
+
+# ZHA devices as returned by zha/devices — lqi in neighbors is a STRING
+MOCK_ZHA_DEVICES_WITH_NEIGHBORS: list[dict] = [
+    {
+        "ieee": "00:00:00:00:00:00:00:00",
+        "device_type": "Coordinator",
+        "name": "Coordinator",
+        "neighbors": [
+            {"ieee": "00:00:00:00:00:00:00:01", "lqi": "172", "relationship": "Neighbor"},
+        ],
+    },
+    {
+        "ieee": "00:00:00:00:00:00:00:01",
+        "device_type": "Router",
+        "name": "Range Extender",
+        "neighbors": [
+            {"ieee": "00:00:00:00:00:00:00:00", "lqi": "170", "relationship": "Neighbor"},
+            # Router claims sensor as its Child — actual parent relationship
+            {"ieee": "00:00:00:00:00:00:00:02", "lqi": "180", "relationship": "Child"},
+        ],
+    },
+    {
+        "ieee": "00:00:00:00:00:00:00:02",
+        "device_type": "EndDevice",
+        "name": "Temp Sensor",
+        "neighbors": [
+            # Sensor reports router as Parent
+            {"ieee": "00:00:00:00:00:00:00:01", "lqi": "178", "relationship": "Parent"},
+        ],
+    },
+]
+
+
+def test_build_zha_topology_from_devices_node_count():
+
+    nodes, _ = _build_zha_topology_from_devices(MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
+    assert len(nodes) == 3
+
+
+def test_build_zha_topology_from_devices_lqi_string_converted():
+    """Neighbor LQI strings are converted to int."""
+
+    _, links = _build_zha_topology_from_devices(MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
+    for lk in links:
+        assert isinstance(lk["lqi"], int), f"expected int LQI, got {type(lk['lqi'])}"
+
+
+def test_build_zha_topology_from_devices_relationship_forwarded():
+    """relationship field is forwarded to links."""
+
+    _, links = _build_zha_topology_from_devices(MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
+    # Router's neighbor list entry for sensor has relationship="Child"
+    # → link {source: sensor, target: router, relationship: "Child"}
+    router_ieee = "0000000000000001"
+    sensor_ieee = "0000000000000002"
+    child_links = [
+        lk
+        for lk in links
+        if lk["source"]["ieeeAddr"] == sensor_ieee and lk["target"]["ieeeAddr"] == router_ieee
+    ]
+    assert len(child_links) == 1
+    assert child_links[0]["relationship"] == "Child"
+
+
+def test_build_zha_topology_from_devices_sensor_at_depth2():
+    """Sensor should be placed at depth 2 via the router, not depth 1 via coordinator.
+
+    This is the core bug fix: coordinator also hears the sensor (Neighbor relationship),
+    but the router has relationship='Child' for the sensor, making it the authoritative
+    parent.  Even when coordinator is processed first in the BFS, re-placement ensures
+    the sensor moves to depth 2 once the router joins the tree.
+    """
+
+    # Add a coordinator→sensor "Neighbor" link so the bug scenario is triggered:
+    # coordinator overhears the sensor on the air even though sensor joined the router.
+    devices = [
+        {
+            "ieee": "00:00:00:00:00:00:00:00",
+            "device_type": "Coordinator",
+            "name": "Coordinator",
+            "neighbors": [
+                {"ieee": "00:00:00:00:00:00:00:01", "lqi": "172", "relationship": "Neighbor"},
+                # Coordinator overhears the sensor — NOT its direct child
+                {"ieee": "00:00:00:00:00:00:00:02", "lqi": "176", "relationship": "Neighbor"},
+            ],
+        },
+        {
+            "ieee": "00:00:00:00:00:00:00:01",
+            "device_type": "Router",
+            "name": "Range Extender",
+            "neighbors": [
+                {"ieee": "00:00:00:00:00:00:00:00", "lqi": "170", "relationship": "Neighbor"},
+                {"ieee": "00:00:00:00:00:00:00:02", "lqi": "180", "relationship": "Child"},
+            ],
+        },
+        {
+            "ieee": "00:00:00:00:00:00:00:02",
+            "device_type": "EndDevice",
+            "name": "Temp Sensor",
+            "neighbors": [
+                {"ieee": "00:00:00:00:00:00:00:01", "lqi": "178", "relationship": "Parent"},
+            ],
+        },
+    ]
+    nodes, links = _build_zha_topology_from_devices(devices)
+    _, _, depth_map = _build_routing_tree(nodes, links)
+    assert depth_map["0000000000000001"] == 1, "router should be at hop 1"
+    assert depth_map["0000000000000002"] == 2, (
+        "sensor should be at hop 2 via router, not hop 1 via coordinator"
+    )
+
+
+def test_build_routing_tree_replaces_node_when_better_parent_found():
+    """Re-placement: a node initially placed at depth 1 via coordinator should be
+    promoted to depth 2 via a router when the router joins the tree with a better
+    (Child-relationship) link, even though the coordinator link has higher raw LQI."""
+    coord = "0000000000000000"
+    router = "0000000000000001"
+    sensor = "0000000000000002"
+    nodes = {
+        coord: {"ieeeAddr": coord, "friendlyName": "Coordinator", "type": "Coordinator"},
+        router: {"ieeeAddr": router, "friendlyName": "Range Extender", "type": "Router"},
+        sensor: {"ieeeAddr": sensor, "friendlyName": "Temp Sensor", "type": "EndDevice"},
+    }
+    links = [
+        # Coordinator overhears sensor with HIGH LQI — but sensor is not its child
+        {
+            "source": {"ieeeAddr": sensor},
+            "target": {"ieeeAddr": coord},
+            "lqi": 200,
+            "relationship": "Neighbor",
+        },
+        # Coordinator ↔ router
+        {
+            "source": {"ieeeAddr": router},
+            "target": {"ieeeAddr": coord},
+            "lqi": 172,
+            "relationship": "Neighbor",
+        },
+        {
+            "source": {"ieeeAddr": coord},
+            "target": {"ieeeAddr": router},
+            "lqi": 170,
+            "relationship": "Neighbor",
+        },
+        # Router claims sensor as Child — authoritative parent link (lower raw LQI)
+        {
+            "source": {"ieeeAddr": sensor},
+            "target": {"ieeeAddr": router},
+            "lqi": 180,
+            "relationship": "Child",
+        },
+        {
+            "source": {"ieeeAddr": router},
+            "target": {"ieeeAddr": sensor},
+            "lqi": 178,
+            "relationship": "Parent",
+        },
+    ]
+    _, _, depth_map = _build_routing_tree(nodes, links)
+    assert depth_map[router] == 1
+    assert depth_map[sensor] == 2, (
+        "sensor should be at depth 2 via router (Child relationship) "
+        "even though coordinator has higher raw LQI to sensor"
+    )
+
+
+# ---------------------------------------------------------------------------
 # ZHA backend integration test via run_network_map
 # ---------------------------------------------------------------------------
 
 
-async def _run_zha_with_capture(topology: dict, devices: list) -> str:
+async def _run_zha_with_capture(devices: list) -> str:
+    """Run ZHA network-map and return captured console output."""
     mock_ha_client = AsyncMock()
-    mock_ha_client.get_zha_network_topology = AsyncMock(return_value=topology)
-    mock_ha_client.run_zha_topology_scan = AsyncMock()
     mock_ha_client.get_zha_devices = AsyncMock(return_value=devices)
 
     buf = io.StringIO()
@@ -830,48 +1000,54 @@ async def _run_zha_with_capture(topology: dict, devices: list) -> str:
 
 
 async def test_zha_backend_shows_coordinator():
-    output = await _run_zha_with_capture(MOCK_ZHA_TOPOLOGY, MOCK_ZHA_DEVICES)
+    output = await _run_zha_with_capture(MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
     assert "Coordinator" in output
 
 
 async def test_zha_backend_shows_device_name():
-    output = await _run_zha_with_capture(MOCK_ZHA_TOPOLOGY, MOCK_ZHA_DEVICES)
+    """user_given_name is shown in output."""
+    devices = [
+        {
+            "ieee": "00:00:00:00:00:00:00:00",
+            "device_type": "Coordinator",
+            "name": "Coordinator",
+            "user_given_name": None,
+            "neighbors": [
+                {"ieee": "00:00:00:00:00:00:00:01", "lqi": "200", "relationship": "Neighbor"}
+            ],
+        },
+        {
+            "ieee": "00:00:00:00:00:00:00:01",
+            "device_type": "Router",
+            "name": "Router 1",
+            "user_given_name": "Living Room Switch",
+            "neighbors": [
+                {"ieee": "00:00:00:00:00:00:00:00", "lqi": "195", "relationship": "Neighbor"}
+            ],
+        },
+    ]
+    output = await _run_zha_with_capture(devices)
     assert "Living Room Switch" in output
 
 
 async def test_zha_backend_summary_label():
-    output = await _run_zha_with_capture(MOCK_ZHA_TOPOLOGY, MOCK_ZHA_DEVICES)
+    output = await _run_zha_with_capture(MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
     assert "ZHA" in output
 
 
-async def test_zha_backend_triggers_scan_when_topology_empty():
-    """When cached topology is empty, scan is triggered; topology returned by scan is used."""
+async def test_zha_backend_uses_neighbor_data_for_routing():
+    """Devices with neighbor data are placed at correct hop depth via the routing tree."""
+    output = await _run_zha_with_capture(MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
+    # MOCK_ZHA_DEVICES_WITH_NEIGHBORS has Temp Sensor as a child of Range Extender (hop 2).
+    # Coordinator and Range Extender are at hop 1.
+    assert "Coordinator" in output
+    assert "Range Extender" in output
+    assert "Temp Sensor" in output
+
+
+async def test_zha_backend_flat_fallback_when_no_neighbor_data():
+    """When devices have no neighbour data, flat view is shown."""
     mock_ha_client = AsyncMock()
-    # get_zha_network_topology always returns {} (command unavailable in this HA version)
-    mock_ha_client.get_zha_network_topology = AsyncMock(return_value={})
-    # run_zha_topology_scan returns topology directly (HA version that supports it)
-    mock_ha_client.run_zha_topology_scan = AsyncMock(return_value=MOCK_ZHA_TOPOLOGY)
-    mock_ha_client.get_zha_devices = AsyncMock(return_value=MOCK_ZHA_DEVICES)
-
-    buf = io.StringIO()
-    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
-
-    with (
-        patch("zigporter.commands.network_map.HAClient", return_value=mock_ha_client),
-        patch("zigporter.commands.network_map.console", cap_console),
-        patch("zigporter.commands.network_map.Progress", return_value=_make_mock_progress()),
-    ):
-        await run_network_map(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, backend="zha")
-
-    mock_ha_client.run_zha_topology_scan.assert_called_once()
-    assert "Coordinator" in buf.getvalue()
-
-
-async def test_zha_backend_flat_fallback_when_no_topology_scan():
-    """When both get_zha_network_topology and scan_now return {}, flat view is shown."""
-    mock_ha_client = AsyncMock()
-    mock_ha_client.get_zha_network_topology = AsyncMock(return_value={})
-    mock_ha_client.run_zha_topology_scan = AsyncMock(return_value={})
     mock_ha_client.get_zha_devices = AsyncMock(return_value=MOCK_ZHA_DEVICES)
 
     buf = io.StringIO()
@@ -893,9 +1069,7 @@ async def test_zha_backend_flat_fallback_when_no_topology_scan():
 async def test_auto_backend_picks_zha_when_z2m_url_empty():
     """With no Z2M_URL and ZHA available, auto should resolve to ZHA."""
     mock_ha_client = AsyncMock()
-    mock_ha_client.get_zha_devices = AsyncMock(return_value=MOCK_ZHA_DEVICES)
-    mock_ha_client.get_zha_network_topology = AsyncMock(return_value=MOCK_ZHA_TOPOLOGY)
-    mock_ha_client.run_zha_topology_scan = AsyncMock()
+    mock_ha_client.get_zha_devices = AsyncMock(return_value=MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
 
     buf = io.StringIO()
     cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)

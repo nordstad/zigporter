@@ -183,19 +183,20 @@ class HAClient:
             return {}
 
     async def run_zha_topology_scan(self) -> dict[str, Any]:
-        """Trigger a ZHA network topology scan and wait for it to complete.
+        """Trigger a ZHA network topology scan.
 
-        Sends ``zha/topology/scan_now`` which blocks until the scan finishes
-        (typically 30–90 s for real networks).  Some HA versions return the topology
-        dict directly in the response; others return an empty acknowledgement.
-        Returns the response dict (may be empty) or ``{}`` if the command is
-        unavailable in this HA version.
+        Sends ``zha/topology/update`` which fires an async background scan in HA
+        and returns immediately (empty acknowledgement).  The updated neighbor
+        tables become available in the next ``zha/devices`` response once the scan
+        completes (typically 30–90 s on real networks).
+        Returns ``{}`` always; caller should re-fetch ``get_zha_devices()`` after
+        waiting if fresh data is needed.
         """
         try:
-            result = await self._ws_command({"type": "zha/topology/scan_now"})
-            return result or {}
+            await self._ws_command({"type": "zha/topology/update"})
         except RuntimeError:
-            return {}
+            pass
+        return {}
 
     async def get_entity_registry(self) -> list[dict[str, Any]]:
         """Fetch the full entity registry."""

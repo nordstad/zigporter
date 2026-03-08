@@ -73,7 +73,11 @@ def _normalize_zha_topology(
 
         for neighbor in dev_data.get("neighbors", []):
             n_ieee = normalize_ieee(neighbor.get("ieee", ""))
-            lqi = neighbor.get("lqi", 0)
+            lqi = _zha_lqi(neighbor.get("lqi"))
+            # ZHA includes a "relationship" field from the ZDO neighbor table:
+            # "Child" means the scanning device is the parent of n_ieee.
+            # Passed through to _build_routing_tree to prefer authoritative parent links.
+            relationship = neighbor.get("relationship", "")
             if n_ieee:
                 # source=neighbor, target=scanner — matches Z2M link convention
                 links.append(
@@ -81,8 +85,79 @@ def _normalize_zha_topology(
                         "source": {"ieeeAddr": n_ieee},
                         "target": {"ieeeAddr": ieee},
                         "lqi": lqi,
+                        "relationship": relationship,
                     }
                 )
+
+    return nodes, links
+
+
+def _zha_lqi(raw: str | int | None) -> int:
+    """Convert a ZHA LQI value to int.
+
+    HA serialises neighbor LQI as a string (``str(neighbor.lqi)``); the
+    top-level device ``lqi`` field is an int or None.  This helper handles
+    both forms and returns 0 on any parse failure.
+    """
+    if raw is None:
+        return 0
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return 0
+
+
+def _build_zha_topology_from_devices(
+    zha_devices: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """Build routing topology from the neighbor tables embedded in ``zha/devices``.
+
+    Each device in the ZHA devices list includes a ``neighbors`` list populated
+    from the ZDO neighbor-table scan that ZHA runs periodically.  Each neighbor
+    entry contains:
+
+    * ``"ieee"``         — IEEE address of the neighbor (colon format)
+    * ``"lqi"``          — LQI **as a string** (HA serialises it via ``str()``)
+    * ``"relationship"`` — ZDO relationship name, e.g. ``"Child"``, ``"Neighbor"``,
+                           ``"Parent"`` — **not** present when ZHA has no scan data
+
+    A ``"Child"`` relationship means the *scanning* device is the parent of the
+    neighbor.  Passing this through to ``_build_routing_tree`` as the link
+    ``"relationship"`` field lets the tree builder prefer authoritative parent
+    links over same-LQI coordinator overhear links.
+
+    Falls back silently to an empty link list (flat view) when no device has
+    neighbor data (e.g. ZHA has never completed a topology scan).
+    """
+    nodes: dict[str, dict[str, Any]] = {}
+    links: list[dict[str, Any]] = []
+
+    for dev in zha_devices:
+        raw_ieee = dev.get("ieee", "")
+        if not raw_ieee:
+            continue
+        ieee = normalize_ieee(raw_ieee)
+        name = dev.get("user_given_name") or dev.get("name") or raw_ieee
+        device_type = dev.get("device_type") or "EndDevice"
+        nodes[ieee] = {"ieeeAddr": ieee, "friendlyName": name, "type": device_type}
+
+        for neighbor in dev.get("neighbors", []):
+            n_raw_ieee = neighbor.get("ieee", "")
+            if not n_raw_ieee:
+                continue
+            n_ieee = normalize_ieee(n_raw_ieee)
+            lqi = _zha_lqi(neighbor.get("lqi"))
+            relationship = neighbor.get("relationship", "")
+            # source=neighbor, target=scanner — matches Z2M link convention.
+            # relationship="Child" means the scanner (dev) is the parent of n_ieee.
+            links.append(
+                {
+                    "source": {"ieeeAddr": n_ieee},
+                    "target": {"ieeeAddr": ieee},
+                    "lqi": lqi,
+                    "relationship": relationship,
+                }
+            )
 
     return nodes, links
 
@@ -214,14 +289,16 @@ def _build_routing_tree(
         depth_map:   ieee → hops from coordinator
     """
     # Build per-directed-pair LQI: (source, target) → lqi
+    # outgoing: source → [(target, lqi, relationship)]
     pair_lqi: dict[tuple[str, str], int] = {}
-    outgoing: dict[str, list[tuple[str, int]]] = {}
+    outgoing: dict[str, list[tuple[str, int, str | int]]] = {}
     for link in links:
         src = link["source"]["ieeeAddr"].lower()
         tgt = link["target"]["ieeeAddr"].lower()
         lqi = link.get("lqi", 0)
+        relationship = link.get("relationship", "")
         pair_lqi[(src, tgt)] = lqi
-        outgoing.setdefault(src, []).append((tgt, lqi))
+        outgoing.setdefault(src, []).append((tgt, lqi, relationship))
 
     # Locate coordinator
     coordinator_ieee: str | None = None
@@ -237,29 +314,55 @@ def _build_routing_tree(
     lqi_map: dict[str, int] = {}
     depth_map: dict[str, int] = {coordinator_ieee: 0}
     visited: set[str] = {coordinator_ieee}
+    # Track the best score seen for each placed node so that already-visited nodes can
+    # be re-placed when a strictly better parent is found later in the same pass or a
+    # subsequent pass.
+    #
+    # Score = (is_child_rel, effective_lqi).
+    #
+    # is_child_rel=1 when the candidate router explicitly claims this device as its
+    # child via the ZHA ZDO relationship field (string "Child" or integer 1 from
+    # bellows/zigpy serialisation).  Putting is_child first means a "Child" link
+    # always beats a higher-LQI "Neighbor" link from the coordinator — correct
+    # because the coordinator sometimes overhears end-devices that have actually
+    # joined a range extender.
+    #
+    # "Parent" relationship edges are skipped: a link whose relationship is "Parent"
+    # means the *current* device is the parent of the candidate (i.e. the edge points
+    # in the wrong direction for BFS parent selection) and would create routing cycles.
+    #
+    # Re-placement is safe because scores are strictly monotone increasing and bounded:
+    # is_child ∈ {0,1}, effective_lqi ∈ [0,255].  The while-loop always terminates.
+    best_score_map: dict[str, tuple[int, int]] = {}
 
-    # Iterative fixed-point: keep adding nodes whose best reachable neighbor is in tree
     changed = True
     while changed:
         changed = False
         for ieee in nodes:
-            if ieee in visited:
+            if nodes[ieee].get("type") == "Coordinator":
                 continue
             best_parent: str | None = None
-            best_lqi = -1
-            for tgt, lqi_out in outgoing.get(ieee, []):
+            best_score: tuple[int, int] = (-1, -1)
+            for tgt, lqi_out, relationship in outgoing.get(ieee, []):
                 if tgt not in visited:
+                    continue
+                # "Parent" means the current node is the parent of tgt — wrong direction.
+                if relationship in ("Parent", "PreviousChild"):
                     continue
                 # Use the weaker of the two directions — Zigbee links are asymmetric
                 # and the bottleneck is whichever side has the lower receive quality.
                 lqi_in = pair_lqi.get((tgt, ieee), lqi_out)
                 effective_lqi = min(lqi_out, lqi_in)
-                if effective_lqi > best_lqi:
-                    best_lqi = effective_lqi
+                # Accept both string ("Child") and integer (1) from ZHA/bellows.
+                is_child = 1 if relationship in ("Child", 1) else 0
+                score = (is_child, effective_lqi)
+                if score > best_score:
+                    best_score = score
                     best_parent = tgt
-            if best_parent is not None:
+            if best_parent is not None and best_score > best_score_map.get(ieee, (-1, -1)):
+                best_score_map[ieee] = best_score
                 parent_map[ieee] = best_parent
-                lqi_map[ieee] = best_lqi
+                lqi_map[ieee] = best_score[1]
                 depth_map[ieee] = depth_map[best_parent] + 1
                 visited.add(ieee)
                 changed = True
@@ -470,19 +573,14 @@ async def _fetch_zha_data(
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]] | None:
     """Fetch network topology from ZHA. Returns (nodes, links) or None on error.
 
-    Topology resolution order:
-    1. ``zha/network_topology`` — cached scan result (some HA versions).
-    2. ``zha/topology/scan_now`` — triggers a scan; some HA versions return the
-       topology dict directly in the response.
-    3. After scan, re-try ``zha/network_topology`` in case it was populated.
-    4. Flat fallback: all devices at depth 1 using per-device LQI from
-       ``zha/devices``.  Routing paths are not shown but link quality is.
+    Calls ``zha/devices`` and builds the routing tree from the per-device neighbor
+    tables (ZDO scan data) that HA already embeds in each ``zha_device_info``.
+    Falls back to a flat single-hop view when no device has neighbor data yet.
     """
     ha_client = HAClient(ha_url, token, verify_ssl)
 
     with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
-        t = progress.add_task("Fetching ZHA network topology...", total=None)
-        start = time.monotonic()
+        t = progress.add_task("Fetching ZHA devices...", total=None)
         try:
             zha_devices = await ha_client.get_zha_devices()
             if not zha_devices:
@@ -492,29 +590,6 @@ async def _fetch_zha_data(
                     "[dim]Ensure ZHA is installed and has paired devices.[/dim]"
                 )
                 return None
-
-            # 1. Try cached topology
-            topology = await ha_client.get_zha_network_topology()
-
-            if not topology:
-                # 2. Trigger scan — may return topology directly or just ack {}
-                progress.update(
-                    t, description="Scanning ZHA network topology (may take up to 90s)..."
-                )
-                scan = asyncio.create_task(ha_client.run_zha_topology_scan())
-                while not scan.done():
-                    await asyncio.sleep(1)
-                    elapsed = int(time.monotonic() - start)
-                    progress.update(t, description=f"Scanning ZHA network topology... {elapsed}s")
-                scan_result = scan.result()
-
-                # scan_now returns topology directly in some HA versions
-                if scan_result:
-                    topology = scan_result
-                else:
-                    # 3. Re-fetch cached topology after scan
-                    topology = await ha_client.get_zha_network_topology()
-
         except Exception as exc:  # noqa: BLE001
             progress.update(t, description="Failed")
             console.print(f"\n[red]Error:[/red] Could not fetch ZHA data — {exc}")
@@ -525,14 +600,21 @@ async def _fetch_zha_data(
             return None
         progress.update(t, description="Done")
 
-    if topology:
-        nodes, links = _normalize_zha_topology(topology, zha_devices)
+    # Use the neighbor tables embedded in each device's zha_device_info.
+    # These come from ZHA's periodic ZDO topology scan and include the "relationship"
+    # field that correctly resolves parent-child links even when the coordinator
+    # overhears end-devices that have actually joined a range extender.
+    # Fall back to a flat single-hop view only when no device has neighbour data
+    # (e.g. ZHA has never run a topology scan on this installation).
+    has_neighbors = any(dev.get("neighbors") for dev in zha_devices)
+    if has_neighbors:
+        nodes, links = _build_zha_topology_from_devices(zha_devices)
     else:
-        # 4. Flat fallback — device LQI only, no routing paths
         nodes, links = _build_flat_zha_topology(zha_devices)
         console.print(
-            "[dim]ZHA topology scan not available in this HA version — "
-            "showing flat view with per-device LQI.[/dim]"
+            "[dim]ZHA has no topology scan data yet — showing flat view.\n"
+            "Trigger a scan from ZHA settings (Network visualisation → Scan) "
+            "then re-run.[/dim]"
         )
 
     return nodes, links
