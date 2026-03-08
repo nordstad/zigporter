@@ -12,7 +12,6 @@ from rich.console import Console
 from zigporter.commands.network_map import (
     _build_routing_tree,
     _build_zha_topology_from_devices,
-    _normalize_zha_topology,
     run_network_map,
 )
 from zigporter.commands.network_map_svg import (
@@ -608,116 +607,12 @@ def test_compute_ring_radii_sparse_outer_hops_respect_min_gap():
         assert gap >= MIN_RING_GAP, f"hop {h} gap {gap:.1f}px < MIN_RING_GAP {MIN_RING_GAP}"
 
 
-# ---------------------------------------------------------------------------
-# ZHA normalization unit tests
-# ---------------------------------------------------------------------------
-
-# Minimal ZHA topology returned by zha/network_topology
-MOCK_ZHA_TOPOLOGY: dict = {
-    "00:00:00:00:00:00:00:00": {
-        "ieee": "00:00:00:00:00:00:00:00",
-        "device_type": "Coordinator",
-        "user_given_name": None,
-        "name": "Coordinator",
-        "neighbors": [
-            {"ieee": "00:00:00:00:00:00:00:01", "lqi": 220},
-            {"ieee": "00:00:00:00:00:00:00:02", "lqi": 180},
-        ],
-    },
-    "00:00:00:00:00:00:00:01": {
-        "ieee": "00:00:00:00:00:00:00:01",
-        "device_type": "Router",
-        "user_given_name": "Living Room Switch",
-        "name": "Router 1",
-        "neighbors": [
-            {"ieee": "00:00:00:00:00:00:00:00", "lqi": 215},
-            {"ieee": "00:00:00:00:00:00:00:03", "lqi": 160},
-        ],
-    },
-    "00:00:00:00:00:00:00:02": {
-        "ieee": "00:00:00:00:00:00:00:02",
-        "device_type": "Router",
-        "user_given_name": None,
-        "name": "Router 2",
-        "neighbors": [
-            {"ieee": "00:00:00:00:00:00:00:00", "lqi": 170},
-        ],
-    },
-    "00:00:00:00:00:00:00:03": {
-        "ieee": "00:00:00:00:00:00:00:03",
-        "device_type": "EndDevice",
-        "user_given_name": "Bedroom Sensor",
-        "name": "Sensor",
-        "neighbors": [
-            {"ieee": "00:00:00:00:00:00:00:01", "lqi": 155},
-        ],
-    },
-}
-
 MOCK_ZHA_DEVICES: list[dict] = [
     {"ieee": "00:00:00:00:00:00:00:00", "device_type": "Coordinator", "name": "Coordinator"},
     {"ieee": "00:00:00:00:00:00:00:01", "device_type": "Router", "name": "Router 1"},
     {"ieee": "00:00:00:00:00:00:00:02", "device_type": "Router", "name": "Router 2"},
     {"ieee": "00:00:00:00:00:00:00:03", "device_type": "EndDevice", "name": "Sensor"},
 ]
-
-
-def test_normalize_zha_topology_node_count():
-    nodes, _ = _normalize_zha_topology(MOCK_ZHA_TOPOLOGY, MOCK_ZHA_DEVICES)
-    assert len(nodes) == 4
-
-
-def test_normalize_zha_topology_coordinator_type():
-    nodes, _ = _normalize_zha_topology(MOCK_ZHA_TOPOLOGY, MOCK_ZHA_DEVICES)
-    coord = nodes["0000000000000000"]
-    assert coord["type"] == "Coordinator"
-
-
-def test_normalize_zha_topology_user_given_name_preferred():
-    nodes, _ = _normalize_zha_topology(MOCK_ZHA_TOPOLOGY, MOCK_ZHA_DEVICES)
-    # Router 1 has user_given_name "Living Room Switch"
-    assert nodes["0000000000000001"]["friendlyName"] == "Living Room Switch"
-
-
-def test_normalize_zha_topology_falls_back_to_name():
-    nodes, _ = _normalize_zha_topology(MOCK_ZHA_TOPOLOGY, MOCK_ZHA_DEVICES)
-    # Router 2 has no user_given_name, falls back to "name"
-    assert nodes["0000000000000002"]["friendlyName"] == "Router 2"
-
-
-def test_normalize_zha_topology_links_direction():
-    """Each neighbor entry in device D's list becomes source=neighbor, target=D."""
-    _, links = _normalize_zha_topology(MOCK_ZHA_TOPOLOGY, MOCK_ZHA_DEVICES)
-    # Coordinator has neighbor 0x01 with lqi=220 → link: source=0x01, target=coordinator
-    coord_ieee = "0000000000000000"
-    router1_ieee = "0000000000000001"
-    matching = [
-        lk
-        for lk in links
-        if lk["source"]["ieeeAddr"] == router1_ieee
-        and lk["target"]["ieeeAddr"] == coord_ieee
-        and lk["lqi"] == 220
-    ]
-    assert len(matching) == 1, "expected one link: source=router1, target=coordinator, lqi=220"
-
-
-def test_normalize_zha_topology_link_count():
-    _, links = _normalize_zha_topology(MOCK_ZHA_TOPOLOGY, MOCK_ZHA_DEVICES)
-    # coordinator(2) + router1(2) + router2(1) + sensor(1) = 6 links
-    assert len(links) == 6
-
-
-def test_normalize_zha_topology_empty_input():
-    nodes, links = _normalize_zha_topology({}, [])
-    assert nodes == {}
-    assert links == []
-
-
-def test_normalize_zha_topology_skips_missing_ieee():
-    topology = {"": {"device_type": "Router", "name": "Bad", "neighbors": []}}
-    nodes, links = _normalize_zha_topology(topology, [])
-    assert nodes == {}
-    assert links == []
 
 
 # ---------------------------------------------------------------------------
@@ -1105,3 +1000,69 @@ async def test_auto_backend_error_when_neither_available():
         await run_network_map(HA_URL, TOKEN, z2m_url="", verify_ssl=False, backend="auto")
 
     assert "Neither" in buf.getvalue() or "not available" in buf.getvalue()
+
+
+async def test_auto_backend_prompts_when_both_available_selects_z2m():
+    """When both Z2M and ZHA are available, user is prompted; selecting z2m shows Z2M output."""
+    mock_ha_client = AsyncMock()
+    mock_ha_client.get_zha_devices = AsyncMock(return_value=MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
+
+    mock_z2m_client = AsyncMock()
+    mock_z2m_client.get_network_map = AsyncMock(return_value=MOCK_NETWORK_MAP_RESPONSE)
+
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+
+    mock_select = AsyncMock(return_value="z2m")
+
+    with (
+        patch("zigporter.commands.network_map.HAClient", return_value=mock_ha_client),
+        patch("zigporter.commands.network_map.Z2MClient", return_value=mock_z2m_client),
+        patch("zigporter.commands.network_map.console", cap_console),
+        patch("zigporter.commands.network_map.Progress", return_value=_make_mock_progress()),
+        patch(
+            "zigporter.commands.network_map.questionary.select",
+            return_value=type("S", (), {"ask_async": mock_select})(),
+        ),
+    ):
+        await run_network_map(
+            HA_URL,
+            TOKEN,
+            Z2M_URL,
+            verify_ssl=False,
+            backend="auto",
+        )
+
+    output = buf.getvalue()
+    assert "Z2M" in output
+
+
+async def test_auto_backend_prompts_when_both_available_selects_zha():
+    """When both Z2M and ZHA are available, user is prompted; selecting zha shows ZHA output."""
+    mock_ha_client = AsyncMock()
+    mock_ha_client.get_zha_devices = AsyncMock(return_value=MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
+
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+
+    mock_select = AsyncMock(return_value="zha")
+
+    with (
+        patch("zigporter.commands.network_map.HAClient", return_value=mock_ha_client),
+        patch("zigporter.commands.network_map.console", cap_console),
+        patch("zigporter.commands.network_map.Progress", return_value=_make_mock_progress()),
+        patch(
+            "zigporter.commands.network_map.questionary.select",
+            return_value=type("S", (), {"ask_async": mock_select})(),
+        ),
+    ):
+        await run_network_map(
+            HA_URL,
+            TOKEN,
+            Z2M_URL,
+            verify_ssl=False,
+            backend="auto",
+        )
+
+    output = buf.getvalue()
+    assert "ZHA" in output

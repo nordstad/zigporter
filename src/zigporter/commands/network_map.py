@@ -22,76 +22,6 @@ console = Console()
 # ---------------------------------------------------------------------------
 
 
-def _normalize_zha_topology(
-    topology: dict[str, Any],
-    zha_devices: list[dict[str, Any]],
-) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
-    """Convert ZHA network topology to the (nodes, links) format used by the renderers.
-
-    ZHA device type strings ("Coordinator", "Router", "EndDevice") match Z2M's
-    convention, so no translation is needed.  IEEE addresses are in colon format
-    in ZHA and are normalized to lowercase hex strings for consistency.
-
-    Link convention (matching Z2M): source=neighbor (device being measured),
-    target=scanning device (device doing the measuring),
-    lqi=measured by scanning device.
-    """
-    # Build fallback name/type lookup from zha/devices
-    device_info: dict[str, dict[str, Any]] = {}
-    for dev in zha_devices:
-        ieee = normalize_ieee(dev.get("ieee", ""))
-        if ieee:
-            device_info[ieee] = dev
-
-    nodes: dict[str, dict[str, Any]] = {}
-    links: list[dict[str, Any]] = []
-
-    for raw_ieee, dev_data in topology.items():
-        if not raw_ieee or not raw_ieee.strip():
-            continue
-        ieee = normalize_ieee(raw_ieee)
-
-        name = (
-            dev_data.get("user_given_name")
-            or dev_data.get("name")
-            or device_info.get(ieee, {}).get("user_given_name")
-            or device_info.get(ieee, {}).get("name")
-            or raw_ieee
-        )
-
-        device_type = (
-            dev_data.get("device_type")
-            or device_info.get(ieee, {}).get("device_type")
-            or "EndDevice"
-        )
-
-        nodes[ieee] = {
-            "ieeeAddr": ieee,
-            "friendlyName": name,
-            "type": device_type,
-        }
-
-        for neighbor in dev_data.get("neighbors", []):
-            n_ieee = normalize_ieee(neighbor.get("ieee", ""))
-            lqi = _zha_lqi(neighbor.get("lqi"))
-            # ZHA includes a "relationship" field from the ZDO neighbor table:
-            # "Child" means the scanning device is the parent of n_ieee.
-            # Passed through to _build_routing_tree to prefer authoritative parent links.
-            relationship = neighbor.get("relationship", "")
-            if n_ieee:
-                # source=neighbor, target=scanner — matches Z2M link convention
-                links.append(
-                    {
-                        "source": {"ieeeAddr": n_ieee},
-                        "target": {"ieeeAddr": ieee},
-                        "lqi": lqi,
-                        "relationship": relationship,
-                    }
-                )
-
-    return nodes, links
-
-
 def _zha_lqi(raw: str | int | None) -> int:
     """Convert a ZHA LQI value to int.
 
@@ -230,6 +160,15 @@ async def _resolve_backend(
         return "z2m"
 
     if backend == "zha":
+        try:
+            ha_client = HAClient(ha_url, token, verify_ssl)
+            await ha_client.get_zha_devices()
+        except Exception:  # noqa: BLE001
+            console.print(
+                "[red]Error:[/red] --backend zha requires ZHA to be installed and reachable."
+            )
+            console.print("  Run [bold]zigporter check[/bold] to diagnose connectivity.")
+            return "none"
         return "zha"
 
     # auto — detect what's available
