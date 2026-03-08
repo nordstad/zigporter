@@ -414,6 +414,46 @@ async def test_resolve_odd_entities_skip():
     assert result == []
 
 
+async def test_resolve_odd_entities_no_tty_no_apply_skips():
+    """No TTY + apply=False → odd entities are skipped, entity_pairs unchanged."""
+    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+
+    odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
+    with patch("zigporter.commands.rename_device.sys") as mock_sys:
+        mock_sys.stdin.isatty.return_value = False
+        result = await resolve_odd_entities(odd, [], "bedroom_lamp", apply=False)
+
+    assert result == []
+
+
+async def test_resolve_odd_entities_no_tty_apply_uses_suggested():
+    """No TTY + apply=True → odd entities are auto-renamed to their suggested IDs."""
+    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+
+    odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
+    with patch("zigporter.commands.rename_device.sys") as mock_sys:
+        mock_sys.stdin.isatty.return_value = False
+        result = await resolve_odd_entities(odd, [], "bedroom_lamp", apply=True)
+
+    # suggested = "sensor.bedroom_lamp_power" (new_slug + slugify("Power"))
+    assert result == [("sensor.custom_power", "sensor.bedroom_lamp_power")]
+
+
+async def test_resolve_odd_entities_no_tty_apply_preserves_existing_pairs():
+    """No TTY + apply=True → existing matched pairs are kept alongside the auto-accepted ones."""
+    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+
+    existing = [("light.bedroom_lamp", "light.kitchen_plug")]
+    odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
+    with patch("zigporter.commands.rename_device.sys") as mock_sys:
+        mock_sys.stdin.isatty.return_value = False
+        result = await resolve_odd_entities(odd, existing, "bedroom_lamp", apply=True)
+
+    assert ("light.bedroom_lamp", "light.kitchen_plug") in result
+    assert ("sensor.custom_power", "sensor.bedroom_lamp_power") in result
+    assert len(result) == 2
+
+
 # ---------------------------------------------------------------------------
 # run_rename_device
 # ---------------------------------------------------------------------------
@@ -1295,7 +1335,7 @@ async def test_run_rename_device_no_entities(mocker):
 
 
 async def test_run_rename_device_odd_entities_no_tty(mocker):
-    """Lines 941-945: odd entities exist but no TTY → skips them."""
+    """odd entities exist, no TTY, apply=False → skips them (no entity pairs, returns True)."""
     from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
@@ -1310,10 +1350,58 @@ async def test_run_rename_device_odd_entities_no_tty(mocker):
     mocker.patch("zigporter.commands.rename_device.sys").stdin.isatty.return_value = False
 
     result = await run_rename_device(
-        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", False
     )
     # No entity_pairs after skipping odds → returns True (no valid pairs)
     assert result is True
+
+
+async def test_run_rename_device_odd_entities_no_tty_apply(mocker):
+    """odd entities exist, no TTY, apply=True → auto-accepts suggested IDs and executes."""
+    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+
+    device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
+    # Entity whose suffix doesn't contain "kitchen_plug" slug → goes to odd list
+    entities = [
+        {"entity_id": "switch.0xabcd1234", "name": None, "original_name": "Switch", "device_id": "dev1"}
+    ]
+    mock_instance = MagicMock()
+    mock_instance.get_entities_for_device = AsyncMock(return_value=entities)
+    mocker.patch("zigporter.commands.rename_device.HAClient", return_value=mock_instance)
+    mocker.patch("zigporter.commands.rename_device.find_device", new=AsyncMock(return_value=device))
+    mocker.patch("zigporter.commands.rename_device.sys").stdin.isatty.return_value = False
+
+    # The suggested ID will be switch.bedroom_lamp_switch (new_slug + original_name slug)
+    suggested_eid = "switch.bedroom_lamp_switch"
+    snap = _make_snapshot_mock(entity_ids=["switch.0xabcd1234"])
+    mocker.patch(
+        "zigporter.commands.rename_device.fetch_ha_snapshot", new=AsyncMock(return_value=snap)
+    )
+    mock_plan = RenamePlan(
+        old_entity_id="switch.0xabcd1234",
+        new_entity_id=suggested_eid,
+        locations=[
+            RenameLocation(
+                context="registry",
+                name="HA entity registry",
+                item_id="switch.0xabcd1234",
+                occurrences=1,
+            )
+        ],
+    )
+    mocker.patch(
+        "zigporter.commands.rename_device.build_rename_plan_from_snapshot", return_value=mock_plan
+    )
+    execute_mock = mocker.patch(
+        "zigporter.commands.rename_device.execute_device_rename", new=AsyncMock()
+    )
+
+    result = await run_rename_device(
+        "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
+    )
+    assert result is True
+    # execute_device_rename must have been called — the entity was not skipped
+    execute_mock.assert_called_once()
 
 
 async def test_run_rename_device_odd_entities_interactive_suggested(mocker):
