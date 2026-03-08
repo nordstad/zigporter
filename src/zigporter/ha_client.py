@@ -173,7 +173,8 @@ class HAClient:
 
         Returns a dict keyed by IEEE address (colon-format) containing per-device
         topology data including the ``neighbors`` list.  Returns an empty dict if ZHA
-        is not installed or no topology scan has been run yet.
+        is not installed, if the command is unavailable in this HA version, or if no
+        scan has been run yet.
         """
         try:
             result = await self._ws_command({"type": "zha/network_topology"})
@@ -181,13 +182,20 @@ class HAClient:
         except RuntimeError:
             return {}
 
-    async def run_zha_topology_scan(self) -> None:
+    async def run_zha_topology_scan(self) -> dict[str, Any]:
         """Trigger a ZHA network topology scan and wait for it to complete.
 
         Sends ``zha/topology/scan_now`` which blocks until the scan finishes
-        (typically 30–90 s for real networks).
+        (typically 30–90 s for real networks).  Some HA versions return the topology
+        dict directly in the response; others return an empty acknowledgement.
+        Returns the response dict (may be empty) or ``{}`` if the command is
+        unavailable in this HA version.
         """
-        await self._ws_command({"type": "zha/topology/scan_now"})
+        try:
+            result = await self._ws_command({"type": "zha/topology/scan_now"})
+            return result or {}
+        except RuntimeError:
+            return {}
 
     async def get_entity_registry(self) -> list[dict[str, Any]]:
         """Fetch the full entity registry."""

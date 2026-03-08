@@ -87,6 +87,49 @@ def _normalize_zha_topology(
     return nodes, links
 
 
+def _build_flat_zha_topology(
+    zha_devices: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """Build a single-hop topology from ZHA device list when no scan data is available.
+
+    All devices appear at depth 1 under the coordinator.  LQI is taken from
+    each device's ``lqi`` field (the most recently observed link quality
+    reported by ZHA — typically the last-hop LQI, not necessarily a direct
+    coordinator measurement).  No actual routing paths are shown.
+    """
+    coordinator_ieee: str | None = None
+    for dev in zha_devices:
+        if dev.get("device_type") == "Coordinator":
+            ieee = normalize_ieee(dev.get("ieee", ""))
+            if ieee:
+                coordinator_ieee = ieee
+                break
+
+    nodes: dict[str, dict[str, Any]] = {}
+    links: list[dict[str, Any]] = []
+
+    for dev in zha_devices:
+        raw_ieee = dev.get("ieee", "")
+        if not raw_ieee:
+            continue
+        ieee = normalize_ieee(raw_ieee)
+        name = dev.get("user_given_name") or dev.get("name") or raw_ieee
+        device_type = dev.get("device_type") or "EndDevice"
+        nodes[ieee] = {"ieeeAddr": ieee, "friendlyName": name, "type": device_type}
+
+        if coordinator_ieee and ieee != coordinator_ieee:
+            lqi = dev.get("lqi") or 0
+            links.append(
+                {
+                    "source": {"ieeeAddr": ieee},
+                    "target": {"ieeeAddr": coordinator_ieee},
+                    "lqi": lqi,
+                }
+            )
+
+    return nodes, links
+
+
 # ---------------------------------------------------------------------------
 # Backend selection
 # ---------------------------------------------------------------------------
@@ -425,17 +468,36 @@ async def _fetch_zha_data(
     token: str,
     verify_ssl: bool,
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]] | None:
-    """Fetch network topology from ZHA. Returns (nodes, links) or None on error."""
+    """Fetch network topology from ZHA. Returns (nodes, links) or None on error.
+
+    Topology resolution order:
+    1. ``zha/network_topology`` — cached scan result (some HA versions).
+    2. ``zha/topology/scan_now`` — triggers a scan; some HA versions return the
+       topology dict directly in the response.
+    3. After scan, re-try ``zha/network_topology`` in case it was populated.
+    4. Flat fallback: all devices at depth 1 using per-device LQI from
+       ``zha/devices``.  Routing paths are not shown but link quality is.
+    """
     ha_client = HAClient(ha_url, token, verify_ssl)
 
     with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
         t = progress.add_task("Fetching ZHA network topology...", total=None)
         start = time.monotonic()
         try:
+            zha_devices = await ha_client.get_zha_devices()
+            if not zha_devices:
+                progress.update(t, description="Failed")
+                console.print(
+                    "\n[red]Error:[/red] No ZHA devices found.\n"
+                    "[dim]Ensure ZHA is installed and has paired devices.[/dim]"
+                )
+                return None
+
+            # 1. Try cached topology
             topology = await ha_client.get_zha_network_topology()
 
             if not topology:
-                # No cached scan yet — trigger one
+                # 2. Trigger scan — may return topology directly or just ack {}
                 progress.update(
                     t, description="Scanning ZHA network topology (may take up to 90s)..."
                 )
@@ -443,25 +505,19 @@ async def _fetch_zha_data(
                 while not scan.done():
                     await asyncio.sleep(1)
                     elapsed = int(time.monotonic() - start)
-                    progress.update(
-                        t,
-                        description=f"Scanning ZHA network topology... {elapsed}s",
-                    )
-                scan.result()
-                topology = await ha_client.get_zha_network_topology()
+                    progress.update(t, description=f"Scanning ZHA network topology... {elapsed}s")
+                scan_result = scan.result()
 
-            if not topology:
-                progress.update(t, description="Failed")
-                console.print(
-                    "\n[red]Error:[/red] ZHA topology scan returned no data.\n"
-                    "[dim]Ensure ZHA has active devices and try again.[/dim]"
-                )
-                return None
+                # scan_now returns topology directly in some HA versions
+                if scan_result:
+                    topology = scan_result
+                else:
+                    # 3. Re-fetch cached topology after scan
+                    topology = await ha_client.get_zha_network_topology()
 
-            zha_devices = await ha_client.get_zha_devices()
         except Exception as exc:  # noqa: BLE001
             progress.update(t, description="Failed")
-            console.print(f"\n[red]Error:[/red] Could not fetch ZHA network topology — {exc}")
+            console.print(f"\n[red]Error:[/red] Could not fetch ZHA data — {exc}")
             console.print(
                 "[dim]Ensure ZHA is installed and connected.\n"
                 "Run [bold]zigporter check[/bold] to diagnose connectivity.[/dim]"
@@ -469,7 +525,16 @@ async def _fetch_zha_data(
             return None
         progress.update(t, description="Done")
 
-    nodes, links = _normalize_zha_topology(topology, zha_devices)
+    if topology:
+        nodes, links = _normalize_zha_topology(topology, zha_devices)
+    else:
+        # 4. Flat fallback — device LQI only, no routing paths
+        nodes, links = _build_flat_zha_topology(zha_devices)
+        console.print(
+            "[dim]ZHA topology scan not available in this HA version — "
+            "showing flat view with per-device LQI.[/dim]"
+        )
+
     return nodes, links
 
 

@@ -765,11 +765,12 @@ async def test_zha_backend_summary_label():
 
 
 async def test_zha_backend_triggers_scan_when_topology_empty():
-    """When the cached topology is empty, run_zha_topology_scan should be called."""
+    """When cached topology is empty, scan is triggered; topology returned by scan is used."""
     mock_ha_client = AsyncMock()
-    # First call returns empty (no cached scan), second call returns real data
-    mock_ha_client.get_zha_network_topology = AsyncMock(side_effect=[{}, MOCK_ZHA_TOPOLOGY])
-    mock_ha_client.run_zha_topology_scan = AsyncMock()
+    # get_zha_network_topology always returns {} (command unavailable in this HA version)
+    mock_ha_client.get_zha_network_topology = AsyncMock(return_value={})
+    # run_zha_topology_scan returns topology directly (HA version that supports it)
+    mock_ha_client.run_zha_topology_scan = AsyncMock(return_value=MOCK_ZHA_TOPOLOGY)
     mock_ha_client.get_zha_devices = AsyncMock(return_value=MOCK_ZHA_DEVICES)
 
     buf = io.StringIO()
@@ -784,6 +785,29 @@ async def test_zha_backend_triggers_scan_when_topology_empty():
 
     mock_ha_client.run_zha_topology_scan.assert_called_once()
     assert "Coordinator" in buf.getvalue()
+
+
+async def test_zha_backend_flat_fallback_when_no_topology_scan():
+    """When both get_zha_network_topology and scan_now return {}, flat view is shown."""
+    mock_ha_client = AsyncMock()
+    mock_ha_client.get_zha_network_topology = AsyncMock(return_value={})
+    mock_ha_client.run_zha_topology_scan = AsyncMock(return_value={})
+    mock_ha_client.get_zha_devices = AsyncMock(return_value=MOCK_ZHA_DEVICES)
+
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+
+    with (
+        patch("zigporter.commands.network_map.HAClient", return_value=mock_ha_client),
+        patch("zigporter.commands.network_map.console", cap_console),
+        patch("zigporter.commands.network_map.Progress", return_value=_make_mock_progress()),
+    ):
+        await run_network_map(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, backend="zha")
+
+    output = buf.getvalue()
+    assert "flat view" in output
+    # MOCK_ZHA_DEVICES uses "name" field (no user_given_name), so names come from there
+    assert "Router 1" in output
 
 
 async def test_auto_backend_picks_zha_when_z2m_url_empty():
