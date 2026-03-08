@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- docs: expand Confirmed Working section — split into Platform/Software tables, add OS, HA install type, and Python 3.12/3.13/3.14 rows
+- docs: add compatibility report issue template so users can submit their environment details
+
 
 ## [0.9.0] - 2026-03-06
 
