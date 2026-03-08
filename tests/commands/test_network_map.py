@@ -1066,3 +1066,164 @@ async def test_auto_backend_prompts_when_both_available_selects_zha():
 
     output = buf.getvalue()
     assert "ZHA" in output
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests — edge cases and error paths
+# ---------------------------------------------------------------------------
+
+
+# ── _zha_lqi ─────────────────────────────────────────────────────────────────
+
+
+def test_zha_lqi_none_returns_zero():
+    from zigporter.commands.network_map import _zha_lqi  # noqa: PLC0415
+
+    assert _zha_lqi(None) == 0
+
+
+def test_zha_lqi_invalid_string_returns_zero():
+    from zigporter.commands.network_map import _zha_lqi  # noqa: PLC0415
+
+    assert _zha_lqi("not-a-number") == 0
+
+
+# ── _build_zha_topology_from_devices edge cases ───────────────────────────────
+
+
+def test_build_zha_topology_from_devices_skips_device_with_empty_ieee():
+    devices = [
+        {"ieee": "", "device_type": "Router", "name": "Bad Device"},
+        {"ieee": "00:00:00:00:00:00:00:00", "device_type": "Coordinator", "name": "Coord"},
+    ]
+    nodes, _ = _build_zha_topology_from_devices(devices)
+    assert "" not in nodes
+    assert len(nodes) == 1
+
+
+def test_build_zha_topology_from_devices_skips_neighbor_with_empty_ieee():
+    devices = [
+        {
+            "ieee": "00:00:00:00:00:00:00:00",
+            "device_type": "Coordinator",
+            "name": "Coord",
+            "neighbors": [{"ieee": "", "lqi": "200"}],
+        },
+    ]
+    _, links = _build_zha_topology_from_devices(devices)
+    assert links == []
+
+
+# ── _build_flat_zha_topology edge case ───────────────────────────────────────
+
+
+def test_build_flat_zha_topology_skips_device_with_empty_ieee():
+    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+
+    devices = [
+        {"ieee": "", "device_type": "EndDevice", "name": "Bad"},
+        {"ieee": "00:00:00:00:00:00:00:00", "device_type": "Coordinator", "name": "Coord"},
+    ]
+    nodes, _ = _build_flat_zha_topology(devices)
+    assert "" not in nodes
+
+
+# ── Backend resolution error paths ───────────────────────────────────────────
+
+
+async def test_backend_z2m_error_when_no_z2m_url():
+    """--backend z2m with empty Z2M_URL prints error and returns without output."""
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+    with patch("zigporter.commands.network_map.console", cap_console):
+        await run_network_map(HA_URL, TOKEN, z2m_url="", verify_ssl=False, backend="z2m")
+    output = buf.getvalue()
+    assert "Z2M_URL" in output
+
+
+async def test_backend_zha_error_when_zha_unreachable():
+    """--backend zha with ZHA failing prints actionable error and returns."""
+    mock_ha_client = AsyncMock()
+    mock_ha_client.get_zha_devices = AsyncMock(side_effect=RuntimeError("ZHA not installed"))
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+    with (
+        patch("zigporter.commands.network_map.HAClient", return_value=mock_ha_client),
+        patch("zigporter.commands.network_map.console", cap_console),
+    ):
+        await run_network_map(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, backend="zha")
+    output = buf.getvalue()
+    assert "ZHA" in output
+    assert "reachable" in output or "installed" in output
+
+
+async def test_auto_backend_picks_z2m_when_zha_unavailable():
+    """Auto mode selects Z2M when Z2M_URL is set but ZHA is not reachable."""
+    mock_ha_client = AsyncMock()
+    mock_ha_client.get_zha_devices = AsyncMock(side_effect=RuntimeError("ZHA not installed"))
+    mock_z2m_client = AsyncMock()
+    mock_z2m_client.get_network_map = AsyncMock(return_value=MOCK_NETWORK_MAP_RESPONSE)
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+    with (
+        patch("zigporter.commands.network_map.HAClient", return_value=mock_ha_client),
+        patch("zigporter.commands.network_map.Z2MClient", return_value=mock_z2m_client),
+        patch("zigporter.commands.network_map.console", cap_console),
+        patch("zigporter.commands.network_map.Progress", return_value=_make_mock_progress()),
+    ):
+        await run_network_map(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, backend="auto")
+    assert "Z2M" in buf.getvalue()
+
+
+# ── _fetch_zha_data error paths ───────────────────────────────────────────────
+
+
+async def test_zha_fetch_returns_none_when_no_devices():
+    """_fetch_zha_data prints error and returns None when ZHA returns an empty device list."""
+    mock_ha_client = AsyncMock()
+    mock_ha_client.get_zha_devices = AsyncMock(return_value=[])
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+    with (
+        patch("zigporter.commands.network_map.HAClient", return_value=mock_ha_client),
+        patch("zigporter.commands.network_map.console", cap_console),
+        patch("zigporter.commands.network_map.Progress", return_value=_make_mock_progress()),
+    ):
+        await run_network_map(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, backend="zha")
+    assert "No ZHA devices" in buf.getvalue()
+
+
+async def test_zha_fetch_returns_none_on_exception():
+    """Exception in _fetch_zha_data (after _resolve_backend succeeds) prints error."""
+    mock_ha_client = AsyncMock()
+    # First call (_resolve_backend) succeeds; second (_fetch_zha_data) raises.
+    mock_ha_client.get_zha_devices = AsyncMock(
+        side_effect=[MOCK_ZHA_DEVICES_WITH_NEIGHBORS, RuntimeError("connection reset")]
+    )
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+    with (
+        patch("zigporter.commands.network_map.HAClient", return_value=mock_ha_client),
+        patch("zigporter.commands.network_map.console", cap_console),
+        patch("zigporter.commands.network_map.Progress", return_value=_make_mock_progress()),
+    ):
+        await run_network_map(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, backend="zha")
+    assert "Could not fetch ZHA data" in buf.getvalue()
+
+
+# ── _fetch_z2m_data error path ────────────────────────────────────────────────
+
+
+async def test_z2m_fetch_returns_none_on_exception():
+    """Exception in _fetch_z2m_data prints error and run_network_map returns early."""
+    mock_z2m_client = AsyncMock()
+    mock_z2m_client.get_network_map = AsyncMock(side_effect=RuntimeError("Z2M unreachable"))
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+    with (
+        patch("zigporter.commands.network_map.Z2MClient", return_value=mock_z2m_client),
+        patch("zigporter.commands.network_map.console", cap_console),
+        patch("zigporter.commands.network_map.Progress", return_value=_make_mock_progress()),
+    ):
+        await run_network_map(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, backend="z2m")
+    assert "Could not fetch Z2M network map" in buf.getvalue()
