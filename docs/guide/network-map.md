@@ -2,9 +2,36 @@
 
 Generate a radial SVG diagram of your Zigbee mesh with LQI-coloured edges, hop rings, and per-device signal badges — or print a routing tree and signal table straight to the terminal.
 
+Works with both **Zigbee2MQTT** and **ZHA**.
+
 ```bash
 zigporter network-map
 ```
+
+## Backends
+
+| Flag | Backend | Requirements |
+|---|---|---|
+| `--backend auto` | Auto-detect (default) | Prompts if both are available |
+| `--backend z2m` | Zigbee2MQTT | `Z2M_URL` configured |
+| `--backend zha` | ZHA | ZHA integration installed in HA |
+
+With `--backend auto`, zigporter checks which integrations are reachable.  If only one is
+available it is selected silently.  If both are available, you are prompted to choose.
+
+### ZHA topology availability
+
+ZHA topology scanning (multi-hop routing paths) requires a HA version that exposes the
+`zha/topology/scan_now` WebSocket command.  When that endpoint is not available, zigporter
+automatically falls back to a **flat view**: all devices appear at depth 1 under the
+coordinator, using the per-device LQI stored in ZHA's device registry.  A note is printed
+when the flat view is active.
+
+Flat-view limitations:
+
+- Actual routing paths are not shown — all devices appear as `hops: 1`
+- The `(coord: N)` annotation is not shown (it is only meaningful for depth > 1 devices)
+- LQI values reflect the last-observed link quality reported by ZHA, not a fresh scan
 
 ## Output formats
 
@@ -12,7 +39,7 @@ zigporter network-map
 |---|---|
 | `--format tree` | Indented routing tree (default) |
 | `--format table` | Flat table sorted by LQI ascending (weakest links first) |
-| `--svg <file>` | Also export an SVG diagram |
+| `--output <file>` | Also export an SVG diagram |
 
 ## Compared to the Z2M network map
 
@@ -32,7 +59,11 @@ useful for answering "which path does each device actually use, and how good is 
 ## SVG export example
 
 ```bash
+# Z2M (default when Z2M_URL is configured)
 zigporter network-map --output network.svg
+
+# ZHA
+zigporter network-map --backend zha --output zha_network.svg
 ```
 
 [![Zigbee network map SVG example](../assets/network-map-demo.svg)](../assets/network-map-demo.svg){ target=_blank title="Open full size" }
@@ -77,9 +108,14 @@ The device routes through the plug.  The actual path quality is **76**, not 29.
 ### LQI (the main number)
 
 The **routing path quality** — the bidirectional LQI between a device and its **routing
-parent** in the tree.  Computed as `min(parent→device, device→parent)` using the Z2M
+parent** in the tree.  Computed as `min(parent→device, device→parent)` using the
 network-map scan data.  This is the quality of the edge drawn in the tree and reflects
 the link the device actually uses to forward traffic.
+
+!!! note "ZHA flat view"
+    When ZHA's topology scan endpoint is unavailable, the tree is always one hop deep and
+    LQI comes from ZHA's per-device last-observed value rather than a fresh bidirectional
+    scan.  The `(coord: N)` annotation is not shown in flat view.
 
 Using the minimum of both directions matters because Zigbee links are asymmetric: a
 device may hear the coordinator at LQI 115 while the coordinator only hears the device
@@ -139,7 +175,9 @@ diverge because they describe different links.
 | Window Sensor | 2 | 172 | 71 | Badge = Kitchen Plug→coord; map = device→Kitchen Plug |
 | Garage Plug | 3 | 76 | 105 | Badge = SMLIGHT→coord final hop; map = device→SMLIGHT hop |
 
-## Z2M 2.x notes
+## Z2M-specific notes
+
+### Z2M 2.x notes
 
 Z2M 2.x does not publish retained MQTT messages on device state topics, so the live
 `last_linkquality` overlay (which would update the routing-path LQI with real-time

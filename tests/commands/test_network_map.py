@@ -11,7 +11,7 @@ from rich.console import Console
 
 from zigporter.commands.network_map import (
     _build_routing_tree,
-    _normalize_zha_topology,  # used in ZHA unit tests below
+    _normalize_zha_topology,
     run_network_map,
 )
 from zigporter.commands.network_map_svg import (
@@ -716,6 +716,86 @@ def test_normalize_zha_topology_skips_missing_ieee():
     topology = {"": {"device_type": "Router", "name": "Bad", "neighbors": []}}
     nodes, links = _normalize_zha_topology(topology, [])
     assert nodes == {}
+    assert links == []
+
+
+# ---------------------------------------------------------------------------
+# _build_flat_zha_topology unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_build_flat_zha_topology_node_count():
+    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+
+    nodes, _ = _build_flat_zha_topology(MOCK_ZHA_DEVICES)
+    assert len(nodes) == 4  # coordinator + 2 routers + 1 end device
+
+
+def test_build_flat_zha_topology_coordinator_present():
+    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+
+    nodes, _ = _build_flat_zha_topology(MOCK_ZHA_DEVICES)
+    coord = nodes["0000000000000000"]
+    assert coord["type"] == "Coordinator"
+
+
+def test_build_flat_zha_topology_all_devices_at_depth1():
+    """With flat topology, the routing tree places every device at depth 1."""
+    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+
+    nodes, links = _build_flat_zha_topology(MOCK_ZHA_DEVICES)
+    _, _, depth_map = _build_routing_tree(nodes, links)
+    for ieee, depth in depth_map.items():
+        if nodes[ieee]["type"] != "Coordinator":
+            assert depth == 1, f"expected depth 1 for {ieee}, got {depth}"
+
+
+def test_build_flat_zha_topology_lqi_from_device_field():
+    """LQI in links comes from each device's lqi field."""
+    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+
+    devices = [
+        {"ieee": "00:00:00:00:00:00:00:00", "device_type": "Coordinator", "name": "Coord"},
+        {
+            "ieee": "00:00:00:00:00:00:00:01",
+            "device_type": "EndDevice",
+            "name": "Sensor",
+            "lqi": 142,
+        },
+    ]
+    _, links = _build_flat_zha_topology(devices)
+    assert len(links) == 1
+    assert links[0]["lqi"] == 142
+
+
+def test_build_flat_zha_topology_missing_lqi_defaults_to_zero():
+    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+
+    devices = [
+        {"ieee": "00:00:00:00:00:00:00:00", "device_type": "Coordinator", "name": "Coord"},
+        {"ieee": "00:00:00:00:00:00:00:01", "device_type": "EndDevice", "name": "Sensor"},
+    ]
+    _, links = _build_flat_zha_topology(devices)
+    assert links[0]["lqi"] == 0
+
+
+def test_build_flat_zha_topology_empty_devices():
+    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+
+    nodes, links = _build_flat_zha_topology([])
+    assert nodes == {}
+    assert links == []
+
+
+def test_build_flat_zha_topology_no_coordinator_skips_links():
+    """Without a coordinator entry, no links are created (nothing to link to)."""
+    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+
+    devices = [
+        {"ieee": "00:00:00:00:00:00:00:01", "device_type": "Router", "name": "Router", "lqi": 200},
+    ]
+    nodes, links = _build_flat_zha_topology(devices)
+    assert len(nodes) == 1
     assert links == []
 
 
