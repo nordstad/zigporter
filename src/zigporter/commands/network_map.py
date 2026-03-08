@@ -125,14 +125,14 @@ async def _resolve_backend(
         pass
 
     if z2m_available and zha_available:
-        choice = questionary.select(
+        choice = await questionary.select(
             "Both Zigbee2MQTT and ZHA are available. Which backend?",
             choices=[
                 questionary.Choice("Zigbee2MQTT (Z2M)", value="z2m"),
                 questionary.Choice("ZHA (Zigbee Home Automation)", value="zha"),
             ],
             style=QUESTIONARY_STYLE,
-        ).ask()
+        ).ask_async()
         return choice or "z2m"
 
     if z2m_available:
