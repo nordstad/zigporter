@@ -196,11 +196,16 @@ whether HA and Z2M names are kept in sync.
 ## Visualise the Zigbee Mesh
 
 Generate a radial SVG map of your network with LQI-coloured edges and per-device
-path-quality badges:
+path-quality badges.  Works with **Zigbee2MQTT** and **ZHA** — zigporter auto-detects
+which backend is available, or you can select one explicitly:
 
 ```bash
-# Default: tree view printed to terminal + SVG file
-zigporter network-map --output z2m_network.svg
+# Auto-detect backend (prompts if both Z2M and ZHA are available)
+zigporter network-map --output network.svg
+
+# Explicit backend selection
+zigporter network-map --backend z2m --output z2m_network.svg
+zigporter network-map --backend zha --output zha_network.svg
 
 # Table view (sortable columns) instead of tree
 zigporter network-map --format table

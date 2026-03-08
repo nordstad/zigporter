@@ -325,6 +325,16 @@ def test_ensure_config_no_env_runs_setup(tmp_path, mocker):
     mock_setup.assert_called_once()
 
 
+def test_network_map_command_via_cli(mocker):
+    """Invoking `network-map` through the CLI hits the lazy import inside the command."""
+    mocker.patch("zigporter.main._get_config", return_value=("https://ha.test", "tok", True))
+    mocker.patch("zigporter.main._get_z2m_config", return_value=("", "zigbee2mqtt"))
+    mock_nm = mocker.patch("zigporter.commands.network_map.network_map_command")
+    result = runner.invoke(app, ["network-map"])
+    assert result.exit_code == 0
+    mock_nm.assert_called_once()
+
+
 def test_ensure_config_with_existing_env_skips_setup(tmp_path, mocker):
     env = tmp_path / ".env"
     env.write_text("HA_URL=https://ha.test\n")

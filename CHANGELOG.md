@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `network-map`: ZHA backend support via `--backend auto|z2m|zha`.  Auto-detect picks the
+  available integration and prompts when both Z2M and ZHA are present.  Multi-hop routing
+  paths are read from ZHA device neighbor tables; falls back to a flat single-hop view with
+  per-device LQI when no topology scan data is available yet.  `--backend zha` validates
+  ZHA reachability upfront and prints an actionable error if ZHA is not installed.
+
 ### Changed
 
 - docs: expand Confirmed Working section — split into Platform/Software tables, add OS, HA install type, and Python 3.12/3.13/3.14 rows
