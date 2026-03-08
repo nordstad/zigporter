@@ -14,13 +14,30 @@ zigporter network-map
 | `--format table` | Flat table sorted by LQI ascending (weakest links first) |
 | `--svg <file>` | Also export an SVG diagram |
 
+## Compared to the Z2M network map
+
+Z2M ships its own built-in network map (visible in the Z2M frontend). The two tools
+show different things:
+
+| | Z2M network map | `zigporter network-map` |
+|---|---|---|
+| Layout | Force-directed (positions are arbitrary) | Radial, hop-depth rings |
+| Links shown | All neighbour links recorded during the scan | Active routing tree only |
+| Hop depth | Hard to read — no visual grouping | Immediately visible by ring position |
+| Readability | Lines overlap heavily in dense meshes | Clean tree with parent/child edges only |
+
+The Z2M map is useful for seeing the full neighbour graph.  `zigporter network-map` is
+useful for answering "which path does each device actually use, and how good is it?"
+
 ## SVG export example
 
 ```bash
 zigporter network-map --output network.svg
 ```
 
-![Zigbee network map SVG example](../assets/network-map-demo.svg)
+[![Zigbee network map SVG example](../assets/network-map-demo.svg)](../assets/network-map-demo.svg){ target=_blank title="Open full size" }
+
+*Click the image to open full size in a new tab.*
 
 ## LQI thresholds
 
@@ -33,9 +50,9 @@ zigporter network-map --output network.svg
 
 ```
 Coordinator
-    ├── Hall Door Plug    [router]  LQI: 130  hops: 1
-    │    └── SMLIGHT SLZB-06P7    [router]  LQI: 76  hops: 2  WEAK  (coord: 35)
-    │        └── Ute Billadder    [end]     LQI: 99  hops: 3  (coord: 39)
+    ├── Hallway Plug      [router]  LQI: 155  hops: 1
+    │    └── SMLIGHT Repeater    [router]  LQI: 76  hops: 2  WEAK  (coord: 35)
+    │        └── Attic Sensor    [end]     LQI: 62  hops: 3  WEAK  (coord: 39)
 ```
 
 ### LQI — what is it?
@@ -74,14 +91,17 @@ Shown in yellow or red for **depth > 1 devices** (those routing through at least
 intermediate router) when their **direct coordinator link** is below `--warn-lqi`.
 
 This is the LQI the coordinator measured when it received a frame directly from the
-device during the network scan.  It is also the value shown in the Z2M device card
-badge (`last_linkquality`).
+device during the network scan.  This is **not** the same as the Z2M device card
+badge (`last_linkquality`) — the badge reflects the LQI of the **final routing hop**
+in the most recent application message, which can differ from both the routing path
+LQI and the scan direct-coordinator LQI (see
+[below](#why-the-z2m-badge-and-network-map-lqi-differ-for-routed-devices)).
 
 The two numbers tell different stories:
 
 | Value | What it means |
 |---|---|
-| `LQI: 76` | The device has a solid path through its routing parent (Hall Door Plug) |
+| `LQI: 76` | The device has a solid path through its routing parent (Hallway Plug) |
 | `(coord: 35)` | If that router disappears, the fallback direct link to the coordinator is weak |
 
 A device with a good routing LQI but a low `coord` value is **correctly routing around
@@ -90,16 +110,34 @@ there so you know the fallback path is poor if the parent router ever fails.
 
 ### Why the Z2M badge and `network-map` LQI differ for routed devices
 
-Z2M's device card shows `last_linkquality` — the LQI the coordinator measured the last
-time it received a direct frame from that device.  For a device routing through an
-intermediate router this is the **direct coordinator link** quality, which may be very
-different from the routing path quality.
+Z2M's device card shows `last_linkquality` — the LQI of the **final routing hop** in
+the most recently received application message.  For a Hop 1 device that talks
+directly to the coordinator, this is the same link shown in the map.  For a deeper
+device routing through an intermediate router, the badge measures the last
+**router → coordinator** hop of whatever routing path was active when the last packet
+arrived — which may be different from both the routing path the scan recorded and the
+direct coordinator link shown in `(coord: N)`.
 
 `network-map` shows the **routing path quality** (the edge in the tree) because that is
 the correct label for the edge being drawn.  Putting the direct-coordinator number on a
 line between the device and its routing parent would be misleading — it is a completely
-different link.  The `(coord: N)` annotation exposes the Z2M-badge value alongside it
-so you have both pieces of information in one place.
+different link.  The `(coord: N)` annotation exposes the direct scan measurement
+alongside it so you have both pieces of information in one place.
+
+#### Real-world example
+
+The table below comes from an actual scan.  Hop 1 devices talk directly to the
+coordinator, so the badge and scan LQI are measuring the same link and match closely.
+Hop 2+ devices route through an intermediate router; the badge and the map LQI
+diverge because they describe different links.
+
+| Device | Hops | Z2M badge | Map LQI | Notes |
+|---|---|---|---|---|
+| Living Room Plug | 1 | 198 | 198 | Direct link — badge and map measure the same hop |
+| Kitchen Plug | 1 | 172 | 172 | Direct link — badge and map measure the same hop |
+| SMLIGHT Repeater | 2 | 155 | 76 | Badge = Hallway Plug→coord; map = device→Hallway Plug |
+| Window Sensor | 2 | 172 | 71 | Badge = Kitchen Plug→coord; map = device→Kitchen Plug |
+| Garage Plug | 3 | 76 | 105 | Badge = SMLIGHT→coord final hop; map = device→SMLIGHT hop |
 
 ## Z2M 2.x notes
 
@@ -111,6 +149,26 @@ scan itself.
 HA may also disable the `Linkquality` diagnostic sensor entity by default
 (`"disabled_by": "integration"`).  Even if enabled, the value reflects the same direct
 coordinator link shown in the `(coord: N)` annotation, not the routing path quality.
+
+## Scan artifacts — LQI 0 on healthy devices
+
+The network-map scan is a **point-in-time probe**.  Mains-powered routers occasionally
+miss the scan request — they are busy forwarding application traffic or momentarily in
+a radio back-off — and will appear with LQI 0 in the output even though they are
+operating normally.
+
+For example, `TRADFRI Outlet` in the demo SVG above shows `CRITICAL (LQI 0)` even
+though it is a mains-powered router — this is a scan artifact.  If a device shows
+`LQI: 0` or `CRITICAL` but its Z2M dashboard badge shows a healthy non-zero value,
+re-run the command to get a fresh snapshot:
+
+```bash
+zigporter network-map --svg network.svg
+```
+
+A second scan will almost always show the correct value.  Persistent zeros on
+mains-powered routers warrant further investigation (check Z2M logs for join/leave
+events).
 
 ## Example — table format
 

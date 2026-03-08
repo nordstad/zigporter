@@ -22,15 +22,15 @@ description: >
    ```
 
 3. Verify the SVG at `docs/assets/network-map-demo.svg` looks correct.
-   The current mock topology produces 12 nodes across 3 hop rings. Quick
+   The current mock topology produces 30 nodes across 4 hop rings. Quick
    grep sanity checks (each should return at least 1 match):
    ```bash
-   grep -c "Hop 3"     docs/assets/network-map-demo.svg   # 3 rings present
-   grep -c "glow-warn" docs/assets/network-map-demo.svg   # warn glows on Hue Motion, Sonoff ZBMINI, Hall Outlet
-   grep -c "glow-crit" docs/assets/network-map-demo.svg   # crit glow on Smoke Detector
+   grep -c "Hop 4"     docs/assets/network-map-demo.svg   # 4 rings present
+   grep -c "glow-warn" docs/assets/network-map-demo.svg   # warn glows on Window Sensor, SMLIGHT Repeater, Stair Light, Bedroom Sensor, Sonoff Switch, Attic Sensor, Garden Light, Shed Plug
+   grep -c "glow-crit" docs/assets/network-map-demo.svg   # crit glow on Porch Light
    ```
-   Also confirm path-min badges appear for the 4 devices behind a weak parent
-   (Aqara Temp, Aqara Vibration, Bedroom Sensor, Living Motion).
+   Also confirm Aqara Temp and Nightlight (hop 3 behind Bedside Plug) appear in ring 3,
+   and Garden Sensor / Shed Plug appear in ring 4.
 
 4. Stage, commit, and push:
    ```bash
