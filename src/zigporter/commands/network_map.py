@@ -5,13 +5,147 @@ import time
 from pathlib import Path
 from typing import Any
 
+import questionary
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table
 
+from zigporter.ha_client import HAClient
+from zigporter.ui import QUESTIONARY_STYLE
+from zigporter.utils import normalize_ieee
 from zigporter.z2m_client import Z2MClient
 
 console = Console()
+
+
+# ---------------------------------------------------------------------------
+# ZHA data normalization
+# ---------------------------------------------------------------------------
+
+
+def _normalize_zha_topology(
+    topology: dict[str, Any],
+    zha_devices: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """Convert ZHA network topology to the (nodes, links) format used by the renderers.
+
+    ZHA device type strings ("Coordinator", "Router", "EndDevice") match Z2M's
+    convention, so no translation is needed.  IEEE addresses are in colon format
+    in ZHA and are normalized to lowercase hex strings for consistency.
+
+    Link convention (matching Z2M): source=neighbor (device being measured),
+    target=scanning device (device doing the measuring),
+    lqi=measured by scanning device.
+    """
+    # Build fallback name/type lookup from zha/devices
+    device_info: dict[str, dict[str, Any]] = {}
+    for dev in zha_devices:
+        ieee = normalize_ieee(dev.get("ieee", ""))
+        if ieee:
+            device_info[ieee] = dev
+
+    nodes: dict[str, dict[str, Any]] = {}
+    links: list[dict[str, Any]] = []
+
+    for raw_ieee, dev_data in topology.items():
+        if not raw_ieee or not raw_ieee.strip():
+            continue
+        ieee = normalize_ieee(raw_ieee)
+
+        name = (
+            dev_data.get("user_given_name")
+            or dev_data.get("name")
+            or device_info.get(ieee, {}).get("user_given_name")
+            or device_info.get(ieee, {}).get("name")
+            or raw_ieee
+        )
+
+        device_type = (
+            dev_data.get("device_type")
+            or device_info.get(ieee, {}).get("device_type")
+            or "EndDevice"
+        )
+
+        nodes[ieee] = {
+            "ieeeAddr": ieee,
+            "friendlyName": name,
+            "type": device_type,
+        }
+
+        for neighbor in dev_data.get("neighbors", []):
+            n_ieee = normalize_ieee(neighbor.get("ieee", ""))
+            lqi = neighbor.get("lqi", 0)
+            if n_ieee:
+                # source=neighbor, target=scanner — matches Z2M link convention
+                links.append(
+                    {
+                        "source": {"ieeeAddr": n_ieee},
+                        "target": {"ieeeAddr": ieee},
+                        "lqi": lqi,
+                    }
+                )
+
+    return nodes, links
+
+
+# ---------------------------------------------------------------------------
+# Backend selection
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_backend(
+    backend: str,
+    ha_url: str,
+    token: str,
+    verify_ssl: bool,
+    z2m_url: str,
+) -> str:
+    """Resolve the backend to use: returns 'z2m', 'zha', or 'none'.
+
+    For 'auto': detects what is available and prompts when both are present.
+    For explicit 'z2m'/'zha': validates that the chosen backend is usable.
+    """
+    if backend == "z2m":
+        if not z2m_url.strip():
+            console.print("[red]Error:[/red] --backend z2m requires Z2M_URL to be configured.")
+            console.print("  Run [bold]zigporter setup[/bold] to configure Zigbee2MQTT.")
+            return "none"
+        return "z2m"
+
+    if backend == "zha":
+        return "zha"
+
+    # auto — detect what's available
+    z2m_available = bool(z2m_url.strip())
+    zha_available = False
+    try:
+        ha_client = HAClient(ha_url, token, verify_ssl)
+        await ha_client.get_zha_devices()
+        zha_available = True
+    except Exception:  # noqa: BLE001
+        pass
+
+    if z2m_available and zha_available:
+        choice = questionary.select(
+            "Both Zigbee2MQTT and ZHA are available. Which backend?",
+            choices=[
+                questionary.Choice("Zigbee2MQTT (Z2M)", value="z2m"),
+                questionary.Choice("ZHA (Zigbee Home Automation)", value="zha"),
+            ],
+            style=QUESTIONARY_STYLE,
+        ).ask()
+        return choice or "z2m"
+
+    if z2m_available:
+        return "z2m"
+    if zha_available:
+        return "zha"
+
+    console.print("[red]Error:[/red] Neither Zigbee2MQTT nor ZHA is available.")
+    console.print(
+        "[dim]Configure Z2M_URL for Zigbee2MQTT, or ensure ZHA is installed.\n"
+        "Run [bold]zigporter check[/bold] to diagnose connectivity.[/dim]"
+    )
+    return "none"
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +338,8 @@ def _render_table(
     critical_lqi: int,
     out: Console,
 ) -> None:
+    from rich.table import Table  # noqa: PLC0415
+
     table = Table(show_header=True, header_style="bold")
     table.add_column("Device", no_wrap=True)
     table.add_column("Role")
@@ -237,6 +373,107 @@ def _render_table(
 
 
 # ---------------------------------------------------------------------------
+# Data fetching helpers
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_z2m_data(
+    ha_url: str,
+    token: str,
+    z2m_url: str,
+    verify_ssl: bool,
+    mqtt_topic: str,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]] | None:
+    """Fetch network map from Z2M. Returns (nodes, links) or None on error."""
+    client = Z2MClient(ha_url, token, z2m_url, verify_ssl, mqtt_topic)
+
+    with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
+        t = progress.add_task("Fetching Z2M network map...", total=None)
+        start = time.monotonic()
+        try:
+            fetch = asyncio.create_task(client.get_network_map())
+            while not fetch.done():
+                await asyncio.sleep(1)
+                elapsed = int(time.monotonic() - start)
+                progress.update(t, description=f"Fetching Z2M network map... {elapsed}s")
+            response = fetch.result()
+        except Exception as exc:  # noqa: BLE001
+            progress.update(t, description="Failed")
+            console.print(f"\n[red]Error:[/red] Could not fetch Z2M network map — {exc}")
+            console.print(
+                "[dim]Ensure Z2M_URL is reachable and the Z2M add-on is running.\n"
+                "Run [bold]zigporter check[/bold] to diagnose connectivity.[/dim]"
+            )
+            return None
+        progress.update(t, description="Done")
+
+    data = response.get("data", response)
+    raw_nodes: list[dict[str, Any]] = data.get("nodes", [])
+    links: list[dict[str, Any]] = data.get("links", [])
+
+    nodes: dict[str, dict[str, Any]] = {}
+    for n in raw_nodes:
+        ieee = n.get("ieeeAddr", "").lower()
+        if ieee:
+            nodes[ieee] = n
+
+    return nodes, links
+
+
+async def _fetch_zha_data(
+    ha_url: str,
+    token: str,
+    verify_ssl: bool,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]] | None:
+    """Fetch network topology from ZHA. Returns (nodes, links) or None on error."""
+    ha_client = HAClient(ha_url, token, verify_ssl)
+
+    with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
+        t = progress.add_task("Fetching ZHA network topology...", total=None)
+        start = time.monotonic()
+        try:
+            topology = await ha_client.get_zha_network_topology()
+
+            if not topology:
+                # No cached scan yet — trigger one
+                progress.update(
+                    t, description="Scanning ZHA network topology (may take up to 90s)..."
+                )
+                scan = asyncio.create_task(ha_client.run_zha_topology_scan())
+                while not scan.done():
+                    await asyncio.sleep(1)
+                    elapsed = int(time.monotonic() - start)
+                    progress.update(
+                        t,
+                        description=f"Scanning ZHA network topology... {elapsed}s",
+                    )
+                scan.result()
+                topology = await ha_client.get_zha_network_topology()
+
+            if not topology:
+                progress.update(t, description="Failed")
+                console.print(
+                    "\n[red]Error:[/red] ZHA topology scan returned no data.\n"
+                    "[dim]Ensure ZHA has active devices and try again.[/dim]"
+                )
+                return None
+
+            zha_devices = await ha_client.get_zha_devices()
+        except Exception as exc:  # noqa: BLE001
+            progress.update(t, description="Failed")
+            console.print(f"\n[red]Error:[/red] Could not fetch ZHA network topology — {exc}")
+            console.print(
+                "[dim]Ensure ZHA is installed and connected.\n"
+                "Run [bold]zigporter check[/bold] to diagnose connectivity.[/dim]"
+            )
+            return None
+        progress.update(t, description="Done")
+
+    nodes, links = _normalize_zha_topology(topology, zha_devices)
+    return nodes, links
+
+
+# ---------------------------------------------------------------------------
 # Main async entry point
 # ---------------------------------------------------------------------------
 
@@ -251,38 +488,21 @@ async def run_network_map(
     warn_lqi: int = 80,
     critical_lqi: int = 30,
     output_svg: Path | None = None,
+    backend: str = "auto",
 ) -> None:
-    client = Z2MClient(ha_url, token, z2m_url, verify_ssl, mqtt_topic)
+    resolved = await _resolve_backend(backend, ha_url, token, verify_ssl, z2m_url)
+    if resolved == "none":
+        return
 
-    with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
-        t = progress.add_task("Fetching network map...", total=None)
-        start = time.monotonic()
-        try:
-            fetch = asyncio.create_task(client.get_network_map())
-            while not fetch.done():
-                await asyncio.sleep(1)
-                elapsed = int(time.monotonic() - start)
-                progress.update(t, description=f"Fetching network map... {elapsed}s")
-            response = fetch.result()
-        except Exception as exc:  # noqa: BLE001
-            progress.update(t, description="Failed")
-            console.print(f"\n[red]Error:[/red] Could not fetch network map — {exc}")
-            console.print(
-                "[dim]Ensure Z2M_URL is reachable and the Z2M add-on is running.\n"
-                "Run [bold]zigporter check[/bold] to diagnose connectivity.[/dim]"
-            )
-            return
-        progress.update(t, description="Done")
+    if resolved == "zha":
+        result = await _fetch_zha_data(ha_url, token, verify_ssl)
+    else:
+        result = await _fetch_z2m_data(ha_url, token, z2m_url, verify_ssl, mqtt_topic)
 
-    data = response.get("data", response)
-    raw_nodes: list[dict[str, Any]] = data.get("nodes", [])
-    links: list[dict[str, Any]] = data.get("links", [])
+    if result is None:
+        return
 
-    nodes: dict[str, dict[str, Any]] = {}
-    for n in raw_nodes:
-        ieee = n.get("ieeeAddr", "").lower()
-        if ieee:
-            nodes[ieee] = n
+    nodes, links = result
 
     parent_map, lqi_map, depth_map = _build_routing_tree(nodes, links)
 
@@ -322,8 +542,9 @@ async def run_network_map(
         if lqi < critical_lqi and nodes[ieee].get("type") != "Coordinator"
     )
 
+    backend_label = "ZHA" if resolved == "zha" else "Z2M"
     summary = (
-        f"Zigbee Network Map  "
+        f"Zigbee Network Map [{backend_label}]  "
         f"[{len(non_coord)} devices: {router_count} routers, {end_count} end-devices]"
     )
     if weak_count:
@@ -382,6 +603,7 @@ def network_map_command(
     warn_lqi: int = 80,
     critical_lqi: int = 30,
     output_svg: Path | None = None,
+    backend: str = "auto",
 ) -> None:
     asyncio.run(
         run_network_map(
@@ -394,5 +616,6 @@ def network_map_command(
             warn_lqi=warn_lqi,
             critical_lqi=critical_lqi,
             output_svg=output_svg,
+            backend=backend,
         )
     )

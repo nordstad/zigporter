@@ -168,6 +168,27 @@ class HAClient:
         """Fetch all ZHA devices via WebSocket (REST endpoint removed in HA 2025+)."""
         return await self._ws_command({"type": "zha/devices"})
 
+    async def get_zha_network_topology(self) -> dict[str, Any]:
+        """Fetch cached ZHA network topology.
+
+        Returns a dict keyed by IEEE address (colon-format) containing per-device
+        topology data including the ``neighbors`` list.  Returns an empty dict if ZHA
+        is not installed or no topology scan has been run yet.
+        """
+        try:
+            result = await self._ws_command({"type": "zha/network_topology"})
+            return result or {}
+        except RuntimeError:
+            return {}
+
+    async def run_zha_topology_scan(self) -> None:
+        """Trigger a ZHA network topology scan and wait for it to complete.
+
+        Sends ``zha/topology/scan_now`` which blocks until the scan finishes
+        (typically 30–90 s for real networks).
+        """
+        await self._ws_command({"type": "zha/topology/scan_now"})
+
     async def get_entity_registry(self) -> list[dict[str, Any]]:
         """Fetch the full entity registry."""
         return await self._ws_command({"type": "config/entity_registry/list"})
