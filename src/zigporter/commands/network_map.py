@@ -350,17 +350,31 @@ def _status_markup(lqi: int, warn_lqi: int, critical_lqi: int) -> str:
 
 
 def _coord_annotation(
-    ieee: str, depth: int, coord_lqi_map: dict[str, int], warn_lqi: int, critical_lqi: int
+    ieee: str,
+    depth: int,
+    coord_lqi_map: dict[str, int],
+    lqi_map: dict[str, int],
+    warn_lqi: int,
+    critical_lqi: int,
 ) -> str:
-    """Return a Rich-markup annotation when a routed device has a weak direct coordinator link.
+    """Return a Rich-markup annotation showing asymmetric or weak coordinator links.
 
-    Only emitted for depth > 1 nodes (devices not directly connected to the coordinator)
-    whose direct-coordinator LQI is below warn_lqi.  This surfaces the "fallback path"
-    quality without replacing the routing-path LQI shown on the tree edge.
+    Depth 1 (direct to coordinator): shows the uplink LQI (device → coordinator, measured
+    by the coordinator) when it differs from the displayed routing LQI (which is the
+    min of both directions).  This surfaces the asymmetry so users can see that one
+    direction is strong even when the other is weak.
+
+    Depth > 1 (routed): shows the direct-coordinator LQI only when it is below warn_lqi,
+    flagging poor fallback connectivity if the routing parent fails.
     """
-    if depth <= 1 or ieee not in coord_lqi_map:
+    if ieee not in coord_lqi_map:
         return ""
     clqi = coord_lqi_map[ieee]
+    if depth == 1:
+        routing_lqi = lqi_map.get(ieee, clqi)
+        if clqi == routing_lqi:
+            return ""
+        return f"  [dim](up: {clqi})[/dim]"
     if clqi >= warn_lqi:
         return ""
     if clqi == 0:
@@ -401,7 +415,7 @@ def _render_tree(
         status = _status_markup(lqi, warn_lqi, critical_lqi)
         children_info = f"  ({len(node_children)} children)" if node_children else ""
         status_str = f"  {status}" if status else ""
-        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, warn_lqi, critical_lqi)
+        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, lqi_map, warn_lqi, critical_lqi)
         out.print(
             f"{prefix}{connector} {name}  [{role}]  {lqi_str}  hops: {depth}"
             f"{children_info}{status_str}{coord_str}"
@@ -459,7 +473,7 @@ def _render_table(
             parent_node = nodes[parent_ieee]
             parent_name = parent_node.get("friendlyName", parent_ieee)
         status = _status_markup(lqi, warn_lqi, critical_lqi)
-        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, warn_lqi, critical_lqi)
+        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, lqi_map, warn_lqi, critical_lqi)
         rows.append((lqi, name, role, parent_name, str(lqi), str(depth), status + coord_str))
 
     rows.sort(key=lambda r: r[0])
@@ -683,6 +697,7 @@ async def run_network_map(
                 lqi_map=lqi_map,
                 depth_map=depth_map,
                 children=children,
+                coord_lqi_map=coord_lqi_map,
                 output_path=output_svg,
                 warn_lqi=warn_lqi,
                 critical_lqi=critical_lqi,

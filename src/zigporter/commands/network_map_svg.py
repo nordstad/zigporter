@@ -492,6 +492,7 @@ def render_svg(
     output_path: Path,
     warn_lqi: int = 80,
     critical_lqi: int = 30,
+    coord_lqi_map: dict[str, int] | None = None,
 ) -> None:
     """Render a radial Zigbee network map to *output_path* as SVG."""
     coordinator_ieee = next(
@@ -596,6 +597,7 @@ def render_svg(
     dwg.add(ring_group)
 
     # Edges + LQI pill badges
+    _coord_lqi = coord_lqi_map or {}
     edge_group = dwg.g(id="edges", opacity=str(EDGE_OPACITY))
     lqi_label_group = dwg.g(id="lqi-labels")
     for ieee, parent_ieee in parent_map.items():
@@ -613,8 +615,15 @@ def render_svg(
                 stroke_width=_edge_width(lqi),
             )
         )
+        # For depth-1 devices with asymmetric links, show both directions:
+        # ↓N = downlink (coordinator → device), ↑N = uplink (device → coordinator)
+        up_lqi = _coord_lqi.get(ieee)
+        if depth_map.get(ieee, 0) == 1 and up_lqi is not None and up_lqi != lqi:
+            lqi_text = f"\u2193{lqi} \u2191{up_lqi}"
+        else:
+            lqi_text = str(lqi)
         mx, my = x1 * 0.3 + x2 * 0.7, y1 * 0.3 + y2 * 0.7
-        badge_w = len(str(lqi)) * 7 + 10
+        badge_w = len(lqi_text) * 7 + 10
         lqi_label_group.add(
             dwg.rect(
                 insert=(round(mx - badge_w / 2, 1), round(my - 9, 1)),
@@ -626,7 +635,7 @@ def render_svg(
         )
         lqi_label_group.add(
             dwg.text(
-                str(lqi),
+                lqi_text,
                 insert=(round(mx, 1), round(my + 1, 1)),
                 fill=color,
                 font_size=DIM_FS,
