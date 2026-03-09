@@ -353,16 +353,15 @@ def _coord_annotation(
     ieee: str,
     depth: int,
     coord_lqi_map: dict[str, int],
-    lqi_map: dict[str, int],
     warn_lqi: int,
     critical_lqi: int,
 ) -> str:
     """Return a Rich-markup annotation showing asymmetric or weak coordinator links.
 
-    Depth 1 (direct to coordinator): shows the uplink LQI (device → coordinator, measured
-    by the coordinator) when it differs from the displayed routing LQI (which is the
-    min of both directions).  This surfaces the asymmetry so users can see that one
-    direction is strong even when the other is weak.
+    Depth 1 (direct to coordinator): always shows the uplink LQI (device → coordinator,
+    measured by the coordinator).  The primary displayed LQI is min(up, down); showing
+    the uplink separately lets users compare against the Z2M dashboard badge which only
+    reports the uplink direction.
 
     Depth > 1 (routed): shows the direct-coordinator LQI only when it is below warn_lqi,
     flagging poor fallback connectivity if the routing parent fails.
@@ -371,9 +370,6 @@ def _coord_annotation(
         return ""
     clqi = coord_lqi_map[ieee]
     if depth == 1:
-        routing_lqi = lqi_map.get(ieee, clqi)
-        if clqi == routing_lqi:
-            return ""
         return f"  [dim](up: {clqi})[/dim]"
     if clqi >= warn_lqi:
         return ""
@@ -415,7 +411,7 @@ def _render_tree(
         status = _status_markup(lqi, warn_lqi, critical_lqi)
         children_info = f"  ({len(node_children)} children)" if node_children else ""
         status_str = f"  {status}" if status else ""
-        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, lqi_map, warn_lqi, critical_lqi)
+        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, warn_lqi, critical_lqi)
         out.print(
             f"{prefix}{connector} {name}  [{role}]  {lqi_str}  hops: {depth}"
             f"{children_info}{status_str}{coord_str}"
@@ -473,7 +469,7 @@ def _render_table(
             parent_node = nodes[parent_ieee]
             parent_name = parent_node.get("friendlyName", parent_ieee)
         status = _status_markup(lqi, warn_lqi, critical_lqi)
-        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, lqi_map, warn_lqi, critical_lqi)
+        coord_str = _coord_annotation(ieee, depth, coord_lqi_map, warn_lqi, critical_lqi)
         rows.append((lqi, name, role, parent_name, str(lqi), str(depth), status + coord_str))
 
     rows.sort(key=lambda r: r[0])

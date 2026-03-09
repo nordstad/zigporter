@@ -615,10 +615,10 @@ def render_svg(
                 stroke_width=_edge_width(lqi),
             )
         )
-        # For depth-1 devices with asymmetric links, show both directions:
-        # ↓N = downlink (coordinator → device), ↑N = uplink (device → coordinator)
+        # For depth-1 devices show both directions: ↓N = downlink (coordinator → device),
+        # ↑N = uplink (device → coordinator, what the Z2M dashboard reports).
         up_lqi = _coord_lqi.get(ieee)
-        if depth_map.get(ieee, 0) == 1 and up_lqi is not None and up_lqi != lqi:
+        if depth_map.get(ieee, 0) == 1 and up_lqi is not None:
             lqi_text = f"\u2193{lqi} \u2191{up_lqi}"
         else:
             lqi_text = str(lqi)
