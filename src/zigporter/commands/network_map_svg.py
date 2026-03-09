@@ -124,10 +124,13 @@ def _node_radius(node_type: str) -> int:
 
 
 def _subtree_weights(ieee: str, children: dict[str, list[str]]) -> dict[str, int]:
-    """Angular weight = max(leaf count, subtree depth).
+    """Angular weight = max(ceil(√leaf_count), subtree_depth).
 
-    Pure leaf-count under-allocates linear chains: a 3-hop chain gets weight 1
-    (same as a leaf) even though its nodes span 3 rings.
+    Pure leaf-count under-allocates linear chains (a 3-hop chain gets weight 1
+    even though its nodes span 3 rings) and over-allocates wide hubs (a subtree
+    with 15 leaves would consume 75% of the parent's arc, leaving 25% for all
+    siblings).  Square-root compression keeps deep chains well-weighted while
+    preventing any single large subtree from dominating the layout.
     """
     weights: dict[str, int] = {}
 
@@ -139,7 +142,7 @@ def _subtree_weights(ieee: str, children: dict[str, list[str]]) -> dict[str, int
         results = [_calc(k) for k in kids]
         leaves = sum(lc for lc, _ in results)
         depth = max(d for _, d in results) + 1
-        weights[n] = max(leaves, depth)
+        weights[n] = max(math.ceil(math.sqrt(leaves)), depth)
         return leaves, depth
 
     _calc(ieee)
@@ -206,13 +209,17 @@ def _assign_angles(
     total = sum(leaf_counts.get(k, 1) for k in sorted_kids)
     span = end - start
 
-    # Geometry-aware per-child minimum angle: enough arc to fit the node circle
+    # Geometry-aware per-child minimum angle: enough arc for the node circle plus
+    # label pill. Use the same label_arc floor as _compute_ring_radii so the
+    # initial placement already respects label-width separation.
     child_depth = depth_map.get(ieee, 0) + 1
     prev_r = ring_radii.get(child_depth - 1, 0.0)
     curr_r = ring_radii.get(child_depth, prev_r + MIN_RING_GAP)
     r_at_depth = max((prev_r + curr_r) / 2, 1.0)
+    label_arc = MAX_LABEL_LEN * 6 + 10
     min_angles = [
-        (2 * _node_radius(nodes.get(k, {}).get("type", "EndDevice")) + COLLISION_GAP) / r_at_depth
+        max(2 * _node_radius(nodes.get(k, {}).get("type", "EndDevice")) + COLLISION_GAP, label_arc)
+        / r_at_depth
         for k in sorted_kids
     ]
 
@@ -284,7 +291,8 @@ def _resolve_collisions(
                     dist = math.hypot(ax - bx, ay - by)
                     ra = _node_radius(nodes[a].get("type", "EndDevice"))
                     rb = _node_radius(nodes[b].get("type", "EndDevice"))
-                    min_dist = ra + rb + COLLISION_GAP
+                    label_arc = MAX_LABEL_LEN * 6 + 10
+                    min_dist = max(ra + rb + COLLISION_GAP, label_arc)
                     if dist >= min_dist:
                         continue
                     moved = True

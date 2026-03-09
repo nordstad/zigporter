@@ -472,8 +472,8 @@ def test_subtree_weights_linear_chain_uses_depth():
     assert weights["a"] == 3
 
 
-def test_subtree_weights_wide_hub_uses_leaf_count():
-    """A hub with 5 direct children keeps its leaf count as the weight."""
+def test_subtree_weights_wide_hub_uses_sqrt_leaf_count():
+    """A wide hub uses ceil(√leaf_count) to prevent dominating the layout."""
     children: dict[str, list[str]] = {
         "root": ["hub"],
         "hub": ["c1", "c2", "c3", "c4", "c5"],
@@ -484,8 +484,8 @@ def test_subtree_weights_wide_hub_uses_leaf_count():
         "c5": [],
     }
     weights = _subtree_weights("root", children)
-    # hub: leaf_count=5, depth=2 → weight=5
-    assert weights["hub"] == 5
+    # hub: leaf_count=5, depth=2 → weight=max(ceil(√5)=3, 2)=3
+    assert weights["hub"] == 3
 
 
 # ── _edge_color helper ────────────────────────────────────────────────────────
