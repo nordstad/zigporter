@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.0.2] - 2026-03-09
+
+### Fixed
+
+- fix(network-map): prevent parent_map cycles in BFS re-placement (#50)
+
 ## [1.0.2] - 2026-03-09
 
 ### Fixed
@@ -335,6 +342,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/nordstad/zigporter/compare/v1.0.2...v1.0.2
 [1.0.2]: https://github.com/nordstad/zigporter/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/nordstad/zigporter/compare/v1.0.1...v1.0.1
 [1.0.1]: https://github.com/nordstad/zigporter/compare/v1.0.0...v1.0.1
