@@ -1,4 +1,5 @@
 import json
+import ssl
 
 import httpx
 import pytest
@@ -361,7 +362,6 @@ async def test_update_scene(client, mocker):
 
 def test_ssl_context_verify_false(client):
     """Line 34-38: _ssl_context() returns an ssl.SSLContext when verify_ssl=False."""
-    import ssl  # noqa: PLC0415
 
     ctx = client._ssl_context()
     assert isinstance(ctx, ssl.SSLContext)
@@ -528,6 +528,49 @@ async def test_ws_url_http_to_ws(client):
     assert c_http._ws_url == "ws://ha.test/api/websocket"
     c_https = HAClient(ha_url="https://ha.test", token=TOKEN)
     assert c_https._ws_url == "wss://ha.test/api/websocket"
+
+
+async def test_ws_session_no_ssl_for_ws_scheme(mocker):
+    """_ws_session passes ssl=None for ws:// URIs to avoid websockets incompatibility error."""
+    c = HAClient(ha_url="http://ha.test", token=TOKEN, verify_ssl=False)
+    mock_ws = mocker.AsyncMock()
+    mock_ws.recv = mocker.AsyncMock(
+        side_effect=[
+            json.dumps({"type": "auth_required"}),
+            json.dumps({"type": "auth_ok"}),
+        ]
+    )
+    mock_ws.__aenter__ = mocker.AsyncMock(return_value=mock_ws)
+    mock_ws.__aexit__ = mocker.AsyncMock(return_value=False)
+    mock_connect = mocker.patch("websockets.connect", return_value=mock_ws)
+
+    async with c._ws_session():
+        pass
+
+    _, kwargs = mock_connect.call_args
+    assert kwargs.get("ssl") is None
+
+
+async def test_ws_session_ssl_context_for_wss_scheme(mocker):
+    """_ws_session passes an ssl.SSLContext for wss:// URIs."""
+    c = HAClient(ha_url="https://ha.test", token=TOKEN, verify_ssl=True)
+    mock_ws = mocker.AsyncMock()
+    mock_ws.recv = mocker.AsyncMock(
+        side_effect=[
+            json.dumps({"type": "auth_required"}),
+            json.dumps({"type": "auth_ok"}),
+        ]
+    )
+    mock_ws.__aenter__ = mocker.AsyncMock(return_value=mock_ws)
+    mock_ws.__aexit__ = mocker.AsyncMock(return_value=False)
+    mock_connect = mocker.patch("websockets.connect", return_value=mock_ws)
+
+    async with c._ws_session():
+        pass
+
+    _, kwargs = mock_connect.call_args
+    # verify_ssl=True → _ssl_context() returns True (websockets uses default TLS)
+    assert kwargs.get("ssl") is True
 
 
 async def test_get_all_ws_data_unexpected_first_message(client, mocker):
