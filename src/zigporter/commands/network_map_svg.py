@@ -169,7 +169,8 @@ def _compute_path_min_lqi(
             cur = parent_map.get(cur)
         base = cache[cur] if cur in cache else 255
         for node in reversed(path):
-            base = min(lqi_map.get(node, 0), base)
+            if node in lqi_map:
+                base = min(lqi_map[node], base)
             cache[node] = base
         return cache.get(ieee, 0)
 
