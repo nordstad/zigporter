@@ -26,6 +26,17 @@ CLI toolkit for Home Assistant Zigbee — migrate ZHA → Z2M, cascade-rename en
   </tbody>
 </table>
 
+## Claude Code skills
+
+If you open the repo in [Claude Code](https://claude.ai/code), additional slash-command
+skills are available on top of the CLI:
+
+| Skill | Description |
+|---|---|
+| [`/smart-rename`](guide/smart-rename.md) | Audit all Z2M device names against a convention, get AI-suggested corrections, and apply only the ones you approve |
+
+---
+
 ## Installation
 
 ```bash

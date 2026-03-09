@@ -11,6 +11,7 @@ from rich.console import Console
 from zigporter.commands.check import check_command
 from zigporter.commands.export import export_command, run_export
 from zigporter.commands.inspect import inspect_command
+from zigporter.commands.list_devices import list_devices_command
 from zigporter.commands.list_z2m import list_z2m_command
 from zigporter.commands.migrate import migrate_command
 from zigporter.commands.setup import setup_command
@@ -185,6 +186,13 @@ def list_z2m() -> None:
     list_z2m_command(
         ha_url=ha_url, token=token, z2m_url=z2m_url, verify_ssl=verify_ssl, mqtt_topic=mqtt_topic
     )
+
+
+@app.command(name="list-devices")
+def list_devices() -> None:
+    """List all Home Assistant devices across all integrations."""
+    ha_url, token, verify_ssl = _get_config()
+    list_devices_command(ha_url=ha_url, token=token, verify_ssl=verify_ssl)
 
 
 def _resolve_or_fetch_export(

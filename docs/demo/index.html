@@ -201,6 +201,31 @@ const DEMO_LISTZ2M = [
   [d('└───────────────────────┴──────────────────────┴───────────┴─────────────────┘'), 80],
 ];
 
+// ── DEMO: list-devices ────────────────────────────────────────────────────────
+const DEMO_LISTDEVICES = [
+  [`<span class="ps">$</span> <span class="cmd">zigporter list-devices</span>`, 0],
+  [`${d('⠸')} Fetching HA device registry...`, 400, 1],
+  [`${d('⠼')} Fetching HA device registry...`, 500, 1],
+  [`${d('⠴')} Fetching HA device registry...`, 400, 1],
+  [`${d('⠦')} Done`, 300, 2],
+  [null, 200],
+  // Title
+  [d('                          ') + bd('Home Assistant Devices (8)'), 100],
+  // Table header
+  [d('┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━┓'), 100],
+  [d('┃ ') + bd('Name                 ') + d('┃ ') + bd('Area        ') + d('┃ ') + bd('Integration') + d('┃ ') + bd('Manufacturer') + d('┃ ') + bd('Model      ') + d('┃'), 60],
+  [d('┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━┩'), 60],
+  [`│ Attic Climate Sensor │ Attic       │ z2m        │ Aqara       │ WSDCGQ11LM │`, 80],
+  [`│ Bedroom Light Desk   │ Bedroom     │ z2m        │ Philips     │ LCT012     │`, 80],
+  [`│ Hall Sensor Motion   │ Hallway     │ zha        │ Aqara       │ MS-S02     │`, 80],
+  [`│ Kitchen Coffee Plug  │ Kitchen     │ z2m        │ IKEA        │ E1603      │`, 80],
+  [`│ Living Room TV       │ Living Room │ matter     │ Samsung     │ QN85Q80C   │`, 80],
+  [`│ Office Sensor Door   │ Office      │ z2m        │ Aqara       │ MCCGQ11LM  │`, 80],
+  [`│ Outdoor Light Porch  │ Outdoor     │ zwave      │ Fibaro      │ FGS-223    │`, 80],
+  [`│ Study Light Ceiling  │ Study       │ homekit    │ Apple       │ HomePod    │`, 80],
+  [d('└──────────────────────┴─────────────┴────────────┴─────────────┴────────────┘'), 80],
+];
+
 // ── DEMO: migrate ─────────────────────────────────────────────────────────────
 const DEMO_MIGRATE = [
   [`<span class="ps">$</span> <span class="cmd">zigporter migrate</span>`, 0],
@@ -554,6 +579,7 @@ const DEMOS = [
   { key:'fix',           label:'fix-device',    desc:'Clean up stale ZHA registry entries',    script:DEMO_FIX },
   { key:'inspect',       label:'inspect',       desc:'Show a device\'s full state',            script:DEMO_INSPECT },
   { key:'list-z2m',      label:'list-z2m',      desc:'List all Zigbee2MQTT devices',           script:DEMO_LISTZ2M },
+  { key:'list-devices',  label:'list-devices',  desc:'List all HA devices across all integrations', script:DEMO_LISTDEVICES },
   { key:'migrate',       label:'migrate',       desc:'Interactive ZHA → Z2M wizard (1 device)',script:DEMO_MIGRATE },
   { key:'network-map',   label:'network-map',   desc:'Visualise Zigbee mesh topology and LQI',  script:DEMO_NETMAP },
   { key:'rename',        label:'rename-device', desc:'Rename device, cascade all references',  script:DEMO_RENAME },
