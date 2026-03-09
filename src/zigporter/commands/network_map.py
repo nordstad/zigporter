@@ -210,6 +210,16 @@ async def _resolve_backend(
 # ---------------------------------------------------------------------------
 
 
+def _is_ancestor(candidate: str, of: str, parent_map: dict[str, str | None]) -> bool:
+    """Return True if `candidate` is an ancestor of `of` in the current tree."""
+    cur = parent_map.get(of)
+    while cur is not None:
+        if cur == candidate:
+            return True
+        cur = parent_map.get(cur)
+    return False
+
+
 def _build_routing_tree(
     nodes: dict[str, dict[str, Any]],
     links: list[dict[str, Any]],
@@ -295,6 +305,8 @@ def _build_routing_tree(
                 # Accept both string ("Child") and integer (1) from ZHA/bellows.
                 is_child = 1 if relationship in ("Child", 1) else 0
                 score = (is_child, effective_lqi)
+                if _is_ancestor(ieee, tgt, parent_map):
+                    continue  # would create a cycle — skip
                 if score > best_score:
                     best_score = score
                     best_parent = tgt

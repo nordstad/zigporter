@@ -150,19 +150,28 @@ def _compute_path_min_lqi(
     parent_map: dict[str, str | None],
     lqi_map: dict[str, int],
 ) -> dict[str, int]:
-    """Min LQI along the full chain from coordinator to each device."""
+    """Min LQI along the full chain from coordinator to each device.
+
+    Iterative to avoid RecursionError on deep chains or cycles in parent_map.
+    A `seen` set breaks any cycle that may exist in the data.
+    """
     cache: dict[str, int] = {}
 
     def _min(ieee: str) -> int:
         if ieee in cache:
             return cache[ieee]
-        parent = parent_map.get(ieee)
-        if parent is None:  # coordinator
-            cache[ieee] = 255
-            return 255
-        link = lqi_map.get(ieee, 0)
-        cache[ieee] = min(link, _min(parent))
-        return cache[ieee]
+        path: list[str] = []
+        seen: set[str] = set()
+        cur: str | None = ieee
+        while cur is not None and cur not in cache and cur not in seen:
+            seen.add(cur)
+            path.append(cur)
+            cur = parent_map.get(cur)
+        base = cache[cur] if cur in cache else 255
+        for node in reversed(path):
+            base = min(lqi_map.get(node, 0), base)
+            cache[node] = base
+        return cache.get(ieee, 0)
 
     for ieee in parent_map:
         _min(ieee)

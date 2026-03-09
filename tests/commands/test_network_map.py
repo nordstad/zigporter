@@ -258,6 +258,62 @@ def test_build_routing_tree_empty_links_orphans_attached_to_coordinator():
         assert depth_map[ieee] == 1
 
 
+def test_build_routing_tree_no_cycles():
+    """Re-placement must never create a cycle in parent_map.
+
+    Topology: A → Coordinator (lqi=100), B → A (lqi=200).
+    A second pass finds A → B looks better than A → Coordinator due to lqi,
+    but B is already a descendant of A, so the re-placement must be rejected.
+    """
+    nodes = {
+        "0xcoord": {"type": "Coordinator", "friendlyName": "Coordinator"},
+        "0xa": {"type": "Router", "friendlyName": "Router A"},
+        "0xb": {"type": "Router", "friendlyName": "Router B"},
+    }
+    links = [
+        # A → Coordinator (lqi=100)
+        {"source": {"ieeeAddr": "0xa"}, "target": {"ieeeAddr": "0xcoord"}, "lqi": 100},
+        # Coordinator → A (lqi=100, bidirectional)
+        {"source": {"ieeeAddr": "0xcoord"}, "target": {"ieeeAddr": "0xa"}, "lqi": 100},
+        # B → A (lqi=200)
+        {"source": {"ieeeAddr": "0xb"}, "target": {"ieeeAddr": "0xa"}, "lqi": 200},
+        # A → B (lqi=200) — would form a cycle if A were re-parented to B
+        {"source": {"ieeeAddr": "0xa"}, "target": {"ieeeAddr": "0xb"}, "lqi": 200},
+        # Coordinator → B (lqi=50, lower than B→A)
+        {"source": {"ieeeAddr": "0xcoord"}, "target": {"ieeeAddr": "0xb"}, "lqi": 50},
+        # B → Coordinator (lqi=50)
+        {"source": {"ieeeAddr": "0xb"}, "target": {"ieeeAddr": "0xcoord"}, "lqi": 50},
+    ]
+    parent_map, _, _ = _build_routing_tree(nodes, links)
+
+    # Walk every device's parent chain; no device should appear twice
+    for ieee in nodes:
+        seen: set[str] = set()
+        cur = parent_map.get(ieee)
+        while cur is not None:
+            assert cur not in seen, f"Cycle detected in parent chain of {ieee}: {cur} seen twice"
+            seen.add(cur)
+            cur = parent_map.get(cur)
+
+
+def test_compute_path_min_lqi_cycle_safe():
+    """_compute_path_min_lqi must not recurse/loop infinitely on a cyclic parent_map."""
+    from zigporter.commands.network_map_svg import _compute_path_min_lqi  # noqa: PLC0415
+
+    # Artificially inject a two-node cycle: A → B, B → A
+    parent_map: dict[str, str | None] = {
+        "0xcoord": None,
+        "0xa": "0xb",
+        "0xb": "0xa",
+    }
+    lqi_map = {"0xa": 120, "0xb": 90}
+
+    # Must return without raising and all values must be non-negative
+    result = _compute_path_min_lqi(parent_map, lqi_map)
+    for ieee, val in result.items():
+        assert val >= 0, f"{ieee} has negative path_min_lqi: {val}"
+
+
 # ---------------------------------------------------------------------------
 # Integration tests via run_network_map (captured console output)
 # ---------------------------------------------------------------------------
