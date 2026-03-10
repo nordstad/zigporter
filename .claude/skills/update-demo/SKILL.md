@@ -51,14 +51,35 @@ git log <demo-sha>..HEAD --oneline -- src/zigporter/main.py src/zigporter/comman
    - Delete the `DEMO_<NAME>` constant
    - Remove the matching entry from the `DEMOS` array
 
-6. **Verify the HTML is self-consistent using Playwright MCP**
-   - Start a local server: `python3 -m http.server 8765 --directory docs/demo`
-   - Resize to mobile (390×844) and desktop (1440×900) and navigate to `http://localhost:8765/index.html`
-   - Click through each demo card and take screenshots to confirm:
-     - All cards play to completion without stalling
-     - Tables render fully without clipping on mobile
+6. **Verify the HTML is self-consistent using playwright-cli**
+   - Start a local server in the background:
+     ```bash
+     python3 -m http.server 8765 --directory docs/demo > /tmp/demo-server.log 2>&1 &
+     SERVER_PID=$!
+     ```
+   - Open the browser, resize to mobile, click each new/changed card, and check the snapshot:
+     ```bash
+     playwright-cli open http://localhost:8765/index.html
+     playwright-cli resize 390 844
+     playwright-cli snapshot
+     # click the card under test (use ref from snapshot)
+     playwright-cli click <ref>
+     # wait for animation to finish, then snapshot to confirm all rows rendered
+     playwright-cli snapshot
+     playwright-cli console   # check for JS errors
+     # repeat at desktop size
+     playwright-cli resize 1440 900
+     playwright-cli snapshot
+     playwright-cli close
+     ```
+   - Confirm:
+     - All tested cards play to completion without stalling
+     - Tables render fully without clipping on mobile (all rows visible, no overflow)
      - No JS console errors
-   - Kill the server when done
+   - Kill the server when done:
+     ```bash
+     kill $SERVER_PID
+     ```
 
 7. **Show a summary diff** of what changed in `docs/demo/index.html` and confirm with the user
    before finishing.

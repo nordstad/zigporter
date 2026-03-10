@@ -121,3 +121,12 @@ def test_load_z2m_config_missing_raises(monkeypatch, tmp_path):
 
     with pytest.raises(ValueError, match="Z2M_URL"):
         load_z2m_config()
+
+
+def test_default_convention_path(tmp_path, monkeypatch):
+    monkeypatch.setattr("zigporter.config.config_dir", lambda: tmp_path)
+    from zigporter.config import default_convention_path
+
+    result = default_convention_path()
+
+    assert result == tmp_path / "naming-convention.json"

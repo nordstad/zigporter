@@ -48,6 +48,15 @@ def default_stale_path() -> Path:
     return config_dir() / "stale.json"
 
 
+def default_convention_path() -> Path:
+    """Return the default path for the naming convention file.
+
+    Returns:
+        ``~/.config/zigporter/naming-convention.json``
+    """
+    return config_dir() / "naming-convention.json"
+
+
 def backup_confirmed_path() -> Path:
     """Return the sentinel path written when the user confirms a HA backup.
 
