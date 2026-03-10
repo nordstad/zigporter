@@ -353,7 +353,7 @@ def _draw_legend(
     critical_lqi: int,
 ) -> None:
     lx, ly = 20, 20
-    lw, lh = 300, 330
+    lw, lh = 300, 316
     row = 24
 
     g = dwg.g(id="legend")
@@ -476,22 +476,11 @@ def _draw_legend(
     )
     y += row
 
-    # Depth-1 edge label explanation: ↓down ↑up
-    # Use plain text in the icon column — no background rect to avoid overflow
+    # Depth-1 edge label explanation — full-width text, no icon column
     g.add(
         dwg.text(
-            "\u2193N \u2191N",
-            insert=(lx + 16, y),
-            fill=EDGE_GOOD,
-            font_size="9px",
-            font_weight="bold",
-            text_anchor="middle",
-        )
-    )
-    g.add(
-        dwg.text(
-            "hop-1 edge: \u2193 coord\u2192dev, \u2191 dev\u2192coord",
-            insert=(lx + 30, y),
+            "Hop-1 edges: \u2193 coord\u2192dev  \u2191 dev\u2192coord",
+            insert=(lx + 8, y),
             fill=TEXT_DIM,
             font_size=LEGEND_FS,
         )
