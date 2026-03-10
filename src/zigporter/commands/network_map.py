@@ -224,21 +224,38 @@ def _build_routing_tree(
     nodes: dict[str, dict[str, Any]],
     links: list[dict[str, Any]],
 ) -> tuple[dict[str, str | None], dict[str, int], dict[str, int]]:
-    """Build a routing tree via iterative BFS.
+    """Build a routing tree with minimum-hop placement and LQI-optimised parent selection.
 
-    For each non-coordinator node, the parent is the already-placed tree node
-    with the best *bidirectional* LQI — min(lqi_out, lqi_in).  Using only the
-    device's outgoing LQI is misleading because Zigbee links are asymmetric:
-    SLZB-06P7 might report LQI 115 to the coordinator while the coordinator
-    only reports LQI 29 back.  The weaker direction is the real bottleneck.
+    Three-phase algorithm:
+
+    **Phase 1 — Minimum-depth BFS.**  Build a bidirectional adjacency graph from all
+    non-Parent/PreviousChild links and run BFS from the coordinator.  This gives the
+    minimum possible hop count for every device based on RF reachability, preventing
+    the old greedy LQI loop from inflating depths when a deeper router happens to have
+    better signal quality.
+
+    **Phase 2 — Child-relationship correction.**  A ``"Child"`` relationship in a
+    neighbor-table entry is authoritative: the scanning device is the actual parent of
+    that neighbor, regardless of whether the coordinator can also overhear it directly.
+    For each device with a ``"Child"`` link to its router, its depth is raised to
+    ``router.depth + 1`` if that exceeds the BFS minimum (the BFS minimum can be too
+    shallow when the coordinator overhears an end-device that physically joined a range
+    extender further away).
+
+    **Phase 3 — Best-LQI parent selection.**  For each device, pick the already-placed
+    neighbour at exactly ``target_depth - 1`` with the highest bidirectional LQI,
+    still preferring ``"Child"`` relationship links over plain ``"Neighbour"`` links.
+    Devices with no valid parent at that depth fall back to the shallowest available
+    placed neighbour, and finally to a direct coordinator attachment (orphan handling).
 
     Returns:
         parent_map:  ieee → parent_ieee  (None for coordinator)
         lqi_map:     ieee → min(lqi_out, lqi_in) to parent
         depth_map:   ieee → hops from coordinator
     """
-    # Build per-directed-pair LQI: (source, target) → lqi
-    # outgoing: source → [(target, lqi, relationship)]
+    from collections import deque
+
+    # ── Setup ─────────────────────────────────────────────────────────────────
     pair_lqi: dict[tuple[str, str], int] = {}
     outgoing: dict[str, list[tuple[str, int, str | int]]] = {}
     for link in links:
@@ -249,7 +266,6 @@ def _build_routing_tree(
         pair_lqi[(src, tgt)] = lqi
         outgoing.setdefault(src, []).append((tgt, lqi, relationship))
 
-    # Locate coordinator
     coordinator_ieee: str | None = None
     for ieee, node in nodes.items():
         if node.get("type") == "Coordinator":
@@ -259,68 +275,103 @@ def _build_routing_tree(
     if coordinator_ieee is None:
         return {}, {}, {}
 
+    # ── Phase 1: minimum-depth BFS (bidirectional) ────────────────────────────
+    adj: dict[str, set[str]] = {ieee: set() for ieee in nodes}
+    for src, tgt_list in outgoing.items():
+        if src not in nodes:
+            continue
+        for tgt, _lqi, rel in tgt_list:
+            if rel not in ("Parent", "PreviousChild") and tgt in nodes:
+                adj[src].add(tgt)
+                adj[tgt].add(src)
+
+    min_depth: dict[str, int] = {coordinator_ieee: 0}
+    bfs_q: deque[str] = deque([coordinator_ieee])
+    while bfs_q:
+        cur = bfs_q.popleft()
+        for nb in adj[cur]:
+            if nb not in min_depth:
+                min_depth[nb] = min_depth[cur] + 1
+                bfs_q.append(nb)
+
+    # ── Phase 2: raise depth for devices with authoritative "Child" links ──────
+    # "Child" in a neighbor-table entry means the scanning device is the parent.
+    # A device's depth must be >= its Child-parent's depth + 1.
+    target_depth: dict[str, int] = dict(min_depth)
+    for src, tgt_list in outgoing.items():
+        if src not in nodes:
+            continue
+        for tgt, _lqi, rel in tgt_list:
+            if rel not in ("Child", 1) or tgt not in target_depth:
+                continue
+            preferred = target_depth[tgt] + 1
+            if preferred > target_depth.get(src, 0):
+                target_depth[src] = preferred
+
+    # ── Phase 3: best-LQI parent selection at exactly target_depth - 1 ────────
     parent_map: dict[str, str | None] = {coordinator_ieee: None}
     lqi_map: dict[str, int] = {}
     depth_map: dict[str, int] = {coordinator_ieee: 0}
-    visited: set[str] = {coordinator_ieee}
-    # Track the best score seen for each placed node so that already-visited nodes can
-    # be re-placed when a strictly better parent is found later in the same pass or a
-    # subsequent pass.
-    #
-    # Score = (is_child_rel, effective_lqi).
-    #
-    # is_child_rel=1 when the candidate router explicitly claims this device as its
-    # child via the ZHA ZDO relationship field (string "Child" or integer 1 from
-    # bellows/zigpy serialisation).  Putting is_child first means a "Child" link
-    # always beats a higher-LQI "Neighbor" link from the coordinator — correct
-    # because the coordinator sometimes overhears end-devices that have actually
-    # joined a range extender.
-    #
-    # "Parent" relationship edges are skipped: a link whose relationship is "Parent"
-    # means the *current* device is the parent of the candidate (i.e. the edge points
-    # in the wrong direction for BFS parent selection) and would create routing cycles.
-    #
-    # Re-placement is safe because scores are strictly monotone increasing and bounded:
-    # is_child ∈ {0,1}, effective_lqi ∈ [0,255].  The while-loop always terminates.
-    best_score_map: dict[str, tuple[int, int]] = {}
 
-    changed = True
-    while changed:
-        changed = False
-        for ieee in nodes:
-            if nodes[ieee].get("type") == "Coordinator":
+    for ieee in sorted(
+        (n for n in nodes if n != coordinator_ieee),
+        key=lambda x: target_depth.get(x, 999),
+    ):
+        d = target_depth.get(ieee)
+        if d is None:
+            parent_map[ieee] = coordinator_ieee
+            lqi_map[ieee] = 0
+            depth_map[ieee] = 1
+            continue
+
+        best_parent: str | None = None
+        best_score: tuple[int, int] = (-1, -1)
+        for tgt, lqi_out, relationship in outgoing.get(ieee, []):
+            if relationship in ("Parent", "PreviousChild"):
                 continue
-            best_parent: str | None = None
-            best_score: tuple[int, int] = (-1, -1)
-            for tgt, lqi_out, relationship in outgoing.get(ieee, []):
-                if tgt not in visited:
-                    continue
-                # "Parent" means the current node is the parent of tgt — wrong direction.
-                if relationship in ("Parent", "PreviousChild"):
-                    continue
-                # Use the weaker of the two directions — Zigbee links are asymmetric
-                # and the bottleneck is whichever side has the lower receive quality.
-                lqi_in = pair_lqi.get((tgt, ieee), lqi_out)
-                effective_lqi = min(lqi_out, lqi_in)
-                # Accept both string ("Child") and integer (1) from ZHA/bellows.
-                is_child = 1 if relationship in ("Child", 1) else 0
-                score = (is_child, effective_lqi)
-                if _is_ancestor(ieee, tgt, parent_map):
-                    continue  # would create a cycle — skip
-                if score > best_score:
-                    best_score = score
-                    best_parent = tgt
-            if best_parent is not None and best_score > best_score_map.get(ieee, (-1, -1)):
-                best_score_map[ieee] = best_score
-                parent_map[ieee] = best_parent
-                lqi_map[ieee] = best_score[1]
-                depth_map[ieee] = depth_map[best_parent] + 1
-                visited.add(ieee)
-                changed = True
+            if depth_map.get(tgt) != d - 1:
+                continue  # parent must be exactly one hop shallower
+            if _is_ancestor(ieee, tgt, parent_map):
+                continue
+            lqi_in = pair_lqi.get((tgt, ieee), lqi_out)
+            effective_lqi = min(lqi_out, lqi_in)
+            is_child = 1 if relationship in ("Child", 1) else 0
+            score = (is_child, effective_lqi)
+            if score > best_score:
+                best_score = score
+                best_parent = tgt
 
-    # Orphaned nodes (no path found) — attach to coordinator with lqi=0
-    for ieee in nodes:
-        if ieee not in visited:
+        if best_parent is not None:
+            parent_map[ieee] = best_parent
+            lqi_map[ieee] = best_score[1]
+            depth_map[ieee] = d
+            continue
+
+        # Fallback: no valid parent at target_depth-1 (sparse links or Phase 2
+        # raised depth above any placed neighbour).  Pick the shallowest placed
+        # neighbour by (depth, -is_child, -lqi).
+        fb_parent: str | None = None
+        fb_score: tuple[int, int, int] = (999, 1, 1)
+        for tgt, lqi_out, relationship in outgoing.get(ieee, []):
+            if relationship in ("Parent", "PreviousChild"):
+                continue
+            if tgt not in depth_map:
+                continue
+            if _is_ancestor(ieee, tgt, parent_map):
+                continue
+            lqi_in = pair_lqi.get((tgt, ieee), lqi_out)
+            effective_lqi = min(lqi_out, lqi_in)
+            is_child = 1 if relationship in ("Child", 1) else 0
+            score = (depth_map[tgt], -is_child, -effective_lqi)
+            if score < fb_score:
+                fb_score = score
+                fb_parent = tgt
+
+        if fb_parent is not None:
+            parent_map[ieee] = fb_parent
+            lqi_map[ieee] = -fb_score[2]
+            depth_map[ieee] = fb_score[0] + 1
+        else:
             parent_map[ieee] = coordinator_ieee
             lqi_map[ieee] = 0
             depth_map[ieee] = 1

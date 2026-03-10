@@ -249,6 +249,35 @@ def _assign_angles(
         cursor += kid_span
 
 
+# ── Uniform ring distribution ─────────────────────────────────────────────────
+
+
+def _normalize_ring_angles(
+    angles: dict[str, float],
+    depth_map: dict[str, int],
+) -> None:
+    """Redistribute nodes at each ring level to use the full 2π circle evenly.
+
+    The current angle of each node (set by the subtree-proportional
+    ``_assign_angles``) determines its *relative order* within the ring.
+    Sorting by that angle before redistribution preserves parent-child grouping
+    (siblings stay adjacent) while ensuring no ring leaves large dead arcs.
+    """
+    from collections import defaultdict
+
+    by_depth: dict[int, list[tuple[float, str]]] = defaultdict(list)
+    for ieee, angle in angles.items():
+        d = depth_map.get(ieee, 0)
+        if d > 0:
+            by_depth[d].append((angle, ieee))
+
+    for items in by_depth.values():
+        items.sort()
+        n = len(items)
+        for i, (_, ieee) in enumerate(items):
+            angles[ieee] = 2 * math.pi * i / n
+
+
 # ── Collision resolution ──────────────────────────────────────────────────────
 
 
@@ -541,6 +570,7 @@ def render_svg(
         nodes,
         ring_radii,
     )
+    _normalize_ring_angles(angles, depth_map)
     path_min_lqi = _compute_path_min_lqi(parent_map, lqi_map)
 
     positions: dict[str, tuple[float, float]] = {}
