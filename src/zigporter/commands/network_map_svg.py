@@ -353,7 +353,7 @@ def _draw_legend(
     critical_lqi: int,
 ) -> None:
     lx, ly = 20, 20
-    lw, lh = 300, 346
+    lw, lh = 300, 330
     row = 24
 
     g = dwg.g(id="legend")
@@ -433,7 +433,7 @@ def _draw_legend(
     )
     y += row + 6
 
-    # In-circle LQI explanation: small annotated circle
+    # In-circle LQI explanation: small annotated circle with badge overlay
     ex = lx + 16
     ey = y - 3
     g.add(dwg.circle(center=(ex, ey), r=7, fill=ROUTER_FILL))
@@ -459,7 +459,7 @@ def _draw_legend(
     )
     g.add(
         dwg.text(
-            "badge: uplink LQI (hop 1)",
+            "badge: \u2191uplink LQI (hop 1)",
             insert=(lx + 30, y),
             fill=TEXT_DIM,
             font_size=LEGEND_FS,
@@ -477,31 +477,20 @@ def _draw_legend(
     y += row
 
     # Depth-1 edge label explanation: ↓down ↑up
-    pill_ex = lx + 16
-    pill_ey = y - 4
-    pill_text = "\u2193N \u2191N"
-    pill_w_ex = len(pill_text) * 7 + 10
-    g.add(
-        dwg.rect(
-            insert=(pill_ex - pill_w_ex / 2, pill_ey - 5),
-            size=(pill_w_ex, 13),
-            rx=4,
-            fill="#0f172a",
-            opacity="0.85",
-        )
-    )
+    # Use plain text in the icon column — no background rect to avoid overflow
     g.add(
         dwg.text(
-            pill_text,
-            insert=(pill_ex, pill_ey + 5),
+            "\u2193N \u2191N",
+            insert=(lx + 16, y),
             fill=EDGE_GOOD,
-            font_size=LEGEND_FS,
+            font_size="9px",
+            font_weight="bold",
             text_anchor="middle",
         )
     )
     g.add(
         dwg.text(
-            "hop-1 edge: \u2193 coord\u2192dev  \u2191 dev\u2192coord",
+            "hop-1 edge: \u2193 coord\u2192dev, \u2191 dev\u2192coord",
             insert=(lx + 30, y),
             fill=TEXT_DIM,
             font_size=LEGEND_FS,
