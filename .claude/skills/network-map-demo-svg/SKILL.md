@@ -28,6 +28,7 @@ description: >
    grep -c "Hop 4"     docs/assets/network-map-demo.svg   # 4 rings present
    grep -c "glow-warn" docs/assets/network-map-demo.svg   # warn glows on Window Sensor, SMLIGHT Repeater, Stair Light, Bedroom Sensor, Sonoff Switch, Attic Sensor, Garden Light, Shed Plug
    grep -c "glow-crit" docs/assets/network-map-demo.svg   # crit glow on Porch Light
+   grep -o '↓[0-9]* ↑[0-9]*' docs/assets/network-map-demo.svg | wc -l  # 8 directional hop-1 edge labels
    ```
    Also confirm Aqara Temp and Nightlight (hop 3 behind Bedside Plug) appear in ring 3,
    and Garden Sensor / Shed Plug appear in ring 4.

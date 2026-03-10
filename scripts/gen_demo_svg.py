@@ -214,6 +214,20 @@ lqi_map: dict[str, int] = {
     SHED_PLUG: 46,  # WEAK
 }
 
+# Coordinator LQI — uplink (device → coordinator) as measured by the coordinator.
+# Only hop-1 devices have a meaningful direct-coordinator measurement; deeper devices
+# are out of direct range (would show 0 in a real scan).
+coord_lqi_map: dict[str, int] = {
+    LIVING_PLUG: 185,
+    KITCHEN_PLUG: 160,
+    HALLWAY_PLUG: 142,
+    BEDROOM_PLUG: 130,
+    OFFICE_PLUG: 125,
+    BATHROOM_SENSOR: 100,
+    FRONT_DOOR: 88,
+    PORCH_LIGHT: 15,  # even worse uplink — nearly out of range
+}
+
 depth_map: dict[str, int] = {
     COORD: 0,
     LIVING_PLUG: 1,
@@ -299,6 +313,7 @@ render_svg(
     output_path=output_path,
     warn_lqi=80,
     critical_lqi=30,
+    coord_lqi_map=coord_lqi_map,
 )
 
 print(f"SVG written to {output_path}")
