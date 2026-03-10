@@ -353,7 +353,7 @@ def _draw_legend(
     critical_lqi: int,
 ) -> None:
     lx, ly = 20, 20
-    lw, lh = 280, 290
+    lw, lh = 300, 346
     row = 24
 
     g = dwg.g(id="legend")
@@ -459,7 +459,49 @@ def _draw_legend(
     )
     g.add(
         dwg.text(
-            "path min LQI (worst hop)",
+            "badge: uplink LQI (hop 1)",
+            insert=(lx + 30, y),
+            fill=TEXT_DIM,
+            font_size=LEGEND_FS,
+        )
+    )
+    y += row - 8
+    g.add(
+        dwg.text(
+            "or path-min LQI (hop 2+)",
+            insert=(lx + 30, y),
+            fill=TEXT_DIM,
+            font_size=LEGEND_FS,
+        )
+    )
+    y += row
+
+    # Depth-1 edge label explanation: ↓down ↑up
+    pill_ex = lx + 16
+    pill_ey = y - 4
+    pill_text = "\u2193N \u2191N"
+    pill_w_ex = len(pill_text) * 7 + 10
+    g.add(
+        dwg.rect(
+            insert=(pill_ex - pill_w_ex / 2, pill_ey - 5),
+            size=(pill_w_ex, 13),
+            rx=4,
+            fill="#0f172a",
+            opacity="0.85",
+        )
+    )
+    g.add(
+        dwg.text(
+            pill_text,
+            insert=(pill_ex, pill_ey + 5),
+            fill=EDGE_GOOD,
+            font_size=LEGEND_FS,
+            text_anchor="middle",
+        )
+    )
+    g.add(
+        dwg.text(
+            "hop-1 edge: \u2193 coord\u2192dev  \u2191 dev\u2192coord",
             insert=(lx + 30, y),
             fill=TEXT_DIM,
             font_size=LEGEND_FS,
@@ -683,16 +725,21 @@ def render_svg(
             circle_attrs["filter"] = glow_filter
         node_group.add(dwg.circle(**circle_attrs))
 
-        # Path-min LQI badge — shown inside every non-coordinator device node.
-        # Displays the worst-hop LQI on the path from coordinator to this device.
+        # LQI badge — shown inside every non-coordinator device node.
+        # Depth 1: shows uplink LQI (device → coordinator, same value as the Z2M
+        #   dashboard badge) so the diagram is directly comparable to Z2M.
+        # Depth 2+: shows the worst-hop (path-min) LQI on the full path from
+        #   coordinator to this device.
         path_lqi = path_min_lqi.get(ieee, 0)
         if not is_coord:
-            lqi_color = _edge_color(path_lqi, warn_lqi, critical_lqi)
+            node_depth = depth_map.get(ieee, 0)
+            badge_lqi = _coord_lqi.get(ieee, path_lqi) if node_depth == 1 else path_lqi
+            lqi_color = _edge_color(badge_lqi, warn_lqi, critical_lqi)
             is_router = node_type == "Router"
             badge_fs = "9px" if is_router else "8px"
             char_w = 6 if is_router else 5
             badge_h = 11 if is_router else 10
-            badge_w = len(str(path_lqi)) * char_w + 8
+            badge_w = len(str(badge_lqi)) * char_w + 8
             node_group.add(
                 dwg.rect(
                     insert=(round(x - badge_w / 2, 1), round(y - badge_h / 2, 1)),
@@ -704,7 +751,7 @@ def render_svg(
             )
             node_group.add(
                 dwg.text(
-                    str(path_lqi),
+                    str(badge_lqi),
                     insert=(round(x, 1), round(y + badge_h * 0.3, 1)),
                     fill=lqi_color,
                     font_size=badge_fs,
