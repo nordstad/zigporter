@@ -12,12 +12,12 @@ zigporter network-map
 
 | Flag | Backend | Requirements |
 |---|---|---|
-| `--backend auto` | Auto-detect (default) | Prompts if both are available |
+| *(none)* | Auto-detect (default) | Prompts if both are available |
 | `--backend z2m` | Zigbee2MQTT | `Z2M_URL` configured |
 | `--backend zha` | ZHA | ZHA integration installed in HA |
 
-With `--backend auto`, zigporter checks which integrations are reachable.  If only one is
-available it is selected silently.  If both are available, you are prompted to choose.
+By default, zigporter checks which integrations are reachable.  If only one is available
+it is selected silently.  If both are available, you are prompted to choose.
 
 ### ZHA topology availability
 

@@ -1185,6 +1185,42 @@ async def test_auto_backend_prompts_when_both_available_selects_zha():
     assert "ZHA" in output
 
 
+async def test_auto_backend_cancelled_by_user():
+    """When user cancels the backend prompt (Ctrl+C), command exits gracefully."""
+    mock_ha_client = AsyncMock()
+    mock_ha_client.get_zha_devices = AsyncMock(return_value=MOCK_ZHA_DEVICES_WITH_NEIGHBORS)
+
+    mock_z2m_client = AsyncMock()
+
+    buf = io.StringIO()
+    cap_console = Console(file=buf, highlight=False, markup=True, force_terminal=False, width=200)
+
+    mock_select = AsyncMock(return_value=None)  # questionary returns None on cancel
+
+    with (
+        patch("zigporter.commands.network_map.HAClient", return_value=mock_ha_client),
+        patch("zigporter.commands.network_map.Z2MClient", return_value=mock_z2m_client),
+        patch("zigporter.commands.network_map.console", cap_console),
+        patch("zigporter.commands.network_map.Progress", return_value=_make_mock_progress()),
+        patch(
+            "zigporter.commands.network_map.questionary.select",
+            return_value=type("S", (), {"ask_async": mock_select})(),
+        ),
+    ):
+        await run_network_map(
+            HA_URL,
+            TOKEN,
+            Z2M_URL,
+            verify_ssl=False,
+            backend="auto",
+        )
+
+    output = buf.getvalue()
+    assert "Cancelled" in output
+    # Should NOT have proceeded to fetch data
+    mock_z2m_client.get_network_map.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Coverage gap tests — edge cases and error paths
 # ---------------------------------------------------------------------------
