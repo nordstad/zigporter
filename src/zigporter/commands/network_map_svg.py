@@ -642,7 +642,7 @@ def render_svg(
             lqi_text = f"\u2193{lqi} \u2191{up_lqi}"
         else:
             lqi_text = str(lqi)
-        mx, my = x1 * 0.3 + x2 * 0.7, y1 * 0.3 + y2 * 0.7
+        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
         badge_w = len(lqi_text) * 7 + 10
         lqi_label_group.add(
             dwg.rect(
