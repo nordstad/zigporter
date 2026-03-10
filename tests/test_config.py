@@ -1,6 +1,15 @@
 import pytest
 
+import zigporter.config
 from zigporter.config import load_config, load_z2m_config
+
+
+@pytest.fixture(autouse=True)
+def _reset_env_loaded(monkeypatch, tmp_path):
+    """Reset the module-level _env_loaded guard and point config_dir to an empty
+    temp directory so the real ~/.config/zigporter/.env never leaks into tests."""
+    monkeypatch.setattr(zigporter.config, "_env_loaded", False)
+    monkeypatch.setattr(zigporter.config, "config_dir", lambda: tmp_path)
 
 
 def test_load_config_from_env(monkeypatch, tmp_path):

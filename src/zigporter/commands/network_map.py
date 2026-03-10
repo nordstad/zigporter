@@ -199,7 +199,10 @@ async def _resolve_backend(
             ],
             style=QUESTIONARY_STYLE,
         ).ask_async()
-        return choice or "z2m"
+        if choice is None:
+            console.print("\n[dim]Cancelled by user.[/dim]")
+            return "none"
+        return choice
 
     if z2m_available:
         return "z2m"

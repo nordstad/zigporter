@@ -12,12 +12,12 @@ zigporter network-map
 
 | Flag | Backend | Requirements |
 |---|---|---|
-| `--backend auto` | Auto-detect (default) | Prompts if both are available |
+| *(none)* | Auto-detect (default) | Prompts if both are available |
 | `--backend z2m` | Zigbee2MQTT | `Z2M_URL` configured |
 | `--backend zha` | ZHA | ZHA integration installed in HA |
 
-With `--backend auto`, zigporter checks which integrations are reachable.  If only one is
-available it is selected silently.  If both are available, you are prompted to choose.
+By default, zigporter checks which integrations are reachable.  If only one is available
+it is selected silently.  If both are available, you are prompted to choose.
 
 ### ZHA topology availability
 
@@ -34,7 +34,7 @@ To get multi-hop routing data, trigger a scan from ZHA settings
 Flat-view limitations:
 
 - Actual routing paths are not shown — all devices appear as `hops: 1`
-- The `(coord: N)` annotation is not shown (it is only meaningful for depth > 1 devices)
+- The `(direct coord: N)` annotation is not shown (it is only meaningful for depth > 1 devices)
 - LQI values reflect the last-observed link quality reported by ZHA, not a fresh scan
 
 ## Output formats
@@ -85,9 +85,9 @@ zigporter network-map --backend zha --output zha_network.svg
 
 ```
 Coordinator
-    ├── Hallway Plug      [router]  LQI: 155  hops: 1
-    │    └── SMLIGHT Repeater    [router]  LQI: 76  hops: 2  WEAK  (coord: 35)
-    │        └── Attic Sensor    [end]     LQI: 62  hops: 3  WEAK  (coord: 39)
+    ├── Hallway Plug      [router]  LQI: 155  hops: 1  (up: 198)
+    │    └── SMLIGHT Repeater    [router]  LQI: 76  hops: 2  WEAK  (direct coord: 35)
+    │        └── Attic Sensor    [end]     LQI: 62  hops: 3  WEAK  (direct coord: 39)
 ```
 
 ### LQI — what is it?
@@ -118,7 +118,7 @@ the link the device actually uses to forward traffic.
 
 !!! note "ZHA flat view"
     When no device has neighbor data from a ZHA topology scan, the tree is always one hop
-    deep and LQI comes from ZHA's per-device last-observed value.  The `(coord: N)`
+    deep and LQI comes from ZHA's per-device last-observed value.  The `(direct coord: N)`
     annotation is not shown in flat view.  Trigger a scan from ZHA settings
     (**Network visualisation → Scan**) to get full routing paths.
 
@@ -126,7 +126,20 @@ Using the minimum of both directions matters because Zigbee links are asymmetric
 device may hear the coordinator at LQI 115 while the coordinator only hears the device
 at LQI 29.  The weaker direction is the real bottleneck.
 
-### `(coord: N)` annotation
+### `(up: N)` annotation (depth 1)
+
+Shown on **all depth-1 devices** (those connected directly to the coordinator).  This is
+the **uplink LQI** — the signal strength measured by the coordinator when receiving from
+the device — the same value shown on the Z2M device card badge (`last_linkquality`).
+
+The main `LQI:` number for depth-1 devices is `min(uplink, downlink)` (the bottleneck
+direction).  The `(up: N)` annotation exposes the uplink separately so you can compare
+directly against the Z2M dashboard without mental arithmetic.
+
+In the SVG diagram, depth-1 edges show `↓N ↑N` labels: `↓` is the downlink
+(coordinator → device) and `↑` is the uplink (device → coordinator).
+
+### `(direct coord: N)` annotation (depth 2+)
 
 Shown in yellow or red for **depth > 1 devices** (those routing through at least one
 intermediate router) when their **direct coordinator link** is below `--warn-lqi`.
@@ -143,7 +156,7 @@ The two numbers tell different stories:
 | Value | What it means |
 |---|---|
 | `LQI: 76` | The device has a solid path through its routing parent (Hallway Plug) |
-| `(coord: 35)` | If that router disappears, the fallback direct link to the coordinator is weak |
+| `(direct coord: 35)` | If that router disappears, the fallback direct link to the coordinator is weak |
 
 A device with a good routing LQI but a low `coord` value is **correctly routing around
 a weak direct coordinator link** — that is healthy mesh behaviour.  The annotation is
@@ -157,12 +170,12 @@ directly to the coordinator, this is the same link shown in the map.  For a deep
 device routing through an intermediate router, the badge measures the last
 **router → coordinator** hop of whatever routing path was active when the last packet
 arrived — which may be different from both the routing path the scan recorded and the
-direct coordinator link shown in `(coord: N)`.
+direct coordinator link shown in `(direct coord: N)`.
 
 `network-map` shows the **routing path quality** (the edge in the tree) because that is
 the correct label for the edge being drawn.  Putting the direct-coordinator number on a
 line between the device and its routing parent would be misleading — it is a completely
-different link.  The `(coord: N)` annotation exposes the direct scan measurement
+different link.  The `(direct coord: N)` annotation exposes the direct scan measurement
 alongside it so you have both pieces of information in one place.
 
 #### Real-world example
@@ -174,8 +187,8 @@ diverge because they describe different links.
 
 | Device | Hops | Z2M badge | Map LQI | Notes |
 |---|---|---|---|---|
-| Living Room Plug | 1 | 198 | 198 | Direct link — badge and map measure the same hop |
-| Kitchen Plug | 1 | 172 | 172 | Direct link — badge and map measure the same hop |
+| Living Room Plug | 1 | 198 | 198 | Direct link — badge matches `(up: 198)` annotation |
+| Kitchen Plug | 1 | 172 | 172 | Direct link — badge matches `(up: 172)` annotation |
 | SMLIGHT Repeater | 2 | 155 | 76 | Badge = Hallway Plug→coord; map = device→Hallway Plug |
 | Window Sensor | 2 | 172 | 71 | Badge = Kitchen Plug→coord; map = device→Kitchen Plug |
 | Garage Plug | 3 | 76 | 105 | Badge = SMLIGHT→coord final hop; map = device→SMLIGHT hop |
@@ -191,7 +204,7 @@ scan itself.
 
 HA may also disable the `Linkquality` diagnostic sensor entity by default
 (`"disabled_by": "integration"`).  Even if enabled, the value reflects the same direct
-coordinator link shown in the `(coord: N)` annotation, not the routing path quality.
+coordinator link shown in the `(direct coord: N)` annotation, not the routing path quality.
 
 ## Scan artifacts — LQI 0 on healthy devices
 
@@ -206,7 +219,7 @@ though it is a mains-powered router — this is a scan artifact.  If a device sh
 re-run the command to get a fresh snapshot:
 
 ```bash
-zigporter network-map --svg network.svg
+zigporter network-map --output network.svg
 ```
 
 A second scan will almost always show the correct value.  Persistent zeros on
@@ -224,5 +237,5 @@ Device                          Role    Parent               LQI   Hops  Status
 ──────────────────────────────────────────────────────────────────────────────
 Hall Coatroom Led Light         end     Coordinator            0      1   CRITICAL
 Outside Front Climate           end     Coordinator            6      1   CRITICAL
-Förråd Smart Kontakt            end     Downstairs Left Plug  48      4   WEAK  (coord: 1)
+Förråd Smart Kontakt            end     Downstairs Left Plug  48      4   WEAK  (direct coord: 1)
 ```
