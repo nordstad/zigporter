@@ -16,6 +16,15 @@ from zigporter.z2m_client import Z2MClient
 
 console = Console()
 
+# Per-hop LQI penalty for tree-building scoring.  Without this, small LQI
+# fluctuations between scans cascade into wildly different tree depths because
+# a 4-hop chain where every hop is LQI 160 beats a direct link at LQI 155.
+# Subtracting HOP_LQI_PENALTY per hop from the candidate score makes the
+# algorithm prefer shorter paths unless the longer path has a substantial
+# LQI advantage.  Value of 10 means a depth-1 router must beat the direct
+# coordinator link by at least 10 LQI to be chosen.
+HOP_LQI_PENALTY = 10
+
 
 # ---------------------------------------------------------------------------
 # ZHA data normalization
@@ -232,7 +241,14 @@ def _build_routing_tree(
     SLZB-06P7 might report LQI 115 to the coordinator while the coordinator
     only reports LQI 29 back.  The weaker direction is the real bottleneck.
 
-    Score = (is_child_rel, effective_lqi).
+    Score = (is_child_rel, effective_lqi - HOP_LQI_PENALTY * candidate_depth).
+
+    The depth penalty stabilises the tree across scans: Z2M network scans
+    return different LQI values each time (RF noise, sleeping devices), and
+    without the penalty, small fluctuations cascade into wildly different tree
+    depths.  A penalty of 10 per hop means a 4-hop chain at LQI 160 scores
+    120, losing to a direct link at LQI 155 — correct because the direct path
+    is simpler and more reliable.
 
     is_child_rel=1 when the candidate router explicitly claims this device as its
     child via the ZHA ZDO relationship field (string "Child" or integer 1 from
@@ -292,6 +308,7 @@ def _build_routing_tree(
                 continue
             best_parent: str | None = None
             best_score: tuple[int, int] = (-1, -1)
+            best_real_lqi = 0
             for tgt, lqi_out, relationship in outgoing.get(ieee, []):
                 if tgt not in visited:
                     continue
@@ -304,16 +321,20 @@ def _build_routing_tree(
                 effective_lqi = min(lqi_out, lqi_in)
                 # Accept both string ("Child") and integer (1) from ZHA/bellows.
                 is_child = 1 if relationship in ("Child", 1) else 0
-                score = (is_child, effective_lqi)
+                # Penalise deeper candidates so small LQI fluctuations between
+                # scans don't cascade into wildly different tree depths.
+                candidate_depth = depth_map[tgt]
+                score = (is_child, effective_lqi - HOP_LQI_PENALTY * candidate_depth)
                 if _is_ancestor(ieee, tgt, parent_map):
                     continue  # would create a cycle — skip
                 if score > best_score:
                     best_score = score
                     best_parent = tgt
+                    best_real_lqi = effective_lqi
             if best_parent is not None and best_score > best_score_map.get(ieee, (-1, -1)):
                 best_score_map[ieee] = best_score
                 parent_map[ieee] = best_parent
-                lqi_map[ieee] = best_score[1]
+                lqi_map[ieee] = best_real_lqi
                 depth_map[ieee] = depth_map[best_parent] + 1
                 visited.add(ieee)
                 changed = True

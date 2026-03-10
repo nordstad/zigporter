@@ -128,12 +128,15 @@ Use the `/bump-version` skill to automate step 1 (analyses unreleased commits, m
 
 | Constant | Value | Role |
 |---|---|---|
-| `MIN_RING_GAP` | 200 | Minimum px between consecutive ring **boundaries**. Must be > `nr + label_offset + label_width` (≈196px) to prevent outer-ring node circles from overlapping inner-ring label text at 90°/270° angles. |
-| `ANGULAR_PADDING` | 50 | Extra arc per device added on top of the label-width arc floor. |
+| `MIN_RING_GAP` | 200 | Minimum px between consecutive ring **boundaries**. Must be > `nr + label_offset + LABEL_ARC` (≈196px) to prevent outer-ring node circles from overlapping inner-ring label text at 90°/270° angles. |
+| `LABEL_ARC` | 142 | `MAX_LABEL_LEN * 6 + 10` — px arc floor for label pill width. Used in `_compute_ring_radii`, `_assign_angles`, `_resolve_collisions`. |
+| `ANGULAR_PADDING` | 50 | Extra arc per device added on top of the `LABEL_ARC` floor. |
 | `COLLISION_GAP` | 100 | Minimum px gap between node circle **edges** in the collision resolver. Also used as the minimum-angle floor in `_assign_angles`. Must be large enough that a neighboring circle can't land inside the 34px label-offset zone. |
 | `COLLISION_ITERS` | 200 | Max Gauss-Seidel passes in `_resolve_collisions`. Needed for densely-packed rings where many nodes start close together. |
 
-**`_compute_ring_radii` formula**: nodes sit at `(ring_radii[h-1] + ring_radii[h]) / 2` (midpoint). The formula inverts this: `ring_radii[h] = max(2 * required_node_r - prev_r + LABEL_OFFSET, prev_r + MIN_RING_GAP)` where `required_node_r = n * arc_per_device / (2π)` and `arc_per_device = max(node_diameter, label_arc) + ANGULAR_PADDING`.
+**Key functions**: `_compute_layout()` orchestrates the full pipeline (radii → weights → angles → positions → collisions) and returns a `LayoutResult` dataclass. `render_svg()` calls `_compute_layout()` then does pure SVG drawing, delegating per-node rendering to `_draw_node()`. Input validation at the top of `_compute_layout()` catches bad topology data early.
+
+**`_compute_ring_radii` formula**: nodes sit at `(ring_radii[h-1] + ring_radii[h]) / 2` (midpoint). The formula inverts this: `ring_radii[h] = max(2 * required_node_r - prev_r + LABEL_OFFSET, prev_r + MIN_RING_GAP)` where `required_node_r = n * arc_per_device / (2π)` and `arc_per_device = max(node_diameter, LABEL_ARC) + ANGULAR_PADDING`.
 
 **Cross-ring label/node conflict**: for nodes near angle 90°/270° (east/west), labels extend horizontally into adjacent rings. `MIN_RING_GAP = 200` ensures the outer node's circle clears the inner label's full extent.
 

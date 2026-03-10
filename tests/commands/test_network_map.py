@@ -20,6 +20,7 @@ from zigporter.commands.network_map_svg import (
     EDGE_CRIT,
     EDGE_GOOD,
     EDGE_WARN,
+    LABEL_ARC,
     MAX_LABEL_LEN,
     MIN_RING_GAP,
     NODE_R_ROUTER,
@@ -31,8 +32,7 @@ from zigporter.commands.network_map_svg import (
 )
 
 # Pre-compute arc_per_device used by _compute_ring_radii for assertions
-_LABEL_ARC = MAX_LABEL_LEN * 6 + 10
-_ARC_PER_DEVICE = max(2 * NODE_R_ROUTER + COLLISION_GAP, _LABEL_ARC) + ANGULAR_PADDING
+_ARC_PER_DEVICE = max(2 * NODE_R_ROUTER + COLLISION_GAP, LABEL_ARC) + ANGULAR_PADDING
 
 
 HA_URL = "https://ha.test"
@@ -866,6 +866,67 @@ def test_build_zha_topology_from_devices_sensor_at_depth2():
     )
 
 
+def test_build_routing_tree_depth_penalty_prefers_shorter_path():
+    """Depth penalty: a direct coordinator link at LQI 155 should beat a 4-hop chain
+    where every hop is LQI 160, because the per-hop penalty (10) makes the chain
+    score 160 - 40 = 120, which is less than 155."""
+    nodes = {
+        "0xcoord": {"type": "Coordinator", "friendlyName": "Coordinator"},
+        "0xr1": {"type": "Router", "friendlyName": "Router 1"},
+        "0xr2": {"type": "Router", "friendlyName": "Router 2"},
+        "0xr3": {"type": "Router", "friendlyName": "Router 3"},
+        "0xdev": {"type": "EndDevice", "friendlyName": "Device"},
+    }
+    links = [
+        # Direct coordinator → device link at LQI 155 (both directions)
+        {"source": {"ieeeAddr": "0xdev"}, "target": {"ieeeAddr": "0xcoord"}, "lqi": 155},
+        {"source": {"ieeeAddr": "0xcoord"}, "target": {"ieeeAddr": "0xdev"}, "lqi": 155},
+        # Chain: coord → r1 → r2 → r3 → dev, each hop at LQI 160
+        {"source": {"ieeeAddr": "0xr1"}, "target": {"ieeeAddr": "0xcoord"}, "lqi": 160},
+        {"source": {"ieeeAddr": "0xcoord"}, "target": {"ieeeAddr": "0xr1"}, "lqi": 160},
+        {"source": {"ieeeAddr": "0xr2"}, "target": {"ieeeAddr": "0xr1"}, "lqi": 160},
+        {"source": {"ieeeAddr": "0xr1"}, "target": {"ieeeAddr": "0xr2"}, "lqi": 160},
+        {"source": {"ieeeAddr": "0xr3"}, "target": {"ieeeAddr": "0xr2"}, "lqi": 160},
+        {"source": {"ieeeAddr": "0xr2"}, "target": {"ieeeAddr": "0xr3"}, "lqi": 160},
+        {"source": {"ieeeAddr": "0xdev"}, "target": {"ieeeAddr": "0xr3"}, "lqi": 160},
+        {"source": {"ieeeAddr": "0xr3"}, "target": {"ieeeAddr": "0xdev"}, "lqi": 160},
+    ]
+    parent_map, lqi_map, depth_map = _build_routing_tree(nodes, links)
+    assert depth_map["0xdev"] == 1, (
+        f"Device should be at depth 1 (direct to coordinator at LQI 155) "
+        f"not depth {depth_map['0xdev']} via chain"
+    )
+    assert parent_map["0xdev"] == "0xcoord"
+    assert lqi_map["0xdev"] == 155
+
+
+def test_build_routing_tree_depth_penalty_allows_much_stronger_deeper_path():
+    """When a deeper path has a substantially higher LQI (exceeding the hop penalty),
+    it should still be chosen over a weak direct link."""
+    nodes = {
+        "0xcoord": {"type": "Coordinator", "friendlyName": "Coordinator"},
+        "0xrouter": {"type": "Router", "friendlyName": "Router"},
+        "0xdev": {"type": "EndDevice", "friendlyName": "Device"},
+    }
+    links = [
+        # Weak direct coordinator → device link at LQI 50
+        {"source": {"ieeeAddr": "0xdev"}, "target": {"ieeeAddr": "0xcoord"}, "lqi": 50},
+        {"source": {"ieeeAddr": "0xcoord"}, "target": {"ieeeAddr": "0xdev"}, "lqi": 50},
+        # Strong router: coord → router at 180, router → dev at 180
+        {"source": {"ieeeAddr": "0xrouter"}, "target": {"ieeeAddr": "0xcoord"}, "lqi": 180},
+        {"source": {"ieeeAddr": "0xcoord"}, "target": {"ieeeAddr": "0xrouter"}, "lqi": 180},
+        {"source": {"ieeeAddr": "0xdev"}, "target": {"ieeeAddr": "0xrouter"}, "lqi": 180},
+        {"source": {"ieeeAddr": "0xrouter"}, "target": {"ieeeAddr": "0xdev"}, "lqi": 180},
+    ]
+    parent_map, lqi_map, depth_map = _build_routing_tree(nodes, links)
+    # Router at depth 1 scores (0, 180-10) = 170, beats direct at (0, 50)
+    assert depth_map["0xdev"] == 2, (
+        "Device should be at depth 2 via router (LQI 180 - 10 penalty = 170 > 50 direct)"
+    )
+    assert parent_map["0xdev"] == "0xrouter"
+    assert lqi_map["0xdev"] == 180  # lqi_map stores real LQI, not penalized
+
+
 def test_build_routing_tree_replaces_node_when_better_parent_found():
     """Re-placement: a node initially placed at depth 1 via coordinator should be
     promoted to depth 2 via a router when the router joins the tree with a better
@@ -1283,3 +1344,178 @@ async def test_z2m_fetch_returns_none_on_exception():
     ):
         await run_network_map(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, backend="z2m")
     assert "Could not fetch Z2M network map" in buf.getvalue()
+
+
+# ── Layout invariant regression tests ────────────────────────────────────────
+# Uses the 30-node demo topology from scripts/gen_demo_svg.py as fixture data.
+# These tests call internal layout functions directly — no SVG I/O needed.
+
+
+def _demo_topology() -> tuple[
+    dict[str, dict],
+    dict[str, str | None],
+    dict[str, int],
+    dict[str, int],
+    dict[str, list[str]],
+]:
+    """Return (nodes, parent_map, lqi_map, depth_map, children) for the 30-node demo."""
+    from scripts.gen_demo_svg import children, depth_map, lqi_map, nodes, parent_map  # noqa: PLC0415
+
+    return nodes, parent_map, lqi_map, depth_map, children
+
+
+def _run_layout(
+    nodes: dict,
+    depth_map: dict[str, int],
+    children: dict[str, list[str]],
+    parent_map: dict[str, str | None],
+    lqi_map: dict[str, int],
+) -> tuple[
+    dict[int, float],
+    dict[str, float],
+    dict[str, tuple[float, float]],
+    str,
+]:
+    """Run the full layout pipeline and return (ring_radii, angles, positions, coord_ieee)."""
+    from zigporter.commands.network_map_svg import (  # noqa: PLC0415
+        LABEL_MARGIN,
+        _assign_angles,
+        _resolve_collisions,
+    )
+
+    coord_ieee = next(ieee for ieee, n in nodes.items() if n.get("type") == "Coordinator")
+    ring_radii = _compute_ring_radii(depth_map, nodes)
+    leaf_counts = _subtree_weights(coord_ieee, children)
+
+    angles: dict[str, float] = {}
+    _assign_angles(
+        coord_ieee,
+        children,
+        leaf_counts,
+        angles,
+        0.0,
+        2 * math.pi,
+        depth_map,
+        nodes,
+        ring_radii,
+    )
+
+    half = max(ring_radii.values()) + LABEL_MARGIN
+    cx, cy = half, half
+
+    positions: dict[str, tuple[float, float]] = {}
+    for ieee, angle in angles.items():
+        depth = depth_map.get(ieee, 0)
+        if depth > 0:
+            prev_r = ring_radii.get(depth - 1, 0.0)
+            curr_r = ring_radii.get(depth, depth * MIN_RING_GAP)
+            r = (prev_r + curr_r) / 2
+        else:
+            r = 0.0
+        positions[ieee] = (cx + r * math.sin(angle), cy - r * math.cos(angle))
+
+    _resolve_collisions(positions, angles, depth_map, nodes, cx, cy, ring_radii)
+    return ring_radii, angles, positions, coord_ieee
+
+
+class TestLayoutInvariants:
+    """Regression tests for the radial layout pipeline using the 30-node demo topology."""
+
+    def setup_method(self) -> None:
+        nodes, parent_map, lqi_map, depth_map, children = _demo_topology()
+        self.nodes = nodes
+        self.parent_map = parent_map
+        self.lqi_map = lqi_map
+        self.depth_map = depth_map
+        self.children = children
+        self.ring_radii, self.angles, self.positions, self.coord_ieee = _run_layout(
+            nodes,
+            depth_map,
+            children,
+            parent_map,
+            lqi_map,
+        )
+
+    def test_ring_radii_monotonically_increasing(self) -> None:
+        """ring_radii[h] > ring_radii[h-1] for all h."""
+        prev = 0.0
+        for h in sorted(self.ring_radii):
+            assert self.ring_radii[h] > prev, (
+                f"Ring {h} radius {self.ring_radii[h]} <= previous {prev}"
+            )
+            prev = self.ring_radii[h]
+
+    def test_no_same_ring_node_overlap(self) -> None:
+        """No two nodes on the same ring are closer than COLLISION_GAP (center-to-center - radii)."""
+        from zigporter.commands.network_map_svg import _node_radius  # noqa: PLC0415
+
+        by_depth: dict[int, list[str]] = {}
+        for ieee, depth in self.depth_map.items():
+            if depth > 0:
+                by_depth.setdefault(depth, []).append(ieee)
+
+        for depth, ieee_list in by_depth.items():
+            for i, a in enumerate(ieee_list):
+                for b in ieee_list[i + 1 :]:
+                    ax, ay = self.positions[a]
+                    bx, by = self.positions[b]
+                    dist = math.hypot(ax - bx, ay - by)
+                    ra = _node_radius(self.nodes[a].get("type", "EndDevice"))
+                    rb = _node_radius(self.nodes[b].get("type", "EndDevice"))
+                    gap = dist - ra - rb
+                    assert gap >= COLLISION_GAP * 0.9, (
+                        f"Depth {depth}: {a} and {b} overlap — gap {gap:.1f} < {COLLISION_GAP * 0.9:.1f}"
+                    )
+
+    def test_parent_child_angular_proximity(self) -> None:
+        """Every child's angle is within the parent's allocated sector (± 30% tolerance)."""
+        for ieee, parent_ieee in self.parent_map.items():
+            if parent_ieee is None or self.depth_map.get(ieee, 0) == 0:
+                continue
+            if self.depth_map.get(parent_ieee, 0) == 0:
+                continue  # coordinator children can be anywhere in 0..2pi
+            parent_angle = self.angles[parent_ieee]
+            child_angle = self.angles[ieee]
+            # Angular distance (wrapped to [-pi, pi])
+            diff = (child_angle - parent_angle + math.pi) % (2 * math.pi) - math.pi
+            assert abs(diff) < math.pi * 0.7, (
+                f"Child {ieee} angle {math.degrees(child_angle):.1f}° is "
+                f"{math.degrees(abs(diff)):.1f}° from parent {parent_ieee} "
+                f"at {math.degrees(parent_angle):.1f}° — too far"
+            )
+
+    def test_no_cross_diagram_edges(self) -> None:
+        """No edge is longer than 2x the outermost ring radius (catches _normalize_ring_angles regression)."""
+        max_ring = max(self.ring_radii.values())
+        max_edge_len = 2.0 * max_ring
+        for ieee, parent_ieee in self.parent_map.items():
+            if parent_ieee is None:
+                continue
+            x1, y1 = self.positions[ieee]
+            x2, y2 = self.positions[parent_ieee]
+            edge_len = math.hypot(x1 - x2, y1 - y2)
+            assert edge_len <= max_edge_len, (
+                f"Edge {ieee} → {parent_ieee} is {edge_len:.0f}px, "
+                f"exceeds 2× max ring radius {max_edge_len:.0f}px"
+            )
+
+    def test_deterministic_layout(self) -> None:
+        """Same input produces identical positions on two runs."""
+        ring_radii2, angles2, positions2, _ = _run_layout(
+            self.nodes,
+            self.depth_map,
+            self.children,
+            self.parent_map,
+            self.lqi_map,
+        )
+        assert ring_radii2 == self.ring_radii
+        for ieee in self.angles:
+            assert abs(angles2[ieee] - self.angles[ieee]) < 1e-10, (
+                f"Angle for {ieee} differs: {angles2[ieee]} vs {self.angles[ieee]}"
+            )
+        for ieee in self.positions:
+            x1, y1 = self.positions[ieee]
+            x2, y2 = positions2[ieee]
+            assert abs(x1 - x2) < 1e-6 and abs(y1 - y2) < 1e-6, (
+                f"Position for {ieee} differs: ({x1}, {y1}) vs ({x2}, {y2})"
+            )
