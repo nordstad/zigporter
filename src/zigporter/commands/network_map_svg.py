@@ -821,7 +821,10 @@ def render_svg(
             lqi_text = f"\u2193{lqi} \u2191{up_lqi}"
         else:
             lqi_text = str(lqi)
-        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+        # Place label 35% from child toward parent (avoids overlapping parent's
+        # node label — especially the coordinator label which sits just below it).
+        mx = x1 + 0.35 * (x2 - x1)
+        my = y1 + 0.35 * (y2 - y1)
         badge_w = len(lqi_text) * 7 + 10
         lqi_label_group.add(
             dwg.rect(
