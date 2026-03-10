@@ -325,14 +325,22 @@ def _build_routing_tree(
             lqi_map[ieee] = 0
             depth_map[ieee] = 1
 
-    # Depth cascade: re-compute every device's depth as parent.depth + 1 in
-    # topological order.  The greedy loop above can re-assign a node's parent to
-    # a deeper neighbour mid-pass without updating already-placed children, leaving
-    # depth_map inconsistent with parent_map.  This pass fixes that.
-    for ieee in sorted(nodes, key=lambda x: depth_map.get(x, 0)):
-        p = parent_map.get(ieee)
-        if p is not None:
-            depth_map[ieee] = depth_map.get(p, 0) + 1
+    # Depth cascade: re-compute every device's depth as parent.depth + 1.
+    # The greedy loop above can re-assign a node's parent mid-pass without
+    # updating already-processed children, leaving depth_map inconsistent
+    # with parent_map.  Iterate until stable so cascaded re-assignments
+    # (where a parent's depth changes AFTER its children were processed) are
+    # fully propagated.
+    cascade_changed = True
+    while cascade_changed:
+        cascade_changed = False
+        for ieee in nodes:
+            p = parent_map.get(ieee)
+            if p is not None:
+                new_depth = depth_map.get(p, 0) + 1
+                if depth_map.get(ieee) != new_depth:
+                    depth_map[ieee] = new_depth
+                    cascade_changed = True
 
     return parent_map, lqi_map, depth_map
 
