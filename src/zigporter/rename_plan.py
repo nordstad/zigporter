@@ -30,6 +30,8 @@ class RenamePlan:
     scanned_dashboard_names: list[str] = field(default_factory=list)
     yaml_mode_dashboard_names: list[str] = field(default_factory=list)
     yaml_mode_dashboard_paths: list[str | None] = field(default_factory=list)
+    # Items where old_entity_id appears inside a template string (not patched automatically)
+    jinja_template_names: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def total_occurrences(self) -> int:
@@ -70,6 +72,22 @@ def count_occurrences(node: Any, target_id: str) -> int:
     if isinstance(node, list):
         return sum(count_occurrences(item, target_id) for item in node)
     return 0
+
+
+def _has_template_substring(node: Any, target_id: str) -> bool:
+    """Return True if target_id appears as a substring inside any string value in the tree.
+
+    Only matches strings where target_id is embedded (not an exact match), catching
+    Jinja2 expressions like {{ states('sensor.old') }} that deep_replace cannot patch.
+    Checks values only — template expressions never appear as dict keys.
+    """
+    if isinstance(node, str):
+        return target_id in node and node != target_id
+    if isinstance(node, dict):
+        return any(_has_template_substring(v, target_id) for v in node.values())
+    if isinstance(node, list):
+        return any(_has_template_substring(item, target_id) for item in node)
+    return False
 
 
 def deep_replace(node: Any, old_id: str, new_id: str) -> Any:
@@ -249,8 +267,21 @@ def build_rename_plan_from_snapshot(
                 )
             )
 
+    # Scan for Jinja2 template substring references — deep_replace won't patch these.
+    jinja_names: list[tuple[str, str]] = []
+    for auto in snapshot.automations:
+        if _has_template_substring(auto, old_entity_id):
+            jinja_names.append(("automation", auto.get("alias") or auto.get("id", "?")))
+    for script in snapshot.scripts:
+        if _has_template_substring(script, old_entity_id):
+            jinja_names.append(("script", script.get("alias") or script.get("id", "?")))
+    for scene in snapshot.scenes:
+        if _has_template_substring(scene, old_entity_id):
+            jinja_names.append(("scene", scene.get("name") or scene.get("id", "?")))
+
     return RenamePlan(
         old_entity_id=old_entity_id,
         new_entity_id=new_entity_id,
         locations=locations,
+        jinja_template_names=jinja_names,
     )

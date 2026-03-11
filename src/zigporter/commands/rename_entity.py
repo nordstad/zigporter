@@ -205,6 +205,21 @@ def display_plan(plan: RenamePlan) -> None:
         f"\n  [dim]{len(non_registry)} location(s) · {total_refs} reference(s) to update[/dim]"
     )
 
+    # Jinja2 template warning — items containing the entity ID inside a template string
+    if plan.jinja_template_names:
+        console.print(
+            f"\n  [yellow bold]⚠  Jinja2 templates not patched automatically[/yellow bold]\n"
+            f"  [dim]These items contain [bold]{plan.old_entity_id}[/bold] inside a template "
+            f"string (e.g. [bold]{{{{ states('{plan.old_entity_id}') }}}}[/bold]).[/dim]\n"
+            f"  [dim]Review and update them manually after renaming:[/dim]\n"
+        )
+        for ctx_label, name in plan.jinja_template_names:
+            console.print(f"  [yellow][ ][/yellow]  [dim]{ctx_label:12}[/dim]  {name}")
+        console.print(
+            f"\n  [dim]Search for: [bold]'{plan.old_entity_id}'[/bold] "
+            f"in the automation/script editor.[/dim]"
+        )
+
     # Manual steps for YAML-mode dashboards
     if plan.yaml_mode_dashboard_names:
         n = len(plan.yaml_mode_dashboard_names)

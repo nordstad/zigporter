@@ -13,9 +13,40 @@ from zigporter.commands.rename_entity import (
 from zigporter.rename_plan import (
     RenameLocation,
     RenamePlan,
+    _has_template_substring,
     count_occurrences,
     deep_replace,
 )
+
+# ---------------------------------------------------------------------------
+# _has_template_substring
+# ---------------------------------------------------------------------------
+
+
+def test_has_template_substring_detects_jinja():
+    node = {"value_template": "{{ states('switch.kitchen_plug') }}"}
+    assert _has_template_substring(node, "switch.kitchen_plug") is True
+
+
+def test_has_template_substring_ignores_exact_match():
+    # An exact match is handled by deep_replace — not a template substring
+    assert _has_template_substring("switch.kitchen_plug", "switch.kitchen_plug") is False
+
+
+def test_has_template_substring_no_match():
+    node = {"value_template": "{{ states('light.hall') }}"}
+    assert _has_template_substring(node, "switch.kitchen_plug") is False
+
+
+def test_has_template_substring_in_list():
+    node = [{"condition": "{{ is_state('switch.kitchen_plug', 'on') }}"}]
+    assert _has_template_substring(node, "switch.kitchen_plug") is True
+
+
+def test_has_template_substring_non_string_passthrough():
+    assert _has_template_substring(42, "switch.kitchen_plug") is False
+    assert _has_template_substring(None, "switch.kitchen_plug") is False
+
 
 # ---------------------------------------------------------------------------
 # count_occurrences
@@ -249,6 +280,80 @@ async def test_build_rename_plan_tracks_yaml_mode_dashboards(mock_ha_client):
     assert plan.scanned_dashboard_names == []
     lv_locs = [loc for loc in plan.locations if loc.context == "lovelace"]
     assert len(lv_locs) == 0
+
+
+async def test_build_rename_plan_detects_jinja_template_in_automation(mock_ha_client):
+    """Automations with template strings containing the entity ID populate jinja_template_names."""
+    mock_ha_client.get_automation_configs = AsyncMock(
+        return_value=[
+            {
+                "id": "a1",
+                "alias": "Power monitor",
+                "trigger": [
+                    {
+                        "platform": "template",
+                        "value_template": "{{ states('switch.kitchen_plug') | float > 10 }}",
+                    }
+                ],
+            }
+        ]
+    )
+    plan = await build_rename_plan(mock_ha_client, "switch.kitchen_plug", "switch.new_plug")
+    assert ("automation", "Power monitor") in plan.jinja_template_names
+
+
+async def test_build_rename_plan_no_jinja_when_only_exact_matches(mock_ha_client):
+    """Automations with only exact entity_id values do NOT appear in jinja_template_names."""
+    plan = await build_rename_plan(mock_ha_client, "switch.kitchen_plug", "switch.new_plug")
+    assert plan.jinja_template_names == []
+
+
+async def test_build_rename_plan_detects_jinja_template_in_script(mock_ha_client):
+    mock_ha_client.get_scripts = AsyncMock(
+        return_value=[
+            {
+                "id": "s1",
+                "alias": "Check plug",
+                "sequence": [
+                    {
+                        "condition": "template",
+                        "value_template": "{{ is_state('switch.kitchen_plug', 'on') }}",
+                    }
+                ],
+            }
+        ]
+    )
+    plan = await build_rename_plan(mock_ha_client, "switch.kitchen_plug", "switch.new_plug")
+    assert ("script", "Check plug") in plan.jinja_template_names
+
+
+async def test_display_plan_shows_jinja_warning(mock_ha_client, capsys):
+    mock_ha_client.get_automation_configs = AsyncMock(
+        return_value=[
+            {
+                "id": "a1",
+                "alias": "Power monitor",
+                "trigger": [
+                    {
+                        "platform": "template",
+                        "value_template": "{{ states('switch.kitchen_plug') | float > 10 }}",
+                    }
+                ],
+            }
+        ]
+    )
+    plan = await build_rename_plan(mock_ha_client, "switch.kitchen_plug", "switch.new_plug")
+    # Verify jinja_template_names is set before display
+    assert plan.jinja_template_names
+    # display_plan uses rich Console — just verify it doesn't raise and the field is populated
+    display_plan(plan)  # Would raise if warning block has a bug
+
+
+async def test_display_plan_no_jinja_warning_when_empty(mock_ha_client):
+    """display_plan should not raise when jinja_template_names is empty."""
+    plan = await build_rename_plan(mock_ha_client, "switch.kitchen_plug", "switch.new_plug")
+    assert plan.jinja_template_names == []
+    display_plan(plan)  # Must not raise
 
 
 # ---------------------------------------------------------------------------

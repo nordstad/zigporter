@@ -318,6 +318,28 @@ def display_device_plan(device_plan: DeviceRenamePlan) -> None:
         f"  [dim](auto-updated by HA on entity rename)[/dim]"
     )
 
+    # --- Jinja2 template warning ---
+    jinja_hits: list[tuple[str, str]] = []
+    seen_jinja: set[tuple[str, str]] = set()
+    for plan in device_plan.plans:
+        for ctx_label, name in plan.jinja_template_names:
+            key = (ctx_label, name)
+            if key not in seen_jinja:
+                seen_jinja.add(key)
+                jinja_hits.append((ctx_label, name))
+    if jinja_hits:
+        old_ids = [p.old_entity_id for p in device_plan.plans]
+        ids_str = ", ".join(f"[bold]{e}[/bold]" for e in old_ids[:3])
+        if len(old_ids) > 3:
+            ids_str += f" (+{len(old_ids) - 3} more)"
+        console.print(
+            f"\n  [yellow bold]⚠  Jinja2 templates not patched automatically[/yellow bold]\n"
+            f"  [dim]These items contain entity IDs ({ids_str}) inside template strings.[/dim]\n"
+            f"  [dim]Review and update them manually after renaming:[/dim]\n"
+        )
+        for ctx_label, name in jinja_hits:
+            console.print(f"  [yellow][ ][/yellow]  [dim]{ctx_label:12}[/dim]  {name}")
+
     # --- Manual steps for YAML-mode / inaccessible dashboards ---
     if device_plan.failed_dashboards:
         n = len(device_plan.failed_dashboards)

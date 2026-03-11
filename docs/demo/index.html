@@ -514,6 +514,17 @@ const DEMO_RENAME_ENTITY = [
   [null, 80],
   [d('  3 location(s) · 3 reference(s) to update'), 150],
   [null, 200],
+  // Jinja2 template warning
+  [`  ${y('⚠  Jinja2 templates not patched automatically')}`, 200],
+  [null, 60],
+  [`  ${d('These items contain')} ${bd('light.morning_light')} ${d('inside a template string')}`, 80],
+  [`  ${d("(e.g. {{ states('light.morning_light') }}).")}`, 80],
+  [`  ${d('Review and update them manually after renaming:')}`, 80],
+  [null, 60],
+  [`  ${y('[ ]')}  ${d('automation  ')}  Evening Scene`, 100],
+  [null, 60],
+  [`  ${d("Search for: '")}${bd('light.morning_light')}${d("' in the automation/script editor.")}`, 100],
+  [null, 200],
   // Confirm
   [qline('Apply these changes?', 'Yes'), 800],
   [null, 100],

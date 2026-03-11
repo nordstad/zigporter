@@ -72,11 +72,27 @@ Error: Entity 'bogus lights' not found in the HA entity registry.
 
 ### Limitations
 
-Jinja2 template expressions are **not** patched automatically:
+Jinja2 template expressions are **not** patched automatically — `deep_replace` only
+substitutes exact string values, not entity IDs embedded inside template strings:
 
 ```yaml
 # This will NOT be updated — review manually
 condition: "{{ states('light.living_room_1') == 'on' }}"
+```
+
+When these are detected, the command prints a warning listing each affected
+automation/script/scene so you know what to review:
+
+```
+⚠  Jinja2 templates not patched automatically
+   These items contain light.living_room_1 inside a template string
+   (e.g. {{ states('light.living_room_1') }}).
+   Review and update them manually after renaming:
+
+[ ]  automation    Turn on living room
+[ ]  script        Night mode check
+
+   Search for: 'light.living_room_1' in the automation/script editor.
 ```
 
 YAML-mode dashboards stored outside the HA config API are also not reachable from the
@@ -155,7 +171,10 @@ The Z2M step is skipped silently when:
 
 ### Limitations
 
-Same template and YAML-mode dashboard limitations as `rename-entity` apply.
+Same as `rename-entity`: Jinja2 template expressions are not patched automatically.
+When detected, a warning is printed listing each affected automation/script/scene
+(aggregated across all entity renames in the device plan).
+YAML-mode dashboards are also not reachable and will be listed for manual update.
 
 ---
 
