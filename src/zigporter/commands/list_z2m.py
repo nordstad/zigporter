@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -10,17 +11,46 @@ console = Console()
 
 
 async def run_list_z2m(
-    ha_url: str, token: str, z2m_url: str, verify_ssl: bool, mqtt_topic: str = "zigbee2mqtt"
+    ha_url: str,
+    token: str,
+    z2m_url: str,
+    verify_ssl: bool,
+    mqtt_topic: str = "zigbee2mqtt",
+    json_output: bool = False,
 ) -> None:
     client = Z2MClient(ha_url, token, z2m_url, verify_ssl, mqtt_topic)
 
-    with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
-        t = progress.add_task("Fetching Zigbee2MQTT devices...", total=None)
+    if json_output:
         devices = await client.get_devices()
-        progress.update(t, description="Done")
+    else:
+        with Progress(
+            SpinnerColumn(), TextColumn("{task.description}"), console=console
+        ) as progress:
+            t = progress.add_task("Fetching Zigbee2MQTT devices...", total=None)
+            devices = await client.get_devices()
+            progress.update(t, description="Done")
 
     # Exclude the coordinator
     devices = [d for d in devices if d.get("type") != "Coordinator"]
+
+    if json_output:
+        result = []
+        for d in sorted(devices, key=lambda x: x.get("friendly_name", "").lower()):
+            definition = d.get("definition") or {}
+            ieee = d.get("ieee_address") or ""
+            result.append(
+                {
+                    "friendly_name": d.get("friendly_name") or ieee,
+                    "ieee_address": ieee,
+                    "type": d.get("type") or "",
+                    "vendor": definition.get("vendor") or d.get("manufacturer") or "",
+                    "model": definition.get("model") or d.get("model_id") or "",
+                    "power_source": d.get("power_source") or "",
+                    "supported": d.get("supported", True),
+                }
+            )
+        print(json.dumps({"devices": result}, indent=2))
+        return
 
     table = Table(title=f"Zigbee2MQTT Devices ({len(devices)})", show_header=True)
     table.add_column("Friendly name", no_wrap=True)
@@ -48,6 +78,11 @@ async def run_list_z2m(
 
 
 def list_z2m_command(
-    ha_url: str, token: str, z2m_url: str, verify_ssl: bool, mqtt_topic: str = "zigbee2mqtt"
+    ha_url: str,
+    token: str,
+    z2m_url: str,
+    verify_ssl: bool,
+    mqtt_topic: str = "zigbee2mqtt",
+    json_output: bool = False,
 ) -> None:
-    asyncio.run(run_list_z2m(ha_url, token, z2m_url, verify_ssl, mqtt_topic))
+    asyncio.run(run_list_z2m(ha_url, token, z2m_url, verify_ssl, mqtt_topic, json_output))

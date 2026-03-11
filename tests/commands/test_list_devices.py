@@ -1,7 +1,7 @@
 """Tests for the list-devices command."""
 
+import json
 from unittest.mock import AsyncMock, patch
-
 
 from zigporter.commands.list_devices import (
     _integration_label,
@@ -223,3 +223,79 @@ def test_list_devices_command_runs_asyncio(mocker):
     )
     list_devices_command(HA_URL, TOKEN, True)
     mock_run.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# JSON output
+# ---------------------------------------------------------------------------
+
+
+async def test_run_list_devices_json_output_shape(mocker, capsys):
+    """--json emits valid JSON with expected top-level key and field names."""
+    mock_client = mocker.MagicMock()
+    mock_client.get_device_registry = AsyncMock(return_value=DEVICES)
+    mock_client.get_area_registry = AsyncMock(return_value=AREAS)
+
+    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
+        await run_list_devices(HA_URL, TOKEN, True, json_output=True)
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert "devices" in data
+    for d in data["devices"]:
+        for key in ("name", "area", "integration", "manufacturer", "model", "device_id"):
+            assert key in d
+
+
+async def test_run_list_devices_json_output_field_values(mocker, capsys):
+    """Field values are correctly populated from the HA device registry."""
+    mock_client = mocker.MagicMock()
+    mock_client.get_device_registry = AsyncMock(return_value=DEVICES)
+    mock_client.get_area_registry = AsyncMock(return_value=AREAS)
+
+    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
+        await run_list_devices(HA_URL, TOKEN, True, json_output=True)
+
+    captured = capsys.readouterr()
+    devices = json.loads(captured.out)["devices"]
+
+    kitchen = next(d for d in devices if d["name"] == "Kitchen Light")
+    assert kitchen["area"] == "Kitchen"
+    assert kitchen["integration"] == "zha"
+    assert kitchen["manufacturer"] == "IKEA"
+    assert kitchen["model"] == "E14"
+    assert kitchen["device_id"] == "dev1"
+
+    bedroom = next(d for d in devices if d["name"] == "My Sensor")
+    assert bedroom["area"] == "Bedroom"
+    assert bedroom["integration"] == "z2m"
+    assert bedroom["device_id"] == "dev2"
+
+
+async def test_run_list_devices_json_output_filters_unnamed(mocker, capsys):
+    """Devices without a name are excluded from JSON output."""
+    mock_client = mocker.MagicMock()
+    mock_client.get_device_registry = AsyncMock(return_value=DEVICES)
+    mock_client.get_area_registry = AsyncMock(return_value=AREAS)
+
+    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
+        await run_list_devices(HA_URL, TOKEN, True, json_output=True)
+
+    captured = capsys.readouterr()
+    devices = json.loads(captured.out)["devices"]
+    # dev3 has no name — excluded
+    assert len(devices) == 2
+
+
+async def test_run_list_devices_json_output_no_spinner(mocker, capsys):
+    """The progress spinner is not shown when json_output=True."""
+    mock_client = mocker.MagicMock()
+    mock_client.get_device_registry = AsyncMock(return_value=DEVICES)
+    mock_client.get_area_registry = AsyncMock(return_value=AREAS)
+
+    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
+        with patch("zigporter.commands.list_devices.Progress") as mock_progress_cls:
+            await run_list_devices(HA_URL, TOKEN, True, json_output=True)
+
+    mock_progress_cls.assert_not_called()

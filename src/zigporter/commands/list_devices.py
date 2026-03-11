@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Any
 
 from rich.console import Console
@@ -30,16 +31,26 @@ def _integration_label(device: dict[str, Any]) -> str:
     return ""
 
 
-async def run_list_devices(ha_url: str, token: str, verify_ssl: bool) -> None:
+async def run_list_devices(
+    ha_url: str, token: str, verify_ssl: bool, json_output: bool = False
+) -> None:
     client = HAClient(ha_url, token, verify_ssl)
 
-    with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
-        t = progress.add_task("Fetching HA device registry...", total=None)
+    if json_output:
         devices, areas = await asyncio.gather(
             client.get_device_registry(),
             client.get_area_registry(),
         )
-        progress.update(t, description="Done")
+    else:
+        with Progress(
+            SpinnerColumn(), TextColumn("{task.description}"), console=console
+        ) as progress:
+            t = progress.add_task("Fetching HA device registry...", total=None)
+            devices, areas = await asyncio.gather(
+                client.get_device_registry(),
+                client.get_area_registry(),
+            )
+            progress.update(t, description="Done")
 
     area_names: dict[str, str] = {a["area_id"]: a["name"] for a in areas}
 
@@ -52,6 +63,21 @@ async def run_list_devices(ha_url: str, token: str, verify_ssl: bool) -> None:
             device_display_name(d).lower(),
         )
     )
+
+    if json_output:
+        result = [
+            {
+                "name": device_display_name(d),
+                "area": area_names.get(d.get("area_id") or "", ""),
+                "integration": _integration_label(d),
+                "manufacturer": d.get("manufacturer") or "",
+                "model": d.get("model") or "",
+                "device_id": d.get("id") or "",
+            }
+            for d in named
+        ]
+        print(json.dumps({"devices": result}, indent=2))
+        return
 
     table = Table(title=f"Home Assistant Devices ({len(named)})", show_header=True)
     table.add_column("Name", no_wrap=True)
@@ -71,5 +97,7 @@ async def run_list_devices(ha_url: str, token: str, verify_ssl: bool) -> None:
     console.print(table)
 
 
-def list_devices_command(ha_url: str, token: str, verify_ssl: bool) -> None:
-    asyncio.run(run_list_devices(ha_url, token, verify_ssl))
+def list_devices_command(
+    ha_url: str, token: str, verify_ssl: bool, json_output: bool = False
+) -> None:
+    asyncio.run(run_list_devices(ha_url, token, verify_ssl, json_output))

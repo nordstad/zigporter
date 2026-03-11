@@ -1,3 +1,4 @@
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -164,3 +165,87 @@ async def test_run_list_z2m_uses_ieee_when_no_friendly_name(mocker):
                     await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False)
 
     assert added_rows[0][0] == "0xdeadbeefdeadbeef"
+
+
+# ---------------------------------------------------------------------------
+# JSON output
+# ---------------------------------------------------------------------------
+
+
+async def test_run_list_z2m_json_output_shape(z2m_devices, mocker, capsys):
+    """--json emits valid JSON with the expected top-level key and field names."""
+    mock_client = mocker.MagicMock()
+    mock_client.get_devices = AsyncMock(return_value=z2m_devices)
+
+    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
+        await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, json_output=True)
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert "devices" in data
+    devices = data["devices"]
+    # Coordinator is excluded
+    assert all(d["type"] != "Coordinator" for d in devices)
+    # Check required fields are present
+    for d in devices:
+        for key in (
+            "friendly_name",
+            "ieee_address",
+            "type",
+            "vendor",
+            "model",
+            "power_source",
+            "supported",
+        ):
+            assert key in d
+
+
+async def test_run_list_z2m_json_output_field_values(z2m_devices, mocker, capsys):
+    """Field values are correctly populated from Z2M device data."""
+    mock_client = mocker.MagicMock()
+    mock_client.get_devices = AsyncMock(return_value=z2m_devices)
+
+    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
+        await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, json_output=True)
+
+    captured = capsys.readouterr()
+    devices = json.loads(captured.out)["devices"]
+
+    plug = next(d for d in devices if d["friendly_name"] == "Kitchen Plug")
+    assert plug["ieee_address"] == "0x0011223344556677"
+    assert plug["vendor"] == "IKEA"
+    assert plug["model"] == "E1603"
+    assert plug["power_source"] == "Mains (single phase)"
+    assert plug["supported"] is True
+
+    unsupported = next(d for d in devices if d["friendly_name"] == "Unknown Sensor")
+    assert unsupported["supported"] is False
+    assert unsupported["vendor"] == "Acme"
+    assert unsupported["model"] == "XYZ-1"
+
+
+async def test_run_list_z2m_json_output_no_spinner(z2m_devices, mocker, capsys):
+    """The progress spinner is not printed when json_output=True."""
+    mock_client = mocker.MagicMock()
+    mock_client.get_devices = AsyncMock(return_value=z2m_devices)
+
+    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
+        with patch("zigporter.commands.list_z2m.Progress") as mock_progress_cls:
+            await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, json_output=True)
+
+    mock_progress_cls.assert_not_called()
+
+
+async def test_run_list_z2m_json_output_excludes_coordinator(z2m_devices, mocker, capsys):
+    """Coordinator is excluded from JSON output."""
+    mock_client = mocker.MagicMock()
+    mock_client.get_devices = AsyncMock(return_value=z2m_devices)
+
+    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
+        await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, json_output=True)
+
+    captured = capsys.readouterr()
+    devices = json.loads(captured.out)["devices"]
+    assert not any(d["friendly_name"] == "Coordinator" for d in devices)
+    assert len(devices) == 2

@@ -179,20 +179,29 @@ def export(
 
 
 @app.command(name="list-z2m")
-def list_z2m() -> None:
+def list_z2m(
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON instead of a table."),
+) -> None:
     """List all devices currently paired with Zigbee2MQTT."""
     ha_url, token, verify_ssl = _get_config()
     z2m_url, mqtt_topic = _get_z2m_config()
     list_z2m_command(
-        ha_url=ha_url, token=token, z2m_url=z2m_url, verify_ssl=verify_ssl, mqtt_topic=mqtt_topic
+        ha_url=ha_url,
+        token=token,
+        z2m_url=z2m_url,
+        verify_ssl=verify_ssl,
+        mqtt_topic=mqtt_topic,
+        json_output=json_output,
     )
 
 
 @app.command(name="list-devices")
-def list_devices() -> None:
+def list_devices(
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON instead of a table."),
+) -> None:
     """List all Home Assistant devices across all integrations."""
     ha_url, token, verify_ssl = _get_config()
-    list_devices_command(ha_url=ha_url, token=token, verify_ssl=verify_ssl)
+    list_devices_command(ha_url=ha_url, token=token, verify_ssl=verify_ssl, json_output=json_output)
 
 
 def _resolve_or_fetch_export(
