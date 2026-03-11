@@ -143,7 +143,7 @@ class HAClient:
                 await ws.send(json.dumps({"id": cmd_id, **command}))
                 msg = json.loads(await ws.recv())
                 if not msg.get("success"):
-                    if key == "automation_configs":
+                    if key in ("automation_configs", "zha_devices"):
                         results[key] = []
                     else:
                         raise RuntimeError(f"WebSocket command '{command['type']}' failed: {msg}")

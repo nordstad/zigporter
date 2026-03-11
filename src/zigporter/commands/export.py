@@ -173,6 +173,13 @@ async def run_export(ha_url: str, token: str, verify_ssl: bool) -> ZHAExport:
         progress.update(t, description="Fetching ZHA + registry data...")
         ws_data = await client.get_all_ws_data()
 
+        if not ws_data["zha_devices"]:
+            progress.stop()
+            console.print(
+                "[yellow]Warning:[/yellow] No ZHA devices found. "
+                "The ZHA integration may not be installed."
+            )
+
         progress.update(t, description="Fetching entity states...")
         states = await client.get_states()
 

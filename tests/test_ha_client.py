@@ -503,17 +503,45 @@ async def test_rename_device_name(client, mocker):
     assert sent["name_by_user"] == "New Name"
 
 
-async def test_get_all_ws_data_non_automation_failure_raises(client, mocker):
-    """Lines 86-89: non-automation command failure raises RuntimeError."""
+async def test_get_all_ws_data_zha_failure_returns_empty(client, mocker):
+    """zha/devices failure returns empty list instead of raising (ZHA not installed)."""
     auth_msgs = [
         json.dumps({"type": "auth_required"}),
         json.dumps({"type": "auth_ok"}),
     ]
+    results = [
+        # zha_devices (id=1) fails
+        json.dumps({"id": 1, "type": "result", "success": False, "error": {"code": "unknown"}}),
+        # remaining commands succeed
+        json.dumps({"id": 2, "type": "result", "success": True, "result": []}),
+        json.dumps({"id": 3, "type": "result", "success": True, "result": []}),
+        json.dumps({"id": 4, "type": "result", "success": True, "result": []}),
+        json.dumps({"id": 5, "type": "result", "success": True, "result": []}),
+    ]
+    mock_ws = mocker.AsyncMock()
+    mock_ws.recv = mocker.AsyncMock(side_effect=auth_msgs + results)
+    mock_ws.__aenter__ = mocker.AsyncMock(return_value=mock_ws)
+    mock_ws.__aexit__ = mocker.AsyncMock(return_value=False)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+
+    data = await client.get_all_ws_data()
+    assert data["zha_devices"] == []
+    assert "entity_registry" in data
+
+
+async def test_get_all_ws_data_non_automation_failure_raises(client, mocker):
+    """Non-graceful command failure (e.g. entity_registry) raises RuntimeError."""
+    auth_msgs = [
+        json.dumps({"type": "auth_required"}),
+        json.dumps({"type": "auth_ok"}),
+    ]
+    # zha_devices (id=1) succeeds, entity_registry (id=2) fails
+    ok_result = json.dumps({"id": 1, "type": "result", "success": True, "result": []})
     fail_result = json.dumps(
-        {"id": 1, "type": "result", "success": False, "error": {"code": "unknown"}}
+        {"id": 2, "type": "result", "success": False, "error": {"code": "unknown"}}
     )
     mock_ws = mocker.AsyncMock()
-    mock_ws.recv = mocker.AsyncMock(side_effect=auth_msgs + [fail_result])
+    mock_ws.recv = mocker.AsyncMock(side_effect=auth_msgs + [ok_result, fail_result])
     mock_ws.__aenter__ = mocker.AsyncMock(return_value=mock_ws)
     mock_ws.__aexit__ = mocker.AsyncMock(return_value=False)
     mocker.patch("websockets.connect", return_value=mock_ws)
