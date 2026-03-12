@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-03-12
+
+### Added
+
+- `--json` flag on `list-z2m` and `list-devices` for machine-readable output (#61)
+- `--json` flag on `inspect` for structured JSON device dependency report (#61)
+- Headless mode for `stale` and `fix-device` — pass a device arg to skip the picker; `--action` / `--apply` for fully non-interactive execution (#61)
+- `inspect` now supports `--backend z2m` and `--backend all` to inspect non-ZHA devices (#61)
+- `rename-entity` and `rename-device` warn when entity IDs appear inside Jinja2 template strings that cannot be patched automatically (#61)
+
+### Fixed
+
+- `inspect`: `--backend z2m` now accepts all valid Z2M MQTT identifier forms; `--json --debug` no longer mixes debug text into stdout; unknown `--backend` values now fail fast with a clear error (#61)
+- `export`: handle missing ZHA integration gracefully (#58)
+
 
 ## [1.1.0] - 2026-03-10
 
@@ -380,7 +395,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump codecov/codecov-action from 4 to 5 (#3)
 - Bump actions/github-script from 7 to 8 (#2)
 
-[Unreleased]: https://github.com/nordstad/zigporter/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/nordstad/zigporter/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/nordstad/zigporter/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/nordstad/zigporter/compare/v1.1.0...v1.1.0
 [1.1.0]: https://github.com/nordstad/zigporter/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/nordstad/zigporter/compare/v1.0.3...v1.0.3
