@@ -155,8 +155,8 @@ function enterLine(msg) {
   return d(msg);
 }
 
-function stepHead(n, title) {
-  return hd(`[${n}/8] ${title}`);
+function stepHead(n, title, total) {
+  return hd(`[${n}/${total || 8}] ${title}`);
 }
 
 // ── Line entry format ─────────────────────────────────────────────────────────
@@ -360,6 +360,115 @@ const DEMO_MIGRATE = [
   [`  Renaming ${d('light.living_room_bulb')} ${c('→')} ${c('light.living_room_ceiling')}... ${ok('✓')}`, 400],
   [null, 100],
   [`${ok('✓')} Renamed device ${bd('IKEA TRADFRI bulb')} ${c('→')} ${c('Living Room Ceiling')} (${bd('1')} entities updated)`, 300],
+];
+
+// ── DEMO: migrate (Z2M → ZHA) ─────────────────────────────────────────────────
+const DEMO_MIGRATE_REVERSE = [
+  [`<span class="ps">$</span> <span class="cmd">zigporter migrate --direction z2m-to-zha</span>`, 0],
+  [null, 400],
+  [`${c('?')} Select a device to migrate back to ZHA:  ${g('IKEA TRADFRI bulb')}  ${d('LED1623G12')}`, 400],
+  [null, 200],
+  [rule('Reverse-migrating: IKEA TRADFRI bulb', 70), 300],
+  [null, 100],
+  [`This wizard will migrate ${bd('IKEA TRADFRI bulb')} from Zigbee2MQTT back to ZHA in 7 steps (+ 1 optional):`, 200],
+  [null, 100],
+  [`  ${c('1')}  Remove from Z2M    ${d('Unpair the device from Zigbee2MQTT')} ${r('(cannot be undone)')}`, 80],
+  [`  ${c('2')}  Reset device       ${d('Factory-reset to clear the old Z2M pairing')}`, 60],
+  [`  ${c('3')}  Pair with ZHA      ${d('Put device in pairing mode and join ZHA')}`, 60],
+  [`  ${c('4')}  Rename & area      ${d('Restore name and choose an area in HA')}`, 60],
+  [`  ${c('5')}  Restore entity IDs ${d('Resolve stale MQTT entities and _2/_3 suffixes')}`, 60],
+  [`  ${c('6')}  Review             ${d('Inspect entities')}`, 60],
+  [`  ${c('7')}  Validate           ${d('Confirm entities come back online')}`, 60],
+  [`  ${c('8')}  Rename (optional)  ${d('Rename to a different name with full HA cascade')}`, 60],
+  [null, 100],
+  [d('You can abort safely at step 1. After that, the device must complete'), 150],
+  [d('pairing with ZHA before it can be used again.'), 0],
+  [null, 300],
+  // Step 1
+  [stepHead(1, 'Remove from Zigbee2MQTT'), 300],
+  [null, 200],
+  [`  Device:       ${bd('IKEA TRADFRI bulb')}`, 100],
+  [`  IEEE:         ${d('0x00158d0001234abc')}`, 60],
+  [`  Manufacturer: IKEA of Sweden`, 60],
+  [`  Model:        LED1623G12`, 60],
+  [null, 200],
+  [qline('Remove "IKEA TRADFRI bulb" from Z2M?', 'Yes'), 700],
+  [null, 100],
+  [`Removing ${bd('IKEA TRADFRI bulb')} from Z2M...  ${ok('✓ Removal command sent')}`, 800],
+  [`${ok('✓')} Device removal initiated`, 400],
+  [null, 200],
+  // Step 2
+  [stepHead(2, 'Reset physical device'), 300],
+  [null, 200],
+  [`Factory-reset the ${bd('IKEA TRADFRI bulb')} to clear its old pairing.`, 200],
+  [`  Manufacturer: IKEA of Sweden`, 80],
+  [`  Model:        LED1623G12`, 60],
+  [null, 100],
+  [`  Model-specific reset instructions:`, 150],
+  [`  ${b('https://www.zigbee2mqtt.io/devices/LED1623G12.html')}`, 60],
+  [null, 100],
+  [enterLine('Press Enter when the device has been reset...'), 1000],
+  [null, 200],
+  // Step 3
+  [stepHead(3, 'Pair with ZHA'), 400],
+  [null, 200],
+  [`Enabling ZHA permit join...`, 300],
+  [`${ok('✓')} ZHA permit join enabled`, 500],
+  [null, 100],
+  [`Trigger ${bd('IKEA TRADFRI bulb')} to join now...`, 200],
+  [`Waiting for device ${d('0x00158d0001234abc')} to appear in ZHA...`, 200],
+  [null, 100],
+  [`  ${d('⠸')} Polling ZHA for new device  ${d('[297s remaining]')}`, 300, 1],
+  [`  ${d('⠼')} Polling ZHA for new device  ${d('[294s remaining]')}`, 900, 1],
+  [`  ${d('⠴')} Polling ZHA for new device  ${d('[291s remaining]')}`, 900, 1],
+  [`  ${d('⠦')} Polling ZHA for new device  ${d('[288s remaining]')}`, 700, 1],
+  [null, 200, 2],
+  [`${ok('✓')} Device found in ZHA!`, 100],
+  [`${ok('✓')} ZHA device: ${bd('IKEA TRADFRI bulb')}`, 100],
+  [null, 200],
+  // Step 4
+  [stepHead(4, 'Rename & area'), 300],
+  [null, 200],
+  [`${ok('✓')} Already named correctly: IKEA TRADFRI bulb`, 400],
+  [null, 100],
+  [`  Area (from Z2M): ${bd('Living Room')}`, 300],
+  [qline('Assign area:', 'Living Room'), 700],
+  [`${ok('✓')} Area set: Living Room`, 400],
+  [null, 200],
+  // Step 5
+  [stepHead(5, 'Restore entity IDs'), 300],
+  [null, 200],
+  [`  ${y('ZHA entities have a numeric suffix because stale MQTT entities still')}`, 200],
+  [`  ${y('occupy the original IDs. Deleting stale entries restores them.')}`, 0],
+  [null, 80],
+  [`  ${d('light.living_room_bulb_2')}`, 200],
+  [`    ${c('→')} ${bd('light.living_room_bulb')}  ${d('(stale MQTT entity will be deleted)')}`, 80],
+  [null, 100],
+  [qline('Delete stale MQTT entities and restore original entity IDs?', 'Yes'), 700],
+  [`${ok('✓')} light.living_room_bulb_2 ${c('→')} light.living_room_bulb`, 600],
+  [null, 200],
+  // Step 6
+  [stepHead(6, 'Review entities'), 300],
+  [null, 200],
+  [`  ZHA entities for ${bd('IKEA TRADFRI bulb')}:`, 200],
+  [`  ${g('•')} light.living_room_bulb`, 150],
+  [null, 200],
+  // Step 7
+  [stepHead(7, 'Validate'), 300],
+  [null, 200],
+  [`Waiting for entities to come online...`, 200],
+  [`  ${d('⠸')} Polling entity states  ${d('[27s remaining]')}`, 400, 1],
+  [`  ${d('⠼')} Polling entity states  ${d('[24s remaining]')}`, 1000, 1],
+  [`  ${d('⠴')} Polling entity states  ${d('[21s remaining]')}`, 1000, 1],
+  [`  ${ok('✓')}  light.living_room_bulb              ${g('on')}`, 600, 2],
+  [null, 200],
+  [`${ok('✓')} Reverse migration complete! ${bd('IKEA TRADFRI bulb')} successfully migrated to ZHA.`, 400],
+  [`Progress: ${bd('1/1')} devices migrated.`, 100],
+  [null, 300],
+  // Step 8 (optional rename)
+  [stepHead(8, 'Rename (optional)'), 400],
+  [null, 200],
+  [qline('Rename this device to a different name?', 'No'), 700],
 ];
 
 // ── DEMO: rename-device ───────────────────────────────────────────────────────
@@ -591,7 +700,8 @@ const DEMOS = [
   { key:'inspect',       label:'inspect',       desc:'Show a device\'s full state',            script:DEMO_INSPECT },
   { key:'list-z2m',      label:'list-z2m',      desc:'List all Zigbee2MQTT devices',           script:DEMO_LISTZ2M },
   { key:'list-devices',  label:'list-devices',  desc:'List all HA devices across all integrations', script:DEMO_LISTDEVICES },
-  { key:'migrate',       label:'migrate',       desc:'Interactive ZHA → Z2M wizard (1 device)',script:DEMO_MIGRATE },
+  { key:'migrate',         label:'migrate',                       desc:'Interactive ZHA → Z2M wizard (1 device)',  script:DEMO_MIGRATE },
+  { key:'migrate-reverse', label:'migrate --direction z2m-to-zha', desc:'Interactive Z2M → ZHA wizard (1 device)',  script:DEMO_MIGRATE_REVERSE },
   { key:'network-map',   label:'network-map',   desc:'Visualise Zigbee mesh topology and LQI',  script:DEMO_NETMAP },
   { key:'rename',        label:'rename-device', desc:'Rename device, cascade all references',  script:DEMO_RENAME },
   { key:'rename-entity', label:'rename-entity', desc:'Rename entity ID, cascade all references',script:DEMO_RENAME_ENTITY },

@@ -127,7 +127,6 @@ class Z2MDevice(BaseModel):
         power_source: Power source string (e.g. ``"Mains (single phase)"``).
         entities: All entities registered to this device.
         automations: Automations that reference at least one entity of this device.
-        groups: Z2M group names the device belongs to (documentation only).
         available: ``True`` if online, ``False`` if all entities offline, ``None`` if unknown.
     """
 
@@ -143,7 +142,6 @@ class Z2MDevice(BaseModel):
     power_source: str | None = None
     entities: list[ZHAEntity] = Field(default_factory=list)
     automations: list[AutomationRef] = Field(default_factory=list)
-    groups: list[str] = Field(default_factory=list)
     available: bool | None = None
 
 

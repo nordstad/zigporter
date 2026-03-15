@@ -827,7 +827,7 @@ async def run_reverse_wizard(
             )
 
             # Convert Z2MDevice entities to ZHADevice-like for test checklist
-            _show_checklist_for_z2m_device(device, ha_client)
+            _show_checklist_for_z2m_device(device)
 
             # Step 8 — Optional rename
             await step_post_migrate_rename(device, ha_client)
@@ -845,7 +845,7 @@ async def run_reverse_wizard(
         save_state(state, state_path)
 
 
-def _show_checklist_for_z2m_device(device: Z2MDevice, ha_client: HAClient) -> None:
+def _show_checklist_for_z2m_device(device: Z2MDevice) -> None:
     """Show automations that reference this device's entities."""
     if not device.automations:
         return

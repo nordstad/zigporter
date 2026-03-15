@@ -94,6 +94,35 @@ The command:
 4. On confirmation: deletes the stale ZHA entities, removes the ZHA device from the
    registry, and renames any `_N` suffixed Z2M entities back to their original IDs
 
+## Reverse migration (Z2M → ZHA)
+
+To migrate devices back from Zigbee2MQTT to ZHA, snapshot your Z2M state first, then run the reverse wizard:
+
+```bash
+zigporter export-z2m                      # writes ~/.config/zigporter/z2m-export.json
+zigporter migrate --direction z2m-to-zha
+```
+
+The reverse wizard mirrors the forward wizard — same 7 steps plus an optional rename:
+
+1. **Remove from Z2M** — publishes `{"id": name, "force": true}` to `zigbee2mqtt/bridge/request/device/remove` via MQTT; falls back to a manual confirmation prompt if the call fails
+2. **Reset device** — prompts you to factory-reset the physical device to clear its Z2M pairing
+3. **Pair with ZHA** — opens a ZHA permit-join window (up to 254 s, auto-renewed every 244 s) and polls `zha/devices` every 3 s by IEEE address; ZHA has no event stream, so polling is the only reliable detection method; warns immediately if a different device joins by mistake
+4. **Rename & area** — restores the Z2M friendly name and area assignment on the new ZHA device in HA
+5. **Restore entity IDs** — detects `_2`/`_3` suffix conflicts caused by stale MQTT entities still occupying the original entity IDs, deletes the stale MQTT entries, and renames the suffixed ZHA entities back to their original names
+6. **Review** — lists entities registered on the new ZHA device
+7. **Validate** — polls HA entity states until all entities come online
+
+### Z2M groups are not migrated
+
+Z2M groups — virtual multi-device groups that let you control several bulbs or switches as one entity — are **not preserved** during reverse migration. There are two reasons:
+
+1. **Z2M removes the device from its groups automatically.** When a device is unpaired from Z2M, Z2M silently drops it from every group it belonged to. The group entity in HA continues to exist but now controls one fewer device — no error is raised.
+
+2. **ZHA groups are a different system.** ZHA has its own Zigbee group concept (managed under *Devices → Manage Zigbee groups* in the HA UI), but there is no mapping between Z2M group IDs and ZHA group IDs and no way to reconstruct them automatically.
+
+After migrating a device that belonged to Z2M groups, manually remove it from those groups in the Z2M dashboard (*Groups* tab) and rebuild any equivalent ZHA groups if needed.
+
 ## Device state machine
 
 ```mermaid
