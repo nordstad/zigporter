@@ -18,6 +18,7 @@ class DeviceState(BaseModel):
     status: DeviceStatus = DeviceStatus.PENDING
     migrated_at: datetime | None = None
     z2m_friendly_name: str | None = None
+    zha_device_name: str | None = None
 
 
 class MigrationState(BaseModel):
@@ -67,6 +68,12 @@ def mark_migrated(state: MigrationState, ieee: str, z2m_friendly_name: str) -> N
     state.devices[ieee].status = DeviceStatus.MIGRATED
     state.devices[ieee].migrated_at = datetime.now(tz=timezone.utc)
     state.devices[ieee].z2m_friendly_name = z2m_friendly_name
+
+
+def mark_migrated_reverse(state: MigrationState, ieee: str, zha_device_name: str) -> None:
+    state.devices[ieee].status = DeviceStatus.MIGRATED
+    state.devices[ieee].migrated_at = datetime.now(tz=timezone.utc)
+    state.devices[ieee].zha_device_name = zha_device_name
 
 
 def mark_failed(state: MigrationState, ieee: str) -> None:

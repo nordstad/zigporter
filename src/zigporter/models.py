@@ -108,6 +108,62 @@ class ZHAExport(BaseModel):
     devices: list[ZHADevice] = Field(default_factory=list)
 
 
+class Z2MDevice(BaseModel):
+    """A Z2M device as exported from Home Assistant.
+
+    Mirrors :class:`ZHADevice` but for the Zigbee2MQTT integration.  Used by
+    the reverse migration wizard (``zigporter migrate --direction z2m-to-zha``).
+
+    Attributes:
+        device_id: HA device registry ID (UUID string).
+        ieee: IEEE 802.15.4 address (e.g. ``"0x0011223344556677"``).
+        friendly_name: Z2M friendly name.
+        name_by_user: User-customised label shown in the HA UI.
+        manufacturer: Device manufacturer.
+        model: Device model string.
+        area_id: HA area registry ID.
+        area_name: Human-readable area name.
+        device_type: Zigbee device role: ``"EndDevice"``, ``"Router"``, or ``"Coordinator"``.
+        power_source: Power source string (e.g. ``"Mains (single phase)"``).
+        entities: All entities registered to this device.
+        automations: Automations that reference at least one entity of this device.
+        groups: Z2M group names the device belongs to (documentation only).
+        available: ``True`` if online, ``False`` if all entities offline, ``None`` if unknown.
+    """
+
+    device_id: str
+    ieee: str
+    friendly_name: str
+    name_by_user: str | None = None
+    manufacturer: str | None = None
+    model: str | None = None
+    area_id: str | None = None
+    area_name: str | None = None
+    device_type: str = "EndDevice"
+    power_source: str | None = None
+    entities: list[ZHAEntity] = Field(default_factory=list)
+    automations: list[AutomationRef] = Field(default_factory=list)
+    groups: list[str] = Field(default_factory=list)
+    available: bool | None = None
+
+
+class Z2MExport(BaseModel):
+    """Top-level container for a Z2M device inventory snapshot.
+
+    Written to ``~/.config/zigporter/z2m-export.json`` by ``zigporter export-z2m``
+    and read back by ``zigporter migrate --direction z2m-to-zha``.
+
+    Attributes:
+        exported_at: UTC timestamp when the export was created.
+        ha_url: HA base URL used during the export.
+        devices: All Z2M devices found at export time.
+    """
+
+    exported_at: datetime
+    ha_url: str
+    devices: list[Z2MDevice] = Field(default_factory=list)
+
+
 class CheckStatus(str, Enum):
     """Result severity for a single pre-flight check.
 

@@ -393,6 +393,27 @@ class HAClient:
             }
         )
 
+    async def enable_zha_permit_join(self, duration: int = 60) -> None:
+        """Open ZHA network for pairing via the ``zha.permit`` service."""
+        await self.call_service("zha", "permit", {"duration": duration})
+
+    async def get_zha_device_id(self, ieee: str) -> str | None:
+        """Find the HA device_id for a ZHA device by IEEE address.
+
+        ZHA registers devices with identifiers like ``("zha", "00:11:22:33:44:55:66:77")``.
+        Returns the HA device_id string, or ``None`` if not found.
+        """
+        norm = normalize_ieee(ieee)
+        registry = await self.get_device_registry()
+        for entry in registry:
+            for platform, identifier in entry.get("identifiers", []):
+                if platform != "zha":
+                    continue
+                ident = normalize_ieee(identifier)
+                if ident == norm:
+                    return entry["id"]
+        return None
+
     async def call_service(self, domain: str, service: str, service_data: dict[str, Any]) -> None:
         """Call a Home Assistant service via WebSocket."""
         await self._ws_command(

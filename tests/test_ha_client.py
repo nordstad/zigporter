@@ -727,3 +727,76 @@ async def test_get_z2m_device_id_skips_non_mqtt_platform(client, mocker):
     mocker.patch("websockets.connect", return_value=mock_ws)
     result = await client.get_z2m_device_id("00:11:22:33:44:55:66:77")
     assert result == "dev-zigbee"
+
+
+# ---------------------------------------------------------------------------
+# ZHA pairing methods
+# ---------------------------------------------------------------------------
+
+
+async def test_enable_zha_permit_join(client, mocker):
+    """enable_zha_permit_join calls the zha.permit service."""
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.enable_zha_permit_join(duration=120)
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["type"] == "call_service"
+    assert sent["domain"] == "zha"
+    assert sent["service"] == "permit"
+    assert sent["service_data"] == {"duration": 120}
+
+
+async def test_enable_zha_permit_join_default_duration(client, mocker):
+    """Default duration is 60 seconds."""
+    mock_ws = _make_ws(mocker, None)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    await client.enable_zha_permit_join()
+    sent = json.loads(mock_ws.send.call_args_list[-1][0][0])
+    assert sent["service_data"] == {"duration": 60}
+
+
+async def test_get_zha_device_id_found(client, mocker):
+    """get_zha_device_id returns device ID when ZHA identifier matches."""
+    registry = [
+        {
+            "id": "dev-zha-abc",
+            "identifiers": [["zha", "00:11:22:33:44:55:66:77"]],
+        },
+        {
+            "id": "dev-other",
+            "identifiers": [["mqtt", "zigbee2mqtt_0xaabbccddeeff0011"]],
+        },
+    ]
+    mock_ws = _make_ws(mocker, registry)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_zha_device_id("00:11:22:33:44:55:66:77")
+    assert result == "dev-zha-abc"
+
+
+async def test_get_zha_device_id_not_found(client, mocker):
+    """get_zha_device_id returns None when no ZHA device matches."""
+    registry = [
+        {
+            "id": "dev-mqtt",
+            "identifiers": [["mqtt", "zigbee2mqtt_0x0011223344556677"]],
+        },
+    ]
+    mock_ws = _make_ws(mocker, registry)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    result = await client.get_zha_device_id("ff:ff:ff:ff:ff:ff:ff:ff")
+    assert result is None
+
+
+async def test_get_zha_device_id_normalizes_ieee(client, mocker):
+    """get_zha_device_id normalizes both input IEEE and registry entries."""
+    registry = [
+        {
+            "id": "dev-zha-1",
+            "identifiers": [["zha", "00:11:22:33:44:55:66:77"]],
+        },
+    ]
+    mock_ws = _make_ws(mocker, registry)
+    mocker.patch("websockets.connect", return_value=mock_ws)
+    # Input with 0x prefix, no colons
+    result = await client.get_zha_device_id("0x0011223344556677")
+    assert result == "dev-zha-1"

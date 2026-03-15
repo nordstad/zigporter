@@ -89,6 +89,8 @@ def mock_ha_client():
             {"area_id": "living_room", "name": "Living Room"},
         ]
     )
+    client.enable_zha_permit_join = AsyncMock(return_value=None)
+    client.get_zha_device_id = AsyncMock(return_value=None)
     return client
 
 
@@ -101,6 +103,7 @@ def mock_z2m_client():
     client.get_device_by_ieee = AsyncMock(return_value=None)
     client.get_devices = AsyncMock(return_value=[])
     client.wait_for_interview = AsyncMock(return_value=("successful", {}))
+    client.remove_device = AsyncMock(return_value=None)
     return client
 
 

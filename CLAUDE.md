@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`zigporter` is a CLI toolkit for Zigbee device management in Home Assistant: migrate devices from ZHA to Zigbee2MQTT, rename entities/devices with cascading HA config updates, and fix stale ZHA registry entries post-migration. Uses an interactive wizard workflow with persistent state tracking so migrations can be paused and resumed.
+`zigporter` is a CLI toolkit for Zigbee device management in Home Assistant: migrate devices between ZHA and Zigbee2MQTT (both directions), rename entities/devices with cascading HA config updates, and fix stale registry entries post-migration. Uses an interactive wizard workflow with persistent state tracking so migrations can be paused and resumed.
 
 ## Commands
 
@@ -15,8 +15,10 @@ uv sync
 # Run CLI
 uv run zigporter --help
 uv run zigporter export
+uv run zigporter export-z2m                  # Export Z2M devices for reverse migration
 uv run zigporter list-z2m
-uv run zigporter migrate <export-file>
+uv run zigporter migrate <export-file>                  # ZHA → Z2M (default)
+uv run zigporter migrate --direction z2m-to-zha         # Z2M → ZHA (reverse)
 uv run zigporter check                       # Pre-flight connectivity check
 uv run zigporter inspect <device>            # Inspect a single device's state
 uv run zigporter rename-entity <old> <new>   # Rename a HA entity ID
@@ -44,7 +46,7 @@ The codebase follows a layered architecture:
 ```text
 CLI Layer       main.py (Typer app, registers commands)
     ↓
-Command Layer   commands/{check,export,fix_device,inspect,list_z2m,migrate,rename,setup}.py
+Command Layer   commands/{check,export,export_z2m,fix_device,inspect,list_z2m,migrate,migrate_reverse,rename,setup}.py
     ↓
 Client Layer    ha_client.py (HA WebSocket + REST), z2m_client.py (Z2M HTTP ingress)
     ↓
@@ -97,6 +99,15 @@ Z2M_MQTT_TOPIC=zigbee2mqtt  # Default; change if customised
 - Scope `ruff format` to changed files only (`uv run ruff format <file>`) to avoid noisy diffs from pre-existing formatting drift in untouched files.
 - **`_2`/`_3` entity suffix conflicts:** HA appends numeric suffixes to new Z2M entity IDs when stale ZHA registry entries still occupy the original IDs. Step 5 of the migrate wizard detects and resolves this automatically. For devices that were already migrated before this fix, use `zigporter fix-device` to clean up stale entries and rename suffixed entities back to their originals.
 - **Helper / Group config entries:** HA Helper config entries (groups, template helpers, etc.) store entity ID references in their `options` dict, not in automations/scenes/dashboards. `rename-entity` scans these via `HAClient.get_config_entries()` and patches them via `HAClient.update_config_entry_options()`. They appear as "helper" rows in the rename plan. This mirrors the `build_rename_plan_from_snapshot` logic used by `rename-device`.
+
+## Reverse Migration (Z2M → ZHA) Gotchas
+
+- **ZHA has no event stream for device joins.** Unlike Z2M which emits `device_joined`/`device_interview` MQTT events, ZHA detection requires polling `zha/devices` every 3 seconds.
+- **ZHA permit join** uses `zha.permit` service with `duration` parameter (max 254s, same Zigbee 8-bit limit as Z2M).
+- **Z2M device removal** uses MQTT: publish to `{topic}/bridge/request/device/remove` with `{"id": friendly_name, "force": true}`. Z2M 2.x has no REST API — all operations use MQTT fallback.
+- **After pairing with ZHA**, the device has a **new** HA `device_id` (ZHA-based). Use `HAClient.get_zha_device_id(ieee)` to find it — it matches on `identifiers: [("zha", "ieee_colon_format")]`.
+- **Stale MQTT entities** may still occupy original entity IDs after removing from Z2M → ZHA entities get `_2`/`_3` suffixes. Same resolution pattern as forward wizard step 5.
+- When adding async methods to `HAClient`, also update `mock_ha_client` in `tests/commands/test_migrate_reverse.py`.
 
 ## Publishing to PyPI
 

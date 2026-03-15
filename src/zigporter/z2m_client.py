@@ -321,6 +321,16 @@ class Z2MClient:
         except (RuntimeError, httpx.HTTPStatusError, httpx.RequestError):
             return await self._get_network_map_via_mqtt(timeout=timeout)
 
+    async def remove_device(self, friendly_name: str, force: bool = True) -> None:
+        """Remove a device from Z2M by friendly name (HTTP fallback -> MQTT)."""
+        try:
+            await self._post("/api/device/remove", {"id": friendly_name, "force": force})
+        except (RuntimeError, httpx.HTTPStatusError, httpx.RequestError):
+            await self._mqtt_publish(
+                f"{self._mqtt_topic}/bridge/request/device/remove",
+                json.dumps({"id": friendly_name, "force": force}),
+            )
+
     async def rename_device(self, current_name: str, new_name: str) -> None:
         """Rename a Z2M device by its current friendly name."""
         try:

@@ -345,3 +345,61 @@ async def test_get_network_map_http_success_does_not_call_mqtt(client):
 
     assert result == http_response
     mock_mqtt.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# remove_device
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_remove_device_http_success(client):
+    """remove_device calls the HTTP endpoint when it succeeds."""
+    remove_route = respx.post(f"{Z2M_URL}/api/device/remove").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+
+    await client.remove_device("Kitchen Plug", force=True)
+
+    assert remove_route.called
+    body = json.loads(remove_route.calls[0].request.content)
+    assert body == {"id": "Kitchen Plug", "force": True}
+
+
+async def test_remove_device_falls_back_to_mqtt(client):
+    """remove_device falls back to MQTT when HTTP fails."""
+    from unittest.mock import AsyncMock, patch
+
+    with (
+        patch.object(
+            client,
+            "_post",
+            new=AsyncMock(side_effect=RuntimeError("HTTP unavailable")),
+        ),
+        patch.object(client, "_mqtt_publish", new=AsyncMock()) as mock_mqtt,
+    ):
+        await client.remove_device("Kitchen Plug", force=True)
+
+    mock_mqtt.assert_awaited_once()
+    call_args = mock_mqtt.call_args
+    assert "device/remove" in call_args[0][0]
+    payload = json.loads(call_args[0][1])
+    assert payload == {"id": "Kitchen Plug", "force": True}
+
+
+async def test_remove_device_force_false(client):
+    """remove_device passes force=False when specified."""
+    from unittest.mock import AsyncMock, patch
+
+    with (
+        patch.object(
+            client,
+            "_post",
+            new=AsyncMock(side_effect=RuntimeError("HTTP unavailable")),
+        ),
+        patch.object(client, "_mqtt_publish", new=AsyncMock()) as mock_mqtt,
+    ):
+        await client.remove_device("My Device", force=False)
+
+    payload = json.loads(mock_mqtt.call_args[0][1])
+    assert payload["force"] is False

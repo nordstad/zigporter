@@ -26,7 +26,10 @@ from zigporter.ui import QUESTIONARY_STYLE
 
 app = typer.Typer(
     name="zigporter",
-    help="Migrate Zigbee devices from ZHA to Zigbee2MQTT in a controlled manner.",
+    help=(
+        "Migrate Zigbee devices between ZHA and Zigbee2MQTT. "
+        "Supports both ZHA → Z2M (default) and Z2M → ZHA (--direction z2m-to-zha)."
+    ),
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
@@ -178,6 +181,37 @@ def export(
     export_command(output=output, pretty=pretty, ha_url=ha_url, token=token, verify_ssl=verify_ssl)
 
 
+@app.command(name="export-z2m")
+def export_z2m(
+    output: Path = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output file path. Defaults to z2m-export.json in the zigporter config directory.",
+    ),
+    pretty: bool = typer.Option(False, "--pretty", help="Pretty-print JSON output."),
+) -> None:
+    """Export current Z2M devices, entities, areas, and automation references to JSON."""
+    from zigporter.commands.export_z2m import z2m_export_command  # noqa: PLC0415
+    from zigporter.config import default_z2m_export_path  # noqa: PLC0415
+
+    ha_url, token, verify_ssl = _get_config()
+    z2m_url, mqtt_topic = _get_z2m_config()
+
+    if output is None:
+        output = default_z2m_export_path()
+
+    z2m_export_command(
+        output=output,
+        pretty=pretty,
+        ha_url=ha_url,
+        token=token,
+        verify_ssl=verify_ssl,
+        z2m_url=z2m_url,
+        mqtt_topic=mqtt_topic,
+    )
+
+
 @app.command(name="list-z2m")
 def list_z2m(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON instead of a table."),
@@ -268,16 +302,86 @@ def _resolve_or_fetch_export(
     return default
 
 
+def _resolve_or_fetch_z2m_export(
+    explicit_path: Path | None,
+    ha_url: str,
+    token: str,
+    verify_ssl: bool,
+    z2m_url: str,
+    mqtt_topic: str,
+) -> Path:
+    """Return the Z2M export file path, fetching from HA if needed."""
+    from zigporter.commands.export_z2m import run_z2m_export  # noqa: PLC0415
+    from zigporter.config import default_z2m_export_path  # noqa: PLC0415
+
+    if explicit_path is not None:
+        return explicit_path
+
+    default = default_z2m_export_path()
+
+    if default.exists():
+        try:
+            data = json.loads(default.read_text())
+            exported_at = data.get("exported_at", "unknown date")
+            device_count = len(data.get("devices", []))
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            exported_at = "unknown date"
+            device_count = 0
+
+        console.print(
+            f"\n[dim]Found Z2M export from [bold]{exported_at}[/bold] "
+            f"({device_count} device(s))[/dim]\n"
+        )
+        choice = questionary.select(
+            "Use existing Z2M export or refresh from Home Assistant?",
+            choices=[
+                questionary.Choice("Use existing export", value="use"),
+                questionary.Choice("Refresh — fetch a new export from HA", value="refresh"),
+            ],
+            style=_STYLE,
+        ).ask()
+
+        if choice == "use" or choice is None:
+            return default
+
+    else:
+        console.print("\n[yellow]No Z2M export found.[/yellow]")
+        fetch = questionary.confirm(
+            "Fetch a fresh Z2M export from Home Assistant now?",
+            default=True,
+            style=_STYLE,
+        ).ask()
+        if not fetch:
+            console.print(
+                "[red]Cannot proceed without a Z2M export.[/red]\n"
+                "Run [bold]zigporter export-z2m[/bold] first."
+            )
+            raise typer.Exit(code=1)
+
+    import asyncio  # noqa: PLC0415
+
+    console.print()
+    export_data = asyncio.run(run_z2m_export(ha_url, token, verify_ssl, z2m_url, mqtt_topic))
+    default.write_text(export_data.model_dump_json(indent=2))
+    console.print(
+        f"[green]✓[/green] Exported [bold]{len(export_data.devices)}[/bold] Z2M devices "
+        f"to [dim]{default}[/dim]\n"
+    )
+    return default
+
+
 @app.command()
 def migrate(
     zha_export: Path = typer.Argument(
         None,
-        help="Path to a ZHA export JSON file. Defaults to zha-export.json in the zigporter config directory.",
+        help="Path to an export JSON file. For ZHA→Z2M: ZHA export. "
+        "For Z2M→ZHA: Z2M export. Defaults to the appropriate file in the config directory.",
     ),
     state: Path = typer.Option(
         None,
         "--state",
-        help="Path to the migration state file. Defaults to migration-state.json in the zigporter config directory.",
+        help="Path to the migration state file. Defaults to the appropriate file "
+        "in the zigporter config directory.",
     ),
     status: bool = typer.Option(
         False,
@@ -289,13 +393,27 @@ def migrate(
         "--skip-checks",
         help="Skip pre-flight checks (use for re-runs when you have already verified setup).",
     ),
+    direction: str = typer.Option(
+        "zha-to-z2m",
+        "--direction",
+        "-d",
+        help="Migration direction: 'zha-to-z2m' (default) or 'z2m-to-zha'.",
+    ),
 ) -> None:
-    """Interactive wizard to migrate ZHA devices to Zigbee2MQTT one at a time.
+    """Interactive wizard to migrate devices between ZHA and Zigbee2MQTT.
 
+    By default migrates ZHA → Z2M. Use --direction z2m-to-zha for the reverse.
     Tracks progress in a state file so you can safely stop and resume across sessions.
-    On first run the tool will check your setup, prompt for a backup, and fetch a
-    ZHA export automatically if one is not found.
+    On first run the tool will check your setup, prompt for a backup, and fetch an
+    export automatically if one is not found.
     """
+    if direction not in ("zha-to-z2m", "z2m-to-zha"):
+        console.print(
+            f"[red]Invalid direction:[/red] {direction}\n"
+            "  Valid options: 'zha-to-z2m' or 'z2m-to-zha'"
+        )
+        raise typer.Exit(code=1)
+
     if os.environ.get("ZIGPORTER_DEMO"):
         from zigporter.demo import demo_migrate_status  # noqa: PLC0415
 
@@ -318,19 +436,39 @@ def migrate(
     if not status:
         _confirm_backup_once()
 
-    export_path = _resolve_or_fetch_export(zha_export, ha_url, token, verify_ssl)
-    state_path = state if state is not None else default_state_path()
+    if direction == "z2m-to-zha":
+        from zigporter.commands.migrate_reverse import reverse_migrate_command  # noqa: PLC0415
+        from zigporter.config import default_reverse_state_path  # noqa: PLC0415
 
-    migrate_command(
-        zha_export_path=export_path,
-        state_path=state_path,
-        status_only=status,
-        ha_url=ha_url,
-        token=token,
-        verify_ssl=verify_ssl,
-        z2m_url=z2m_url,
-        mqtt_topic=mqtt_topic,
-    )
+        export_path = _resolve_or_fetch_z2m_export(
+            zha_export, ha_url, token, verify_ssl, z2m_url, mqtt_topic
+        )
+        state_path = state if state is not None else default_reverse_state_path()
+
+        reverse_migrate_command(
+            z2m_export_path=export_path,
+            state_path=state_path,
+            status_only=status,
+            ha_url=ha_url,
+            token=token,
+            verify_ssl=verify_ssl,
+            z2m_url=z2m_url,
+            mqtt_topic=mqtt_topic,
+        )
+    else:
+        export_path = _resolve_or_fetch_export(zha_export, ha_url, token, verify_ssl)
+        state_path = state if state is not None else default_state_path()
+
+        migrate_command(
+            zha_export_path=export_path,
+            state_path=state_path,
+            status_only=status,
+            ha_url=ha_url,
+            token=token,
+            verify_ssl=verify_ssl,
+            z2m_url=z2m_url,
+            mqtt_topic=mqtt_topic,
+        )
 
 
 @app.command()

@@ -48,6 +48,24 @@ def default_stale_path() -> Path:
     return config_dir() / "stale.json"
 
 
+def default_z2m_export_path() -> Path:
+    """Return the default path for the Z2M device export file.
+
+    Returns:
+        ``~/.config/zigporter/z2m-export.json``
+    """
+    return config_dir() / "z2m-export.json"
+
+
+def default_reverse_state_path() -> Path:
+    """Return the default path for the reverse migration state file.
+
+    Returns:
+        ``~/.config/zigporter/reverse-migration-state.json``
+    """
+    return config_dir() / "reverse-migration-state.json"
+
+
 def default_convention_path() -> Path:
     """Return the default path for the naming convention file.
 
