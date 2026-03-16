@@ -1,5 +1,6 @@
 """Tests for the network-map command."""
 
+import asyncio
 import io
 import math
 import re
@@ -1555,3 +1556,159 @@ class TestLayoutInvariants:
             assert abs(x1 - x2) < 1e-6 and abs(y1 - y2) < 1e-6, (
                 f"Position for {ieee} differs: ({x1}, {y1}) vs ({x2}, {y2})"
             )
+
+
+# ---------------------------------------------------------------------------
+# Standalone mode (no HA) tests
+# ---------------------------------------------------------------------------
+
+import json as _json  # noqa: E402 (needed at module level for helper)
+
+from zigporter.commands.network_map import _resolve_backend  # noqa: E402
+from zigporter.z2m_client import Z2MClient  # noqa: E402
+
+
+_NM_RESPONSE_PAYLOAD = {
+    "status": "ok",
+    "data": {
+        "value": {
+            "nodes": [{"ieeeAddr": "0x0000000000000000", "type": "Coordinator"}],
+            "links": [],
+        }
+    },
+}
+
+_NM_WS_MESSAGE = {
+    "topic": "zigbee2mqtt/bridge/response/networkmap",
+    "payload": _json.dumps(_NM_RESPONSE_PAYLOAD),
+}
+
+
+class _FakeWS:
+    """Minimal async context manager that yields pre-canned messages."""
+
+    def __init__(self, messages: list[str]) -> None:
+        self._messages = list(messages)
+        self.sent: list[str] = []
+        self.connect_url: str = ""
+
+    async def send(self, data: str) -> None:
+        self.sent.append(data)
+
+    async def recv(self) -> str:
+        if self._messages:
+            return self._messages.pop(0)
+        raise asyncio.TimeoutError()
+
+    async def __aenter__(self) -> "_FakeWS":
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+
+async def test_standalone_no_ha_uses_z2m_ws() -> None:
+    """When ha_url is empty, get_network_map() calls _get_network_map_via_z2m_ws."""
+    client = Z2MClient(None, None, "http://z2m.local:8080")
+    with patch.object(
+        client,
+        "_get_network_map_via_z2m_ws",
+        new_callable=AsyncMock,
+        return_value={"data": {}},
+    ) as mock_ws:
+        await client.get_network_map()
+    mock_ws.assert_awaited_once()
+
+
+async def test_z2m_ws_parses_response_correctly() -> None:
+    """_get_network_map_via_z2m_ws returns the inner value dict."""
+    fake_ws = _FakeWS([_json.dumps(_NM_WS_MESSAGE)])
+    client = Z2MClient(None, None, "http://z2m.local:8080")
+
+    with patch("websockets.connect", return_value=fake_ws):
+        result = await client._get_network_map_via_z2m_ws(timeout=5)
+
+    assert "data" in result
+    assert "nodes" in result["data"]
+
+
+async def test_z2m_ws_skips_unrelated_messages() -> None:
+    """_get_network_map_via_z2m_ws ignores messages on other topics."""
+    unrelated = _json.dumps({"topic": "zigbee2mqtt/bridge/event", "payload": "{}"})
+    fake_ws = _FakeWS([unrelated, _json.dumps(_NM_WS_MESSAGE)])
+    client = Z2MClient(None, None, "http://z2m.local:8080")
+
+    with patch("websockets.connect", return_value=fake_ws):
+        result = await client._get_network_map_via_z2m_ws(timeout=5)
+
+    assert "data" in result
+
+
+async def test_z2m_ws_auth_token_appended() -> None:
+    """When z2m_frontend_token is set the WS URL includes ?token=<value>."""
+    captured_urls: list[str] = []
+
+    def _fake_connect(url: str, **_kwargs: object) -> _FakeWS:
+        captured_urls.append(url)
+        return _FakeWS([_json.dumps(_NM_WS_MESSAGE)])
+
+    client = Z2MClient(None, None, "http://z2m.local:8080", z2m_frontend_token="secret")
+    with patch("websockets.connect", side_effect=_fake_connect):
+        await client._get_network_map_via_z2m_ws(timeout=5)
+
+    assert len(captured_urls) == 1
+    assert "?token=secret" in captured_urls[0]
+
+
+async def test_z2m_ws_url_no_token_when_not_set() -> None:
+    """When z2m_frontend_token is not set the WS URL has no ?token query param."""
+    captured_urls: list[str] = []
+
+    def _fake_connect(url: str, **_kwargs: object) -> _FakeWS:
+        captured_urls.append(url)
+        return _FakeWS([_json.dumps(_NM_WS_MESSAGE)])
+
+    client = Z2MClient(None, None, "http://z2m.local:8080")
+    with patch("websockets.connect", side_effect=_fake_connect):
+        await client._get_network_map_via_z2m_ws(timeout=5)
+
+    assert "token" not in captured_urls[0]
+
+
+async def test_resolve_backend_standalone_no_ha_returns_z2m() -> None:
+    """When ha_url is empty and Z2M_URL is set, auto-resolves to z2m."""
+    result = await _resolve_backend("auto", "", "", True, "http://z2m.local:8080")
+    assert result == "z2m"
+
+
+async def test_resolve_backend_standalone_no_ha_no_z2m_returns_none() -> None:
+    """When ha_url and z2m_url are both empty, returns none."""
+    with patch("zigporter.commands.network_map.console"):
+        result = await _resolve_backend("auto", "", "", True, "")
+    assert result == "none"
+
+
+async def test_resolve_backend_zha_requires_ha() -> None:
+    """Requesting --backend zha without HA credentials returns none."""
+    with patch("zigporter.commands.network_map.console"):
+        result = await _resolve_backend("zha", "", "", True, "")
+    assert result == "none"
+
+
+async def test_z2m_ws_error_payload_raises() -> None:
+    """_get_network_map_via_z2m_ws raises RuntimeError on Z2M error response."""
+    error_msg = _json.dumps(
+        {
+            "topic": "zigbee2mqtt/bridge/response/networkmap",
+            "payload": _json.dumps({"status": "error", "error": "not ready"}),
+        }
+    )
+    fake_ws = _FakeWS([error_msg])
+    client = Z2MClient(None, None, "http://z2m.local:8080")
+
+    with patch("websockets.connect", return_value=fake_ws):
+        try:
+            await client._get_network_map_via_z2m_ws(timeout=5)
+            assert False, "Expected RuntimeError"  # noqa: B011
+        except RuntimeError as exc:
+            assert "not ready" in str(exc)

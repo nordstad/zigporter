@@ -680,8 +680,9 @@ def network_map(
     """
     from zigporter.commands.network_map import network_map_command as _nm  # noqa: PLC0415
 
-    ha_url, token, verify_ssl = _get_config()
+    ha_url, token, verify_ssl = _get_config(optional=True)
     z2m_url, mqtt_topic = _get_z2m_config(optional=True)
+    z2m_frontend_token = os.environ.get("Z2M_FRONTEND_TOKEN")
     _nm(
         ha_url=ha_url,
         token=token,
@@ -693,6 +694,7 @@ def network_map(
         critical_lqi=critical_lqi,
         output_svg=output_svg,
         backend=backend,
+        z2m_frontend_token=z2m_frontend_token,
     )
 
 

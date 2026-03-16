@@ -168,7 +168,12 @@ async def _resolve_backend(
             return "none"
         return "z2m"
 
+    standalone = not ha_url.strip()
+
     if backend == "zha":
+        if standalone:
+            console.print("[red]Error:[/red] --backend zha requires HA_URL + HA_TOKEN.")
+            return "none"
         try:
             ha_client = HAClient(ha_url, token, verify_ssl)
             await ha_client.get_zha_devices()
@@ -182,6 +187,17 @@ async def _resolve_backend(
 
     # auto — detect what's available
     z2m_available = bool(z2m_url.strip())
+
+    # No HA configured — skip ZHA probe entirely
+    if standalone:
+        if z2m_available:
+            return "z2m"
+        console.print("[red]Error:[/red] No Zigbee backend available.")
+        console.print(
+            "[dim]Set Z2M_URL for standalone Z2M mode, or configure HA_URL + HA_TOKEN.[/dim]"
+        )
+        return "none"
+
     zha_available = False
     try:
         ha_client = HAClient(ha_url, token, verify_ssl)
@@ -531,9 +547,10 @@ async def _fetch_z2m_data(
     z2m_url: str,
     verify_ssl: bool,
     mqtt_topic: str,
+    z2m_frontend_token: str | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]] | None:
     """Fetch network map from Z2M. Returns (nodes, links) or None on error."""
-    client = Z2MClient(ha_url, token, z2m_url, verify_ssl, mqtt_topic)
+    client = Z2MClient(ha_url, token, z2m_url, verify_ssl, mqtt_topic, z2m_frontend_token)
 
     with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
         t = progress.add_task("Fetching Z2M network map...", total=None)
@@ -638,6 +655,7 @@ async def run_network_map(
     critical_lqi: int = 30,
     output_svg: Path | None = None,
     backend: str = "auto",
+    z2m_frontend_token: str | None = None,
 ) -> None:
     resolved = await _resolve_backend(backend, ha_url, token, verify_ssl, z2m_url)
     if resolved == "none":
@@ -646,7 +664,9 @@ async def run_network_map(
     if resolved == "zha":
         result = await _fetch_zha_data(ha_url, token, verify_ssl)
     else:
-        result = await _fetch_z2m_data(ha_url, token, z2m_url, verify_ssl, mqtt_topic)
+        result = await _fetch_z2m_data(
+            ha_url, token, z2m_url, verify_ssl, mqtt_topic, z2m_frontend_token
+        )
 
     if result is None:
         return
@@ -754,6 +774,7 @@ def network_map_command(
     critical_lqi: int = 30,
     output_svg: Path | None = None,
     backend: str = "auto",
+    z2m_frontend_token: str | None = None,
 ) -> None:
     asyncio.run(
         run_network_map(
@@ -767,5 +788,6 @@ def network_map_command(
             critical_lqi=critical_lqi,
             output_svg=output_svg,
             backend=backend,
+            z2m_frontend_token=z2m_frontend_token,
         )
     )

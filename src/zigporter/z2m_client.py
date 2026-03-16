@@ -38,30 +38,37 @@ class Z2MClient:
 
     def __init__(
         self,
-        ha_url: str,
-        ha_token: str,
+        ha_url: str | None,
+        ha_token: str | None,
         z2m_url: str,
         verify_ssl: bool = True,
         mqtt_topic: str = "zigbee2mqtt",
+        z2m_frontend_token: str | None = None,
     ) -> None:
         """
         Args:
             ha_url: Base URL of the Home Assistant instance
-                (e.g. ``"http://homeassistant.local:8123"``).
+                (e.g. ``"http://homeassistant.local:8123"``). Optional — pass
+                ``None`` or ``""`` for standalone Z2M mode (no HA).
             ha_token: Long-lived HA access token. Used for ingress session
                 exchange and as the fallback HA-native client credential.
-            z2m_url: Full ingress URL for the Z2M add-on
-                (e.g. ``"http://homeassistant.local:8123/api/hassio_ingress/<slug>"``).
+                Optional in standalone mode.
+            z2m_url: Full ingress URL for the Z2M add-on or standalone Z2M
+                instance (e.g. ``"http://z2m-host:8080"``).
             verify_ssl: Set to ``False`` to disable TLS certificate verification
                 for self-signed certificates.
             mqtt_topic: Z2M base MQTT topic. Must match the ``base_topic``
                 setting in your Z2M configuration (default: ``"zigbee2mqtt"``).
+            z2m_frontend_token: Optional Z2M frontend auth token
+                (``frontend.auth_token`` in Z2M config). Used for direct
+                WebSocket auth in standalone mode.
         """
-        self._ha_url = ha_url.rstrip("/")
-        self._ha_token = ha_token
+        self._ha_url = (ha_url or "").rstrip("/")
+        self._ha_token = ha_token or ""
         self._z2m_url = z2m_url.rstrip("/")
         self._verify_ssl = verify_ssl
         self._mqtt_topic = mqtt_topic
+        self._z2m_frontend_token = z2m_frontend_token
         self._session_token: str | None = None
         self._ha_client_instance: Any = None
 
@@ -308,18 +315,86 @@ class Z2MClient:
     async def get_network_map(self, timeout: int = _NETWORK_MAP_TIMEOUT) -> dict[str, Any]:
         """Return the raw Z2M network map (nodes + links).
 
-        Tries the Z2M HTTP REST endpoint first. Z2M 2.x removed that endpoint,
-        so falls back to subscribing to the MQTT response topic and publishing
-        the request via HA's WebSocket ``call_service`` API.
+        When no HA URL is configured (standalone Z2M mode), connects directly
+        to the Z2M frontend WebSocket at ``<z2m_url>/api``.
+
+        Otherwise, tries the Z2M HTTP REST endpoint first. Z2M 2.x removed
+        that endpoint, so falls back to subscribing to the MQTT response topic
+        and publishing the request via HA's WebSocket ``call_service`` API.
 
         ``timeout`` controls how long to wait for Z2M to respond via MQTT.
         Large meshes with many routers need more time — Z2M scans each router
         sequentially, so allow ~10 s per router.
         """
+        if not self._ha_url:
+            return await self._get_network_map_via_z2m_ws(timeout=timeout)
         try:
             return await self._get("/api/networkmap?type=raw")
         except (RuntimeError, httpx.HTTPStatusError, httpx.RequestError):
             return await self._get_network_map_via_mqtt(timeout=timeout)
+
+    async def _get_network_map_via_z2m_ws(
+        self, timeout: int = _NETWORK_MAP_TIMEOUT
+    ) -> dict[str, Any]:
+        """Fetch Z2M network map via direct Z2M frontend WebSocket (standalone, no HA).
+
+        Connects to ws://<z2m-host>/api — Z2M's built-in frontend WebSocket.
+        Optionally authenticates via ?token=<z2m_frontend_token> if set.
+        """
+        import ssl as _ssl  # noqa: PLC0415
+
+        import websockets  # noqa: PLC0415
+
+        ws_url = (
+            self._z2m_url.replace("https://", "wss://").replace("http://", "ws://").rstrip("/")
+            + "/api"
+        )
+        if self._z2m_frontend_token:
+            ws_url += f"?token={self._z2m_frontend_token}"
+
+        ssl_ctx: _ssl.SSLContext | None = None
+        if ws_url.startswith("wss://") and not self._verify_ssl:
+            ssl_ctx = _ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = _ssl.CERT_NONE
+
+        response_topic = f"{self._mqtt_topic}/bridge/response/networkmap"
+        request_topic = f"{self._mqtt_topic}/bridge/request/networkmap"
+
+        async with websockets.connect(ws_url, ssl=ssl_ctx) as ws:
+            await ws.send(
+                json.dumps(
+                    {
+                        "topic": request_topic,
+                        "payload": json.dumps({"type": "raw"}),
+                    }
+                )
+            )
+
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(f"Timed out after {timeout}s waiting for Z2M network map")
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    raise RuntimeError(f"Timed out after {timeout}s waiting for Z2M network map")
+
+                msg = json.loads(raw)
+                if msg.get("topic") != response_topic:
+                    continue
+
+                payload = msg.get("payload", {})
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+
+                if payload.get("status") == "ok":
+                    data = payload.get("data", {})
+                    return {"data": data.get("value", data)}
+
+                if payload.get("status") == "error":
+                    raise RuntimeError(f"Z2M network map error: {payload.get('error', 'unknown')}")
 
     async def remove_device(self, friendly_name: str, force: bool = True) -> None:
         """Remove a device from Z2M by friendly name (HTTP fallback -> MQTT)."""
