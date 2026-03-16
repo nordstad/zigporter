@@ -1,4 +1,5 @@
 import asyncio
+import sys
 
 import httpx
 import questionary
@@ -210,6 +211,9 @@ def check_command(
     blocking_failures = [r for r in results if r.status == CheckStatus.FAILED and r.blocking]
     if blocking_failures:
         console.print("[yellow]One or more checks failed.[/yellow]")
+        if not sys.stdin.isatty():
+            console.print("[yellow]Non-interactive environment — aborting.[/yellow]")
+            return False
         proceed = questionary.confirm("Proceed anyway?", default=False, style=_STYLE).ask()
         if not proceed:
             return False

@@ -171,10 +171,10 @@ def test_check_command_all_pass(mocker):
     confirm_mock.assert_not_called()
 
 
-def test_check_command_blocking_failure_user_aborts(mocker):
+def _blocking_failure_results():
     from zigporter.models import CheckResult
 
-    results = [
+    return [
         CheckResult(name="Configuration", status=CheckStatus.OK, message="ok"),
         CheckResult(
             name="HA reachable", status=CheckStatus.FAILED, message="unreachable", blocking=True
@@ -182,7 +182,14 @@ def test_check_command_blocking_failure_user_aborts(mocker):
         CheckResult(name="ZHA active", status=CheckStatus.SKIPPED, message="skipped"),
         CheckResult(name="Z2M running", status=CheckStatus.SKIPPED, message="skipped"),
     ]
-    mocker.patch("zigporter.commands.check._run_checks", new=AsyncMock(return_value=results))
+
+
+def test_check_command_blocking_failure_user_aborts(mocker):
+    mocker.patch(
+        "zigporter.commands.check._run_checks",
+        new=AsyncMock(return_value=_blocking_failure_results()),
+    )
+    mocker.patch("zigporter.commands.check.sys.stdin.isatty", return_value=True)
     mocker.patch(
         "zigporter.commands.check.questionary.confirm",
         return_value=MagicMock(ask=MagicMock(return_value=False)),
@@ -193,17 +200,11 @@ def test_check_command_blocking_failure_user_aborts(mocker):
 
 
 def test_check_command_blocking_failure_user_proceeds(mocker):
-    from zigporter.models import CheckResult
-
-    results = [
-        CheckResult(name="Configuration", status=CheckStatus.OK, message="ok"),
-        CheckResult(
-            name="HA reachable", status=CheckStatus.FAILED, message="unreachable", blocking=True
-        ),
-        CheckResult(name="ZHA active", status=CheckStatus.SKIPPED, message="skipped"),
-        CheckResult(name="Z2M running", status=CheckStatus.SKIPPED, message="skipped"),
-    ]
-    mocker.patch("zigporter.commands.check._run_checks", new=AsyncMock(return_value=results))
+    mocker.patch(
+        "zigporter.commands.check._run_checks",
+        new=AsyncMock(return_value=_blocking_failure_results()),
+    )
+    mocker.patch("zigporter.commands.check.sys.stdin.isatty", return_value=True)
     mocker.patch(
         "zigporter.commands.check.questionary.confirm",
         return_value=MagicMock(ask=MagicMock(return_value=True)),
@@ -211,3 +212,17 @@ def test_check_command_blocking_failure_user_proceeds(mocker):
 
     result = check_command("https://ha.test", "token", True, "https://z2m.test")
     assert result is True
+
+
+def test_check_command_blocking_failure_non_tty(mocker):
+    mocker.patch(
+        "zigporter.commands.check._run_checks",
+        new=AsyncMock(return_value=_blocking_failure_results()),
+    )
+    mocker.patch("zigporter.commands.check.sys.stdin.isatty", return_value=False)
+    confirm_mock = mocker.patch("zigporter.commands.check.questionary.confirm")
+
+    result = check_command("https://ha.test", "token", True, "https://z2m.test")
+
+    assert result is False
+    confirm_mock.assert_not_called()
