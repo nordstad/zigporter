@@ -1712,3 +1712,58 @@ async def test_z2m_ws_error_payload_raises() -> None:
             assert False, "Expected RuntimeError"  # noqa: B011
         except RuntimeError as exc:
             assert "not ready" in str(exc)
+
+
+async def test_z2m_ws_wss_no_verify_ssl_creates_unverified_ssl_context() -> None:
+    """When URL is wss:// and verify_ssl=False, an unverified SSL context is created."""
+    import ssl as _ssl
+
+    captured_ssl: list = []
+
+    def _fake_connect(url: str, ssl: object = None, **_kw: object) -> _FakeWS:
+        captured_ssl.append(ssl)
+        return _FakeWS([_json.dumps(_NM_WS_MESSAGE)])
+
+    # https:// triggers the wss:// path; verify_ssl=False activates the ssl_ctx block
+    client = Z2MClient(None, None, "https://z2m.local", verify_ssl=False)
+    with patch("websockets.connect", side_effect=_fake_connect):
+        await client._get_network_map_via_z2m_ws(timeout=5)
+
+    assert len(captured_ssl) == 1
+    ctx = captured_ssl[0]
+    assert ctx is not None
+    assert ctx.verify_mode == _ssl.CERT_NONE
+
+
+async def test_z2m_ws_deadline_exceeded_raises() -> None:
+    """RuntimeError is raised when the overall deadline has passed before recv."""
+    fake_ws = _FakeWS([])
+    client = Z2MClient(None, None, "http://z2m.local:8080")
+
+    # First monotonic() call sets the deadline; second call is already past it
+    with (
+        patch("websockets.connect", return_value=fake_ws),
+        patch("time.monotonic", side_effect=[0.0, 100.0]),
+    ):
+        try:
+            await client._get_network_map_via_z2m_ws(timeout=1)
+            assert False, "Expected RuntimeError"  # noqa: B011
+        except RuntimeError as exc:
+            assert "Timed out" in str(exc)
+
+
+async def test_z2m_ws_recv_timeout_raises() -> None:
+    """RuntimeError is raised when asyncio.wait_for times out waiting for a message.
+
+    _FakeWS([]) raises asyncio.TimeoutError from recv() when its queue is empty,
+    which asyncio.wait_for propagates to the except handler in _get_network_map_via_z2m_ws.
+    """
+    fake_ws = _FakeWS([])
+    client = Z2MClient(None, None, "http://z2m.local:8080")
+
+    with patch("websockets.connect", return_value=fake_ws):
+        try:
+            await client._get_network_map_via_z2m_ws(timeout=5)
+            assert False, "Expected RuntimeError"  # noqa: B011
+        except RuntimeError as exc:
+            assert "Timed out" in str(exc)
