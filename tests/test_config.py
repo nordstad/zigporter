@@ -123,6 +123,32 @@ def test_load_z2m_config_missing_raises(monkeypatch, tmp_path):
         load_z2m_config()
 
 
+def test_cwd_env_without_z2m_url_falls_back_to_global_config(tmp_path, monkeypatch):
+    """A CWD .env that exists but lacks Z2M_URL must not block the global config.
+
+    Reproduces the bug where load_dotenv() returns True whenever the file
+    exists (regardless of which keys it defines), causing the `if not ... else`
+    pattern to skip ~/.config/zigporter/.env entirely.
+    """
+    # Global config has Z2M_URL; CWD .env has HA creds but no Z2M_URL.
+    global_env = tmp_path / "global"
+    global_env.mkdir()
+    (global_env / ".env").write_text("Z2M_URL=https://ha.test/z2m\n")
+
+    cwd = tmp_path / "project"
+    cwd.mkdir()
+    (cwd / ".env").write_text("HA_URL=https://ha.test\nHA_TOKEN=tok\n")
+
+    monkeypatch.setattr("zigporter.config.config_dir", lambda: global_env)
+    monkeypatch.chdir(cwd)
+    monkeypatch.delenv("Z2M_URL", raising=False)
+
+    url, mqtt_topic = load_z2m_config()
+
+    assert url == "https://ha.test/z2m"
+    assert mqtt_topic == "zigbee2mqtt"
+
+
 def test_default_convention_path(tmp_path, monkeypatch):
     monkeypatch.setattr("zigporter.config.config_dir", lambda: tmp_path)
     from zigporter.config import default_convention_path
