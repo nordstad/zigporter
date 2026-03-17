@@ -9,7 +9,7 @@ working directory. CWD ``.env`` takes precedence, making it easy to use
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 
 def config_dir() -> Path:
@@ -95,9 +95,25 @@ def _load_env() -> None:
     if _env_loaded:
         return
     _env_loaded = True
-    # CWD .env takes highest precedence; fall back to ~/.config/zigporter/.env
-    if not load_dotenv(Path.cwd() / ".env"):
-        load_dotenv(config_dir() / ".env")
+    # Desired precedence: shell env vars > CWD .env > global ~/.config/zigporter/.env
+    #
+    # The previous `if not ... else` approach silently skipped the global config
+    # whenever a CWD .env existed but did not contain all zigporter keys (e.g. a
+    # project .env with HA_URL/HA_TOKEN but no Z2M_URL), because load_dotenv()
+    # returns True whenever the target file exists regardless of which keys it
+    # defines.
+    #
+    # Using load_dotenv(override=True) for the CWD file would fix the skipping
+    # issue but would incorrectly let the CWD .env stomp shell env vars.
+    #
+    # Instead, merge both files manually and apply only keys not already set in
+    # os.environ, so shell env vars always win.
+    global_vals = dotenv_values(config_dir() / ".env")
+    cwd_vals = dotenv_values(Path.cwd() / ".env")
+    merged = {**global_vals, **cwd_vals}  # CWD wins over global
+    for key, value in merged.items():
+        if key not in os.environ and value is not None:
+            os.environ[key] = value
 
 
 def load_config() -> tuple[str, str, bool]:
