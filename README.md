@@ -115,14 +115,6 @@ zigporter migrate --status
 
 ## Migrate Z2M → ZHA
 
----
-> [!WARNING]
-> **Back up first** — The migration wizard removes devices from Z2M and makes changes to
-> entity IDs, automations, and dashboards that are difficult to reverse. Before running,
-> [back up your Home Assistant configuration](https://www.home-assistant.io/common-tasks/os/#backups).
-> This tool is provided **as-is** with no warranty. Use at your own risk.
----
-
 ```bash
 # Export your Z2M device list (used as the migration input)
 zigporter export-z2m
