@@ -38,11 +38,14 @@
 
 ## Installation
 
-### pip / uv (cross-platform)
+### uv
 
 ```bash
 uv tool install zigporter
-# or
+```
+### pip
+
+```bash
 pip install zigporter
 ```
 
