@@ -8,13 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
-## [1.3.3] - 2026-03-18
-
-### Changed
-
-- chore(deps-dev): bump zensical from 0.0.26 to 0.0.27 (#73)
-- chore(deps-dev): bump ruff from 0.15.5 to 0.15.6 (#72)
-
 ## [1.3.3] - 2026-03-19
 
 ### Changed
@@ -22,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrate Homebrew formula to dedicated tap repo `nordstad/homebrew-zigporter`; installation is now `brew tap nordstad/zigporter && brew install zigporter`
 - Remove outdated backup warning from Z2M → ZHA migration wizard
 - Update installation section in README
+- chore(deps-dev): bump zensical from 0.0.26 to 0.0.27 (#73)
+- chore(deps-dev): bump ruff from 0.15.5 to 0.15.6 (#72)
 
 ## [1.3.2] - 2026-03-18
 
@@ -469,7 +464,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v1.3.3...HEAD
-[1.3.3]: https://github.com/nordstad/zigporter/compare/v1.3.3...v1.3.3
 [1.3.3]: https://github.com/nordstad/zigporter/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/nordstad/zigporter/compare/v1.3.2...v1.3.2
 [1.3.2]: https://github.com/nordstad/zigporter/compare/v1.3.1...v1.3.2
