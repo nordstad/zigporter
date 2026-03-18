@@ -117,6 +117,21 @@ The workflow (`.github/workflows/publish.yml`) automatically:
 
 ## Monitoring the Release
 
+### Verify Homebrew tap (after CI completes)
+
+```bash
+# Check tap formula was updated to new version
+gh api repos/nordstad/homebrew-zigporter/contents/Formula/zigporter.rb \
+  | python3 -c "import sys,json,base64; print(base64.b64decode(json.load(sys.stdin)['content']).decode())" \
+  | head -8
+
+# Smoke-test the install
+brew upgrade nordstad/zigporter/zigporter && zigporter --version
+```
+
+If `brew upgrade` fails, check if resource stanzas need updating:
+`brew update-python-resources nordstad/zigporter/zigporter` then push to tap main.
+
 ```bash
 # View recent workflow runs
 gh run list --workflow=publish.yml --limit 5

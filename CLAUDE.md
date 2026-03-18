@@ -160,7 +160,7 @@ brew update-python-resources nordstad/zigporter/zigporter
 # then push the updated formula to nordstad/homebrew-zigporter main
 ```
 
-Run this when `uv.lock` runtime deps change.
+Run this when `uv.lock` runtime deps change. After pushing a new tag, verify the tap updated correctly and `brew upgrade nordstad/zigporter/zigporter` succeeds — the resource stanzas must be kept in sync with the installed dep versions.
 
 ### Manual rerun
 

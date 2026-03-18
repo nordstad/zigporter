@@ -43,7 +43,7 @@ pip install zigporter
 Shell completions are installed automatically — no post-install steps required.
 
 ```zsh
-brew tap nordstad/zigporter https://github.com/nordstad/zigporter
+brew tap nordstad/zigporter
 brew install zigporter
 ```
 
