@@ -3,8 +3,8 @@ class Zigporter < Formula
 
   desc "CLI toolkit for Zigbee device management in Home Assistant"
   homepage "https://github.com/nordstad/zigporter"
-  url "https://files.pythonhosted.org/packages/f1/0b/c2613bbcef1effe67447b402bea4e35c018494b226f601dcd484ba070e90/zigporter-1.3.1.tar.gz"
-  sha256 "08350c4bf23e7518ef421be1ca1a2a02d0bfbc0bd9b475280192d9624bd10c4a"
+  url "https://files.pythonhosted.org/packages/6d/f9/295abe44ebd6fe31ce08447e2618b033f1e0d0b3fe7254017840dbb5c45a/zigporter-1.3.2.tar.gz"
+  sha256 "36bbe2a065565eb5d895057f938d13895a719f44018e8d89f333056bda5c4b3f"
   license "MIT"
 
   depends_on "rust" => :build # required for pydantic-core
