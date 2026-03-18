@@ -125,8 +125,13 @@ jobs:
           else
             git add CHANGELOG.md
             git commit -m "Update CHANGELOG.md for release ${GITHUB_REF#refs/tags/}"
-            git pull --rebase --autostash origin main
-            git push origin HEAD:main
+            cp CHANGELOG.md /tmp/CHANGELOG.md
+            git fetch origin main
+            git checkout main
+            cp /tmp/CHANGELOG.md CHANGELOG.md
+            git add CHANGELOG.md
+            git diff --cached --quiet || git commit -m "Update CHANGELOG.md for release ${GITHUB_REF#refs/tags/}"
+            git push origin main
           fi
 
   update-homebrew:
@@ -137,20 +142,37 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
-      - name: Get PyPI tarball URL
+      - name: Get PyPI tarball sha256
         id: pypi
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          URL=$(curl -s "https://pypi.org/pypi/zigporter/${VERSION}/json" | \
-            python3 -c "import sys,json; d=json.load(sys.stdin); print([f['url'] for f in d['urls'] if f['url'].endswith('.tar.gz')][0])")
+          DATA=$(curl -s "https://pypi.org/pypi/zigporter/${VERSION}/json")
+          URL=$(echo "$DATA" | python3 -c "import sys,json; d=json.load(sys.stdin); print([f['url'] for f in d['urls'] if f['url'].endswith('.tar.gz')][0])")
+          SHA=$(echo "$DATA" | python3 -c "import sys,json; d=json.load(sys.stdin); print([f['digests']['sha256'] for f in d['urls'] if f['url'].endswith('.tar.gz')][0])")
           echo "url=${URL}" >> $GITHUB_OUTPUT
+          echo "sha256=${SHA}" >> $GITHUB_OUTPUT
 
-      - uses: mislav/bump-homebrew-formula-action@v3
+      - name: Checkout tap repo
+        uses: actions/checkout@v6
         with:
-          formula-name: zigporter
-          homebrew-tap: nordstad/zigporter
-          tag-name: ${{ github.ref_name }}
-          download-url: ${{ steps.pypi.outputs.url }}
+          repository: nordstad/homebrew-zigporter
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Update formula
         env:
-          COMMITTER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          URL: ${{ steps.pypi.outputs.url }}
+          SHA256: ${{ steps.pypi.outputs.sha256 }}
+        run: |
+          sed -i "s|url \"https://files.pythonhosted.org/.*\"|url \"${URL}\"|" tap/Formula/zigporter.rb
+          sed -i "s|sha256 \"[a-f0-9]*\"|sha256 \"${SHA256}\"|" tap/Formula/zigporter.rb
+
+      - name: Commit and push to tap
+        run: |
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/zigporter.rb
+          git diff --cached --quiet || git commit -m "zigporter ${GITHUB_REF_NAME}"
+          git push origin main

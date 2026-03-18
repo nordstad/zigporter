@@ -133,6 +133,45 @@ git push origin vx.y.z
 Use the `/bump-version` skill to automate step 1 (analyses unreleased commits, moves
 `[Unreleased]` entries, fixes comparison links, commits — does NOT tag or push).
 
+## Homebrew tap
+
+The formula lives in the dedicated tap repo **`nordstad/homebrew-zigporter`** (not this repo).
+Users install with:
+
+```zsh
+brew tap nordstad/zigporter
+brew install zigporter
+```
+
+### How auto-update works
+
+The `update-homebrew` job is inline in `publish.yml` (runs via `needs: publish` — no separate
+`workflow_run` workflow needed). On each tag-triggered publish it:
+
+1. Fetches the new tarball URL and sha256 from PyPI
+2. Checks out `nordstad/homebrew-zigporter` using `HOMEBREW_TAP_TOKEN`
+3. Patches only the `url` and top-level `sha256` lines with `sed`
+4. Commits and pushes directly to tap `main`
+
+**Resource stanzas are NOT updated by CI** — they are a manual step:
+
+```bash
+brew update-python-resources nordstad/zigporter/zigporter
+# then push the updated formula to nordstad/homebrew-zigporter main
+```
+
+Run this when `uv.lock` runtime deps change.
+
+### Manual rerun
+
+```bash
+gh workflow run brew-publish.yml --repo nordstad/zigporter --field version=vX.Y.Z
+```
+
+### Secret
+
+`HOMEBREW_TAP_TOKEN` — fine-grained PAT scoped to `nordstad/homebrew-zigporter` with Contents R/W.
+
 ## network-map SVG layout
 
 `network_map_svg.py` uses a content-aware radial layout. Key constants and their roles:

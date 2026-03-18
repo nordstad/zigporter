@@ -1,0 +1,55 @@
+name: Brew Publish (manual rerun)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g. v1.3.1)"
+        required: true
+
+jobs:
+  update-homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version
+        id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: echo "version=${INPUT_VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Get PyPI tarball sha256
+        id: pypi
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          DATA=$(curl -s "https://pypi.org/pypi/zigporter/${VERSION}/json")
+          URL=$(echo "$DATA" | python3 -c "import sys,json; d=json.load(sys.stdin); print([f['url'] for f in d['urls'] if f['url'].endswith('.tar.gz')][0])")
+          SHA=$(echo "$DATA" | python3 -c "import sys,json; d=json.load(sys.stdin); print([f['digests']['sha256'] for f in d['urls'] if f['url'].endswith('.tar.gz')][0])")
+          echo "url=${URL}" >> $GITHUB_OUTPUT
+          echo "sha256=${SHA}" >> $GITHUB_OUTPUT
+
+      - name: Checkout tap repo
+        uses: actions/checkout@v6
+        with:
+          repository: nordstad/homebrew-zigporter
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Update formula
+        env:
+          URL: ${{ steps.pypi.outputs.url }}
+          SHA256: ${{ steps.pypi.outputs.sha256 }}
+        run: |
+          sed -i "s|url \"https://files.pythonhosted.org/.*\"|url \"${URL}\"|" tap/Formula/zigporter.rb
+          sed -i "s|sha256 \"[a-f0-9]*\"|sha256 \"${SHA256}\"|" tap/Formula/zigporter.rb
+
+      - name: Commit and push to tap
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/zigporter.rb
+          git diff --cached --quiet || git commit -m "zigporter v${VERSION}"
+          git push origin main
