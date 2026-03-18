@@ -8,6 +8,7 @@
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://pepy.tech/projects/zigporter"><img src="https://static.pepy.tech/personalized-badge/zigporter?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads" alt="PyPI Downloads"></a>
+  <a href="https://github.com/nordstad/homebrew-zigporter"><img src="https://img.shields.io/badge/homebrew-nordstad%2Fzigporter-orange?logo=homebrew" alt="Homebrew"></a>
   <p>Manage your Home Assistant Zigbee network from the terminal.<br>Migrate ZHA ↔ Z2M (both directions), cascade-rename entities and devices, and map your mesh.</p>
 </div>
 
