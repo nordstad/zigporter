@@ -1,6 +1,6 @@
 [project]
 name = "zigporter"
-version = "1.3.2"
+version = "1.3.3"
 description = "CLI toolkit for Home Assistant Zigbee — migrate ZHA → Z2M, cascade-rename entities and devices, and map your mesh."
 readme = "README.md"
 authors = [
