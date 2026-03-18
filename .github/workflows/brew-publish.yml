@@ -1,5 +1,8 @@
 name: Brew Publish (manual rerun)
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
