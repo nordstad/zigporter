@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.3.2] - 2026-03-18
+
+### Fixed
+
+- fix(config): CWD .env no longer blocks global config when Z2M_URL is absent (#70)
+- fix(tests): eliminate unawaited-coroutine RuntimeWarnings (#71)
+
 ## [1.3.2] - 2026-03-18
 
 ### Fixed
@@ -446,6 +454,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/nordstad/zigporter/compare/v1.3.2...v1.3.2
 [1.3.2]: https://github.com/nordstad/zigporter/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/nordstad/zigporter/compare/v1.3.1...v1.3.1
 [1.3.1]: https://github.com/nordstad/zigporter/compare/v1.3.0...v1.3.1
