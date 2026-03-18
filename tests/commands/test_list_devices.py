@@ -220,6 +220,7 @@ async def test_run_list_devices_empty_registry(mocker):
 def test_list_devices_command_runs_asyncio(mocker):
     mock_run = mocker.patch(
         "zigporter.commands.list_devices.asyncio.run",
+        side_effect=lambda coro: coro.close(),
     )
     list_devices_command(HA_URL, TOKEN, True)
     mock_run.assert_called_once()

@@ -450,7 +450,9 @@ def test_handle_remove_user_declines(mocker, tmp_path):
 
 def test_handle_remove_success(mocker, tmp_path):
     mocker.patch("questionary.confirm", return_value=MagicMock(ask=MagicMock(return_value=True)))
-    mocker.patch("zigporter.commands.stale.asyncio.run", return_value=True)
+    mocker.patch(
+        "zigporter.commands.stale.asyncio.run", side_effect=lambda coro: coro.close() or True
+    )
     state = StaleState()
     removed_ids: set = set()
 
@@ -461,7 +463,9 @@ def test_handle_remove_success(mocker, tmp_path):
 
 def test_handle_remove_still_present(mocker, tmp_path, capsys):
     mocker.patch("questionary.confirm", return_value=MagicMock(ask=MagicMock(return_value=True)))
-    mocker.patch("zigporter.commands.stale.asyncio.run", return_value=False)
+    mocker.patch(
+        "zigporter.commands.stale.asyncio.run", side_effect=lambda coro: coro.close() or False
+    )
     mocker.patch("zigporter.commands.stale._do_remove_device")
     state = StaleState()
     removed_ids: set = set()
@@ -473,7 +477,13 @@ def test_handle_remove_still_present(mocker, tmp_path, capsys):
 
 def test_handle_remove_exception(mocker, tmp_path, capsys):
     mocker.patch("questionary.confirm", return_value=MagicMock(ask=MagicMock(return_value=True)))
-    mocker.patch("zigporter.commands.stale.asyncio.run", side_effect=RuntimeError("boom"))
+
+    def _raise(coro):
+        if hasattr(coro, "close"):
+            coro.close()
+        raise RuntimeError("boom")
+
+    mocker.patch("zigporter.commands.stale.asyncio.run", side_effect=_raise)
     mocker.patch("zigporter.commands.stale._do_remove_device")
     state = StaleState()
     removed_ids: set = set()
