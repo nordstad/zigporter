@@ -560,7 +560,9 @@ async def _fetch_z2m_data(
             while not fetch.done():
                 await asyncio.sleep(1)
                 elapsed = int(time.monotonic() - start)
-                progress.update(t, description=f"Fetching Z2M network map... {elapsed}s")
+                m, s = divmod(elapsed, 60)
+                elapsed_label = f"{m}m {s:02d}s" if m else f"{s}s"
+                progress.update(t, description=f"Fetching Z2M network map... {elapsed_label}")
             response = fetch.result()
         except Exception as exc:  # noqa: BLE001
             progress.update(t, description="Failed")

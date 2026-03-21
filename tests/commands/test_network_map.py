@@ -1578,9 +1578,10 @@ _NM_RESPONSE_PAYLOAD = {
     },
 }
 
+# Z2M frontend WS uses bare topics (no MQTT base-topic prefix).
 _NM_WS_MESSAGE = {
-    "topic": "zigbee2mqtt/bridge/response/networkmap",
-    "payload": _json.dumps(_NM_RESPONSE_PAYLOAD),
+    "topic": "bridge/response/networkmap",
+    "payload": _NM_RESPONSE_PAYLOAD,
 }
 
 
@@ -1634,7 +1635,7 @@ async def test_z2m_ws_parses_response_correctly() -> None:
 
 async def test_z2m_ws_skips_unrelated_messages() -> None:
     """_get_network_map_via_z2m_ws ignores messages on other topics."""
-    unrelated = _json.dumps({"topic": "zigbee2mqtt/bridge/event", "payload": "{}"})
+    unrelated = _json.dumps({"topic": "bridge/event", "payload": "{}"})
     fake_ws = _FakeWS([unrelated, _json.dumps(_NM_WS_MESSAGE)])
     client = Z2MClient(None, None, "http://z2m.local:8080")
 
@@ -1699,8 +1700,8 @@ async def test_z2m_ws_error_payload_raises() -> None:
     """_get_network_map_via_z2m_ws raises RuntimeError on Z2M error response."""
     error_msg = _json.dumps(
         {
-            "topic": "zigbee2mqtt/bridge/response/networkmap",
-            "payload": _json.dumps({"status": "error", "error": "not ready"}),
+            "topic": "bridge/response/networkmap",
+            "payload": {"status": "error", "error": "not ready"},
         }
     )
     fake_ws = _FakeWS([error_msg])
@@ -1767,3 +1768,34 @@ async def test_z2m_ws_recv_timeout_raises() -> None:
             assert False, "Expected RuntimeError"  # noqa: B011
         except RuntimeError as exc:
             assert "Timed out" in str(exc)
+
+
+async def test_z2m_ws_connection_refused_raises_friendly_error() -> None:
+    """RuntimeError with a user-friendly message when Z2M WS is unreachable."""
+    client = Z2MClient(None, None, "http://z2m.local:8080")
+
+    with patch("websockets.connect", side_effect=OSError("Connection refused")):
+        try:
+            await client._get_network_map_via_z2m_ws(timeout=5)
+            assert False, "Expected RuntimeError"  # noqa: B011
+        except RuntimeError as exc:
+            assert "Could not connect" in str(exc)
+            assert "z2m.local:8080" in str(exc)
+
+
+async def test_z2m_ws_sends_bare_topic_and_dict_payload() -> None:
+    """The WS request uses bare topics (no MQTT prefix) and a dict payload."""
+    fake_ws = _FakeWS([_json.dumps(_NM_WS_MESSAGE)])
+    client = Z2MClient(None, None, "http://z2m.local:8080", mqtt_topic="custom/topic")
+
+    with patch("websockets.connect", return_value=fake_ws):
+        await client._get_network_map_via_z2m_ws(timeout=5)
+
+    assert len(fake_ws.sent) == 1
+    sent = _json.loads(fake_ws.sent[0])
+    # Topic must be bare — no mqtt_topic prefix
+    assert sent["topic"] == "bridge/request/networkmap"
+    # Payload must be a dict (not a JSON string) with routes=True
+    assert isinstance(sent["payload"], dict)
+    assert sent["payload"]["type"] == "raw"
+    assert sent["payload"]["routes"] is True

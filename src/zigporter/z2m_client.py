@@ -8,6 +8,7 @@ falls back to the HA WebSocket API for device queries and the
 
 import asyncio
 import json
+import os
 import time
 from typing import Any
 
@@ -15,8 +16,10 @@ import httpx
 
 from zigporter.utils import normalize_ieee, parse_z2m_ieee_identifier
 
-# Seconds to wait for a Z2M MQTT response before giving up.
-_NETWORK_MAP_TIMEOUT = 240
+# Seconds to wait for a Z2M network-map response before giving up.
+# Large meshes need ~10 s per router; 600 s covers ~60 routers.
+# Override via the Z2M_NETWORK_MAP_TIMEOUT env var (in seconds).
+_NETWORK_MAP_TIMEOUT = int(os.environ.get("Z2M_NETWORK_MAP_TIMEOUT", "600"))
 
 
 class Z2MClient:
@@ -340,6 +343,11 @@ class Z2MClient:
 
         Connects to ws://<z2m-host>/api — Z2M's built-in frontend WebSocket.
         Optionally authenticates via ?token=<z2m_frontend_token> if set.
+
+        Note: the Z2M frontend WS protocol uses bare topic names (e.g.
+        ``bridge/request/networkmap``), without the MQTT base-topic prefix.
+        This differs from the HA MQTT path which uses the full topic
+        (``zigbee2mqtt/bridge/request/networkmap``).
         """
         import ssl as _ssl  # noqa: PLC0415
 
@@ -358,43 +366,64 @@ class Z2MClient:
             ssl_ctx.check_hostname = False
             ssl_ctx.verify_mode = _ssl.CERT_NONE
 
-        response_topic = f"{self._mqtt_topic}/bridge/response/networkmap"
-        request_topic = f"{self._mqtt_topic}/bridge/request/networkmap"
+        # Z2M frontend WS uses bare topics (no MQTT base-topic prefix).
+        response_topic = "bridge/response/networkmap"
+        request_topic = "bridge/request/networkmap"
 
-        async with websockets.connect(ws_url, ssl=ssl_ctx) as ws:
-            await ws.send(
-                json.dumps(
-                    {
-                        "topic": request_topic,
-                        "payload": json.dumps({"type": "raw"}),
-                    }
+        try:
+            ws_conn = websockets.connect(ws_url, ssl=ssl_ctx)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not connect to Z2M WebSocket at {ws_url.split('?')[0]}: {exc}"
+            ) from exc
+
+        try:
+            async with ws_conn as ws:
+                await ws.send(
+                    json.dumps(
+                        {
+                            "topic": request_topic,
+                            "payload": {"type": "raw", "routes": True},
+                        }
+                    )
                 )
-            )
 
-            deadline = time.monotonic() + timeout
-            while True:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise RuntimeError(f"Timed out after {timeout}s waiting for Z2M network map")
-                try:
-                    raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
-                except asyncio.TimeoutError:
-                    raise RuntimeError(f"Timed out after {timeout}s waiting for Z2M network map")
+                deadline = time.monotonic() + timeout
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise RuntimeError(
+                            f"Timed out after {timeout}s waiting for Z2M network map"
+                        )
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+                    except asyncio.TimeoutError:
+                        raise RuntimeError(
+                            f"Timed out after {timeout}s waiting for Z2M network map"
+                        )
 
-                msg = json.loads(raw)
-                if msg.get("topic") != response_topic:
-                    continue
+                    msg = json.loads(raw)
+                    if msg.get("topic") != response_topic:
+                        continue
 
-                payload = msg.get("payload", {})
-                if isinstance(payload, str):
-                    payload = json.loads(payload)
+                    payload = msg.get("payload", {})
+                    if isinstance(payload, str):
+                        payload = json.loads(payload)
 
-                if payload.get("status") == "ok":
-                    data = payload.get("data", {})
-                    return {"data": data.get("value", data)}
+                    if payload.get("status") == "ok":
+                        data = payload.get("data", {})
+                        return {"data": data.get("value", data)}
 
-                if payload.get("status") == "error":
-                    raise RuntimeError(f"Z2M network map error: {payload.get('error', 'unknown')}")
+                    if payload.get("status") == "error":
+                        raise RuntimeError(
+                            f"Z2M network map error: {payload.get('error', 'unknown')}"
+                        )
+        except (OSError, Exception) as exc:
+            if isinstance(exc, RuntimeError):
+                raise
+            raise RuntimeError(
+                f"Could not connect to Z2M WebSocket at {ws_url.split('?')[0]}: {exc}"
+            ) from exc
 
     async def remove_device(self, friendly_name: str, force: bool = True) -> None:
         """Remove a device from Z2M by friendly name (HTTP fallback -> MQTT)."""
