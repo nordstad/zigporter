@@ -680,8 +680,14 @@ def network_map(
     """
     from zigporter.commands.network_map import network_map_command as _nm  # noqa: PLC0415
 
-    ha_url, token, verify_ssl = _get_config()
+    # Load Z2M config first: its presence determines whether HA credentials are
+    # optional. When Z2M_URL is set the user may be in standalone mode (no HA),
+    # so we allow _get_config to succeed without HA creds. When Z2M_URL is
+    # absent we keep the normal HA-required path — which triggers the setup
+    # wizard for new users and shows a clear error for partial HA configs.
     z2m_url, mqtt_topic = _get_z2m_config(optional=True)
+    z2m_frontend_token = os.environ.get("Z2M_FRONTEND_TOKEN")
+    ha_url, token, verify_ssl = _get_config(optional=bool(z2m_url.strip()))
     _nm(
         ha_url=ha_url,
         token=token,
@@ -693,6 +699,7 @@ def network_map(
         critical_lqi=critical_lqi,
         output_svg=output_svg,
         backend=backend,
+        z2m_frontend_token=z2m_frontend_token,
     )
 
 
