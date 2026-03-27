@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.4.0] - 2026-03-27
+
+### Changed
+
+- chore(deps-dev): bump zensical from 0.0.27 to 0.0.29 (#78)
+- chore(deps-dev): bump ruff from 0.15.6 to 0.15.7 (#77)
+- chore(deps-dev): update uv-build requirement from <0.11.0,>=0.9.26 to >=0.9.26,<0.12.0 (#76)
+- chore(deps-dev): bump pytest-cov from 7.0.0 to 7.1.0 (#75)
+- chore(deps): bump actions/deploy-pages from 4 to 5 (#80)
+- chore(deps): bump requests from 2.32.5 to 2.33.0 (#79)
+- chore(deps): bump codecov/codecov-action from 5 to 6 (#81)
+- feat: standalone network-map without Home Assistant (#65) (#67)
+
+### Fixed
+
+- Potential fix for code scanning alert no. 2: Workflow does not contain permissions (#74)
+
 ## [1.4.0] - 2026-03-27
 
 ### Added
@@ -473,6 +491,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/nordstad/zigporter/compare/v1.4.0...v1.4.0
 [1.4.0]: https://github.com/nordstad/zigporter/compare/v1.3.3...v1.4.0
 [1.3.3]: https://github.com/nordstad/zigporter/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/nordstad/zigporter/compare/v1.3.2...v1.3.2
