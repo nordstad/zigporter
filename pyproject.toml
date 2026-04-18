@@ -37,7 +37,7 @@ build-backend = "uv_build"
 docs = [
     "zensical",
     "mkdocstrings[python]",
-    "pygments>=2,<2.20",
+    "pygments>=2,<2.21",
 ]
 dev = [
     "pytest>=8",
