@@ -136,23 +136,8 @@ jobs:
 
   update-homebrew:
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
-      - name: Extract version
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
-
-      - name: Get PyPI tarball sha256
-        id: pypi
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          DATA=$(curl -s "https://pypi.org/pypi/zigporter/${VERSION}/json")
-          URL=$(echo "$DATA" | python3 -c "import sys,json; d=json.load(sys.stdin); print([f['url'] for f in d['urls'] if f['url'].endswith('.tar.gz')][0])")
-          SHA=$(echo "$DATA" | python3 -c "import sys,json; d=json.load(sys.stdin); print([f['digests']['sha256'] for f in d['urls'] if f['url'].endswith('.tar.gz')][0])")
-          echo "url=${URL}" >> $GITHUB_OUTPUT
-          echo "sha256=${SHA}" >> $GITHUB_OUTPUT
-
       - name: Checkout tap repo
         uses: actions/checkout@v6
         with:
@@ -160,13 +145,34 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
 
-      - name: Update formula
+      - name: Update main url/sha256
         env:
-          URL: ${{ steps.pypi.outputs.url }}
-          SHA256: ${{ steps.pypi.outputs.sha256 }}
+          VERSION: ${{ github.ref_name }}
         run: |
-          sed -i "s|url \"https://files.pythonhosted.org/.*\"|url \"${URL}\"|" tap/Formula/zigporter.rb
-          sed -i "s|sha256 \"[a-f0-9]*\"|sha256 \"${SHA256}\"|" tap/Formula/zigporter.rb
+          python3 - <<'EOF'
+          import json, os, re, urllib.request
+
+          version = os.environ["VERSION"].lstrip("v")
+          formula = "tap/Formula/zigporter.rb"
+
+          data = json.loads(urllib.request.urlopen(
+              f"https://pypi.org/pypi/zigporter/{version}/json"
+          ).read())
+          tarball = next(f for f in data["urls"] if f["url"].endswith(".tar.gz"))
+          url, sha256 = tarball["url"], tarball["digests"]["sha256"]
+
+          text = open(formula).read()
+          # Patch only the top-level url/sha256 — stop before the first resource block
+          first_resource = text.index("\n  resource ")
+          header, rest = text[:first_resource], text[first_resource:]
+          header = re.sub(r'url "https://files\.pythonhosted\.org/[^"]+"', f'url "{url}"', header)
+          header = re.sub(r'sha256 "[0-9a-f]+"', f'sha256 "{sha256}"', header)
+          open(formula, "w").write(header + rest)
+          print(f"Updated url/sha256 for v{version}")
+          EOF
+
+      - name: Regenerate resource stanzas
+        run: brew update-python-resources "$(pwd)/tap/Formula/zigporter.rb"
 
       - name: Commit and push to tap
         run: |
