@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.4.1] - 2026-04-22
+
+### Changed
+
+- chore(deps): bump cryptography from 46.0.5 to 46.0.6 (#82)
+- chore(deps-dev): bump ruff from 0.15.7 to 0.15.8 (#85)
+- chore(deps-dev): bump zensical from 0.0.29 to 0.0.30 (#84)
+- chore(deps): bump pygments from 2.19.2 to 2.20.0 (#83)
+- chore(deps): bump actions/github-script from 8 to 9 (#91)
+- chore(deps-dev): bump ruff from 0.15.8 to 0.15.9 (#89)
+- chore(deps-dev): bump pytest from 9.0.2 to 9.0.3 (#86)
+- chore(deps): bump cryptography from 46.0.6 to 46.0.7 (#90)
+- chore(deps-dev): bump respx from 0.22.0 to 0.23.0 (#88)
+- chore(deps): bump actions/upload-pages-artifact from 4 to 5 (#92)
+- chore(deps): bump pydantic from 2.12.5 to 2.13.0 (#96)
+- chore(deps-dev): bump respx from 0.23.0 to 0.23.1 (#95)
+- chore(deps): bump rich from 14.3.3 to 15.0.0 (#94)
+- chore(deps-dev): bump ruff from 0.15.9 to 0.15.10 (#93)
+
 ## [1.4.1] - 2026-04-22
 
 ### Changed
@@ -501,6 +521,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump actions/github-script from 7 to 8 (#2)
 
 [Unreleased]: https://github.com/nordstad/zigporter/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/nordstad/zigporter/compare/v1.4.1...v1.4.1
 [1.4.1]: https://github.com/nordstad/zigporter/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/nordstad/zigporter/compare/v1.4.0...v1.4.0
 [1.4.0]: https://github.com/nordstad/zigporter/compare/v1.3.3...v1.4.0
