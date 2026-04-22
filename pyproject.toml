@@ -35,9 +35,10 @@ build-backend = "uv_build"
 
 [dependency-groups]
 docs = [
-    "zensical",
-    "mkdocstrings[python]",
-    "pygments>=2,<2.20",
+    "zensical>=0.0.34",
+    "mkdocstrings>=0.24.0",
+    "mkdocstrings-python>=1.8.0",
+    "pygments>=2,<2.21",
 ]
 dev = [
     "pytest>=8",
