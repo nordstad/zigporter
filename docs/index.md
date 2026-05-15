@@ -35,6 +35,12 @@ skills are available on top of the CLI:
 |---|---|
 | [`/smart-rename`](guide/smart-rename.md) | Audit all Z2M device names against a convention, get AI-suggested corrections, and apply only the ones you approve |
 
+## Related: HACS integration
+
+**[zigporter-hacs](https://github.com/nordstad/zigporter-hacs)** is the Home Assistant-native companion — a HACS custom integration that renders the same radial network map as a live Lovelace card, directly inside your HA dashboard. No terminal required.
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=nordstad&repository=zigporter-hacs&category=integration)
+
 ---
 
 ## Installation

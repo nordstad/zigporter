@@ -226,6 +226,10 @@ A second scan will almost always show the correct value.  Persistent zeros on
 mains-powered routers warrant further investigation (check Z2M logs for join/leave
 events).
 
+## Home Assistant dashboard card
+
+Prefer a live map inside HA rather than a CLI export? **[zigporter-hacs](https://github.com/nordstad/zigporter-hacs)** is a HACS custom integration that renders the same radial network map as a Lovelace card — no terminal required, refreshable on demand.
+
 ## Example — table format
 
 ```bash

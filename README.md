@@ -259,6 +259,21 @@ Open the `.svg` in any browser — hover over truncated device names to see the 
 
 [View a full SVG example →](https://nordstad.github.io/zigporter/guide/network-map/#svg-export-example)
 
+## Related: HACS Integration
+
+**[zigporter-hacs](https://github.com/nordstad/zigporter-hacs)** is the Home Assistant-native companion to this CLI — a HACS custom integration that renders the same radial network map as a live Lovelace card, directly inside your HA dashboard.
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=nordstad&repository=zigporter-hacs&category=integration)
+
+| | CLI (`zigporter`) | HACS integration |
+|---|---|---|
+| Network map | SVG file, terminal tree, table | Live Lovelace card |
+| Backends | Zigbee2MQTT, ZHA | Zigbee2MQTT, ZHA |
+| Migrate ZHA ↔ Z2M | Yes | — |
+| Rename with cascade | Yes | — |
+| Stale device cleanup | Yes | — |
+| Requires terminal | Yes | No — works from HA UI |
+
 ## Confirmed Working
 
 **Platform**
