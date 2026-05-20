@@ -4,6 +4,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    allow:
+      - dependency-type: "direct"
+        update-types: ["minor", "patch", "major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
