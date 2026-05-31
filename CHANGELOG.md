@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [1.4.2] - 2026-05-31
+
+### Changed
+
+- chore(deps): bump typer from 0.24.1 to 0.26.2 (#103, #112)
+- chore(deps): bump pydantic from 2.13.0 to 2.13.4 (#99, #106)
+- chore(deps): bump urllib3 from 2.6.3 to 2.7.0 (#105)
+- chore(deps): bump idna from 3.11 to 3.15 (#109)
+- chore(deps): bump pymdown-extensions from 10.21.2 to 10.21.3 (#108)
+- chore(deps-dev): bump ruff from 0.15.10 to 0.15.14 (#98, #101, #110, #113)
+- chore(deps-dev): bump zensical from 0.0.34 to 0.0.43 (#102, #104, #107, #111)
+- chore(deps-dev): bump mkdocstrings from 1.0.3 to 1.0.4 (#97)
+- chore(deps-dev): bump pytest-asyncio from 1.3.0 to 1.4.0 (#114)
+- Configure Dependabot to allow version updates beyond security patches
+
+### Fixed
+
+- fix(ci): regenerate homebrew resource stanzas on each release
+- fix(docs): use absolute path for demo iframe to avoid zensical rewrite bug
+
+### Documentation
+
+- docs: add cross-references to zigporter-hacs companion integration
+
+
 ## [1.4.1] - 2026-04-22
 
 ### Changed
@@ -520,7 +545,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump codecov/codecov-action from 4 to 5 (#3)
 - Bump actions/github-script from 7 to 8 (#2)
 
-[Unreleased]: https://github.com/nordstad/zigporter/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/nordstad/zigporter/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/nordstad/zigporter/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/nordstad/zigporter/compare/v1.4.1...v1.4.1
 [1.4.1]: https://github.com/nordstad/zigporter/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/nordstad/zigporter/compare/v1.4.0...v1.4.0
