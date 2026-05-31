@@ -8,41 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
-
 ## [1.4.2] - 2026-05-31
 
 ### Changed
 
-- chore(deps-dev): bump ruff from 0.15.10 to 0.15.11 (#98)
-- chore(deps): bump pydantic from 2.13.0 to 2.13.3 (#99)
-- chore(deps-dev): bump mkdocstrings from 1.0.3 to 1.0.4 (#97)
-- chore(deps-dev): bump zensical from 0.0.34 to 0.0.37 (#102)
-- chore(deps-dev): bump zensical from 0.0.37 to 0.0.40 (#104)
-- chore(deps-dev): bump zensical from 0.0.40 to 0.0.41 (#107)
-- chore(deps): bump pydantic from 2.13.3 to 2.13.4 (#106)
-- chore(deps): bump urllib3 from 2.6.3 to 2.7.0 (#105)
-- chore(deps): bump typer from 0.24.1 to 0.25.1 (#103)
-- chore(deps-dev): bump ruff from 0.15.11 to 0.15.12 (#101)
-- chore(deps): bump idna from 3.11 to 3.15 (#109)
-- chore(deps): bump pymdown-extensions from 10.21.2 to 10.21.3 (#108)
-- chore(deps-dev): bump zensical from 0.0.41 to 0.0.43 (#111)
-- chore(deps-dev): bump ruff from 0.15.12 to 0.15.13 (#110)
-- chore(deps-dev): bump pytest-asyncio from 1.3.0 to 1.4.0 (#114)
-- chore(deps-dev): bump ruff from 0.15.13 to 0.15.14 (#113)
-- chore(deps): bump typer from 0.25.1 to 0.26.2 (#112)
-
-## [1.4.2] - 2026-05-31
-
-### Changed
-
-- chore(deps): bump typer from 0.24.1 to 0.26.2 (#103, #112)
-- chore(deps): bump pydantic from 2.13.0 to 2.13.4 (#99, #106)
-- chore(deps): bump urllib3 from 2.6.3 to 2.7.0 (#105)
-- chore(deps): bump idna from 3.11 to 3.15 (#109)
-- chore(deps): bump pymdown-extensions from 10.21.2 to 10.21.3 (#108)
 - chore(deps-dev): bump ruff from 0.15.10 to 0.15.14 (#98, #101, #110, #113)
-- chore(deps-dev): bump zensical from 0.0.34 to 0.0.43 (#102, #104, #107, #111)
+- chore(deps): bump pydantic from 2.13.0 to 2.13.4 (#99, #106)
 - chore(deps-dev): bump mkdocstrings from 1.0.3 to 1.0.4 (#97)
+- chore(deps-dev): bump zensical from 0.0.34 to 0.0.43 (#102, #104, #107, #111)
+- chore(deps): bump urllib3 from 2.6.3 to 2.7.0 (#105)
+- chore(deps): bump typer from 0.24.1 to 0.26.2 (#103, #112)
+- chore(deps): bump idna from 3.11 to 3.15 (#109)
+- chore(deps): bump pymdown-extensions from 10.21.2 to 10.21.3 (#108)
 - chore(deps-dev): bump pytest-asyncio from 1.3.0 to 1.4.0 (#114)
 - Configure Dependabot to allow version updates beyond security patches
 
