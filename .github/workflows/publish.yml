@@ -172,7 +172,9 @@ jobs:
           EOF
 
       - name: Regenerate resource stanzas
-        run: brew update-python-resources "$(pwd)/tap/Formula/zigporter.rb"
+        run: |
+          brew tap nordstad/zigporter "$(pwd)/tap"
+          brew update-python-resources nordstad/zigporter/zigporter
 
       - name: Commit and push to tap
         run: |
