@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-import pytest  # noqa: F401
+import pytest
 import questionary
 
 from zigporter.commands.stale import (
@@ -22,7 +22,6 @@ from zigporter.commands.stale import (
     stale_command,
 )
 from zigporter.stale_state import StaleDeviceStatus, StaleState, mark_stale, mark_suppressed
-
 
 # ---------------------------------------------------------------------------
 # _is_ha_core_device
@@ -892,28 +891,28 @@ def test_stale_command_suppressed_count_does_not_call_picker(mocker, tmp_path):
 
 
 def test_match_offline_by_name_partial():
-    from zigporter.commands.stale import _match_offline  # noqa: PLC0415
+    from zigporter.commands.stale import _match_offline
 
     offline = [_offline_device(), {**_offline_device(), "device_id": "dev-2", "name": "New Lamp"}]
     assert _match_offline("Old", offline) == [offline[0]]
 
 
 def test_match_offline_by_name_case_insensitive():
-    from zigporter.commands.stale import _match_offline  # noqa: PLC0415
+    from zigporter.commands.stale import _match_offline
 
     offline = [_offline_device()]
     assert _match_offline("old bulb", offline) == [offline[0]]
 
 
 def test_match_offline_by_device_id_exact():
-    from zigporter.commands.stale import _match_offline  # noqa: PLC0415
+    from zigporter.commands.stale import _match_offline
 
     offline = [_offline_device()]
     assert _match_offline("dev-1", offline) == [offline[0]]
 
 
 def test_match_offline_no_match():
-    from zigporter.commands.stale import _match_offline  # noqa: PLC0415
+    from zigporter.commands.stale import _match_offline
 
     offline = [_offline_device()]
     assert _match_offline("Nonexistent", offline) == []
@@ -971,7 +970,7 @@ def test_stale_command_headless_action_ignore(mocker, tmp_path):
     stale_command("url", "tok", False, state_path=state_path, device="Old Bulb", action="ignore")
 
     mock_select.assert_not_called()
-    from zigporter.stale_state import load_stale_state  # noqa: PLC0415
+    from zigporter.stale_state import load_stale_state
 
     state = load_stale_state(state_path)
     assert state.devices["dev-1"].status == StaleDeviceStatus.IGNORED
@@ -988,7 +987,7 @@ def test_stale_command_headless_action_suppress(mocker, tmp_path):
 
     stale_command("url", "tok", False, state_path=state_path, device="dev-1", action="suppress")
 
-    from zigporter.stale_state import load_stale_state  # noqa: PLC0415
+    from zigporter.stale_state import load_stale_state
 
     state = load_stale_state(state_path)
     assert state.devices["dev-1"].status == StaleDeviceStatus.SUPPRESSED
@@ -1014,7 +1013,7 @@ def test_stale_command_headless_action_mark_stale_with_note(mocker, tmp_path):
     )
 
     mock_text.assert_not_called()
-    from zigporter.stale_state import load_stale_state  # noqa: PLC0415
+    from zigporter.stale_state import load_stale_state
 
     state = load_stale_state(state_path)
     assert state.devices["dev-1"].status == StaleDeviceStatus.STALE
@@ -1030,13 +1029,13 @@ def test_stale_command_headless_action_clear(mocker, tmp_path):
     state_path = tmp_path / "s.json"
     pre_state = StaleState()
     mark_stale(pre_state, "dev-1", "Old Bulb", note="old note")
-    from zigporter.stale_state import save_stale_state  # noqa: PLC0415
+    from zigporter.stale_state import save_stale_state
 
     save_stale_state(pre_state, state_path)
 
     stale_command("url", "tok", False, state_path=state_path, device="Old Bulb", action="clear")
 
-    from zigporter.stale_state import load_stale_state  # noqa: PLC0415
+    from zigporter.stale_state import load_stale_state
 
     state = load_stale_state(state_path)
     assert "dev-1" not in state.devices
@@ -1064,7 +1063,7 @@ def test_stale_command_headless_action_remove_success(mocker, tmp_path):
         "zigporter.commands.stale._fetch_offline_devices",
         side_effect=_fake_fetch_one,
     )
-    from unittest.mock import AsyncMock  # noqa: PLC0415
+    from unittest.mock import AsyncMock
 
     mocker.patch(
         "zigporter.commands.stale._do_remove_device",
@@ -1074,7 +1073,7 @@ def test_stale_command_headless_action_remove_success(mocker, tmp_path):
 
     stale_command("url", "tok", False, state_path=state_path, device="Old Bulb", action="remove")
 
-    from zigporter.stale_state import load_stale_state  # noqa: PLC0415
+    from zigporter.stale_state import load_stale_state
 
     state = load_stale_state(state_path)
     assert "dev-1" not in state.devices
@@ -1086,7 +1085,7 @@ def test_stale_command_headless_action_remove_still_present(mocker, tmp_path):
         "zigporter.commands.stale._fetch_offline_devices",
         side_effect=_fake_fetch_one,
     )
-    from unittest.mock import AsyncMock  # noqa: PLC0415
+    from unittest.mock import AsyncMock
 
     mocker.patch(
         "zigporter.commands.stale._do_remove_device",
@@ -1104,7 +1103,7 @@ def test_stale_command_headless_action_remove_exception(mocker, tmp_path):
         "zigporter.commands.stale._fetch_offline_devices",
         side_effect=_fake_fetch_one,
     )
-    from unittest.mock import AsyncMock  # noqa: PLC0415
+    from unittest.mock import AsyncMock
 
     mocker.patch(
         "zigporter.commands.stale._do_remove_device",
@@ -1150,7 +1149,7 @@ def test_stale_command_prune_plural_message(mocker, tmp_path, capsys):
     mocker.patch("questionary.select", return_value=MagicMock(ask=MagicMock(return_value=_DONE)))
     state_path = tmp_path / "s.json"
 
-    from zigporter.stale_state import save_stale_state  # noqa: PLC0415
+    from zigporter.stale_state import save_stale_state
 
     pre_state = StaleState()
     mark_stale(pre_state, "ghost-1", "Ghost One")
@@ -1159,7 +1158,7 @@ def test_stale_command_prune_plural_message(mocker, tmp_path, capsys):
 
     stale_command("url", "tok", False, state_path=state_path)
 
-    from zigporter.stale_state import load_stale_state  # noqa: PLC0415
+    from zigporter.stale_state import load_stale_state
 
     state = load_stale_state(state_path)
     assert "ghost-1" not in state.devices

@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
@@ -120,7 +120,7 @@ def _confirm_backup_once() -> None:
         raise typer.Exit(code=1)
 
     try:
-        marker.write_text(datetime.now(tz=timezone.utc).isoformat() + "\n")
+        marker.write_text(datetime.now(tz=UTC).isoformat() + "\n")
     except OSError:
         console.print(
             f"[yellow]Warning:[/yellow] Could not save backup confirmation marker at {marker}."
@@ -192,8 +192,8 @@ def export_z2m(
     pretty: bool = typer.Option(False, "--pretty", help="Pretty-print JSON output."),
 ) -> None:
     """Export current Z2M devices, entities, areas, and automation references to JSON."""
-    from zigporter.commands.export_z2m import z2m_export_command  # noqa: PLC0415
-    from zigporter.config import default_z2m_export_path  # noqa: PLC0415
+    from zigporter.commands.export_z2m import z2m_export_command
+    from zigporter.config import default_z2m_export_path
 
     ha_url, token, verify_ssl = _get_config()
     z2m_url, mqtt_topic = _get_z2m_config()
@@ -311,8 +311,8 @@ def _resolve_or_fetch_z2m_export(
     mqtt_topic: str,
 ) -> Path:
     """Return the Z2M export file path, fetching from HA if needed."""
-    from zigporter.commands.export_z2m import run_z2m_export  # noqa: PLC0415
-    from zigporter.config import default_z2m_export_path  # noqa: PLC0415
+    from zigporter.commands.export_z2m import run_z2m_export
+    from zigporter.config import default_z2m_export_path
 
     if explicit_path is not None:
         return explicit_path
@@ -358,7 +358,7 @@ def _resolve_or_fetch_z2m_export(
             )
             raise typer.Exit(code=1)
 
-    import asyncio  # noqa: PLC0415
+    import asyncio
 
     console.print()
     export_data = asyncio.run(run_z2m_export(ha_url, token, verify_ssl, z2m_url, mqtt_topic))
@@ -415,7 +415,7 @@ def migrate(
         raise typer.Exit(code=1)
 
     if os.environ.get("ZIGPORTER_DEMO"):
-        from zigporter.demo import demo_migrate_status  # noqa: PLC0415
+        from zigporter.demo import demo_migrate_status
 
         demo_migrate_status()
         return
@@ -437,8 +437,8 @@ def migrate(
         _confirm_backup_once()
 
     if direction == "z2m-to-zha":
-        from zigporter.commands.migrate_reverse import reverse_migrate_command  # noqa: PLC0415
-        from zigporter.config import default_reverse_state_path  # noqa: PLC0415
+        from zigporter.commands.migrate_reverse import reverse_migrate_command
+        from zigporter.config import default_reverse_state_path
 
         export_path = _resolve_or_fetch_z2m_export(
             zha_export, ha_url, token, verify_ssl, z2m_url, mqtt_topic
@@ -528,7 +528,7 @@ def rename_entity(
     Note: Jinja2 template strings (e.g. {{ states('old.id') }}) are not patched
     automatically — review them manually after renaming.
     """
-    from zigporter.commands.rename_entity import rename_command  # noqa: PLC0415
+    from zigporter.commands.rename_entity import rename_command
 
     ha_url, token, verify_ssl = _get_config()
     rename_command(
@@ -571,7 +571,7 @@ def rename_device(
     Note: Jinja2 template strings (e.g. {{ states('old.id') }}) are not patched
     automatically — review them manually after renaming.
     """
-    from zigporter.commands.rename_device import rename_device_command  # noqa: PLC0415
+    from zigporter.commands.rename_device import rename_device_command
 
     ha_url, token, verify_ssl = _get_config()
     rename_device_command(
@@ -613,7 +613,7 @@ def stale(
     Pass a device argument to skip the picker (semi-headless).
     Add --action to execute without any prompts (fully headless).
     """
-    from zigporter.commands.stale import stale_command  # noqa: PLC0415
+    from zigporter.commands.stale import stale_command
 
     ha_url, token, verify_ssl = _get_config()
     stale_command(
@@ -648,7 +648,7 @@ def fix_device(
     Pass a device argument to skip the picker.  Add --apply to also skip the
     confirmation prompt (fully non-interactive).
     """
-    from zigporter.commands.fix_device import fix_device_command as _fix  # noqa: PLC0415
+    from zigporter.commands.fix_device import fix_device_command as _fix
 
     ha_url, token, verify_ssl = _get_config()
     _fix(ha_url=ha_url, token=token, verify_ssl=verify_ssl, device=device, apply=apply)
@@ -678,7 +678,7 @@ def network_map(
     --format=table for a flat list sorted by LQI ascending (weakest links
     first). Use --output to save a radial SVG diagram with LQI-encoded edges.
     """
-    from zigporter.commands.network_map import network_map_command as _nm  # noqa: PLC0415
+    from zigporter.commands.network_map import network_map_command as _nm
 
     # Load Z2M config first: its presence determines whether HA credentials are
     # optional. When Z2M_URL is set the user may be in standalone mode (no HA),

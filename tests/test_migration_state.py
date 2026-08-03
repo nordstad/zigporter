@@ -1,6 +1,5 @@
 import json
 
-
 from zigporter.migration_state import (
     DeviceStatus,
     load_state,
@@ -9,7 +8,6 @@ from zigporter.migration_state import (
     mark_migrated,
     save_state,
 )
-
 
 DEVICES = [
     {"ieee": "00:11:22:33:44:55:66:77", "name": "Living Room Thermostat"},

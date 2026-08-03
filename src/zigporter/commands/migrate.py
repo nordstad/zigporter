@@ -12,6 +12,14 @@ from zigporter.commands.migrate_reporting import (
     step_show_inspect_summary,
     step_show_test_checklist,
 )
+from zigporter.commands.rename_device import (
+    build_device_rename_plan,
+    compute_entity_pairs,
+    display_device_plan,
+    execute_device_rename,
+    resolve_odd_entities,
+    slugify,
+)
 from zigporter.ha_client import HAClient
 from zigporter.migration_state import (
     DeviceStatus,
@@ -27,14 +35,6 @@ from zigporter.models import ZHADevice, ZHAExport
 from zigporter.ui import QUESTIONARY_STYLE
 from zigporter.utils import normalize_ieee
 from zigporter.z2m_client import Z2MClient
-from zigporter.commands.rename_device import (
-    build_device_rename_plan,
-    compute_entity_pairs,
-    display_device_plan,
-    execute_device_rename,
-    resolve_odd_entities,
-    slugify,
-)
 
 console = Console()
 
@@ -964,7 +964,7 @@ async def run_wizard(
     console.rule(f"[bold]Migrating: {device.name}[/bold]")
 
     console.print(
-        "\nThis wizard will migrate [bold]{name}[/bold] from ZHA to Zigbee2MQTT "
+        f"\nThis wizard will migrate [bold]{device.name}[/bold] from ZHA to Zigbee2MQTT "
         "in 7 steps (+ 1 optional):\n"
         "\n"
         "  [cyan]1[/cyan]  Remove from ZHA    Unpair the device from ZHA [red](cannot be undone)[/red]\n"
@@ -977,7 +977,7 @@ async def run_wizard(
         "  [cyan]8[/cyan]  Rename (optional)  Rename to a different name with full HA cascade\n"
         "\n"
         "[dim]You can abort safely at step 1. After that, the device must complete\n"
-        "pairing with Z2M before it can be used again.[/dim]".format(name=device.name)
+        "pairing with Z2M before it can be used again.[/dim]"
     )
 
     await show_device_dependencies(device, ha_client, console)

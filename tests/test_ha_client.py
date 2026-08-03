@@ -7,7 +7,6 @@ import respx  # used by @respx.mock decorator
 
 from zigporter.ha_client import HAClient
 
-
 HA_URL = "https://ha.test"
 TOKEN = "test-token"
 
@@ -443,7 +442,7 @@ async def test_update_config_entry_options(client, mocker):
 @respx.mock
 async def test_get_lovelace_config_yaml_mode_ws_then_rest_fails(client, mocker):
     """Lines 200-201, 214-215: WS raises mode_not_storage → REST also fails → YAML_MODE."""
-    from zigporter.ha_client import is_yaml_mode  # noqa: PLC0415
+    from zigporter.ha_client import is_yaml_mode
 
     messages = [
         json.dumps({"type": "auth_required"}),
@@ -663,7 +662,7 @@ async def test_get_lovelace_config_rest_fallback_with_url_path(client, mocker):
 @respx.mock
 async def test_get_lovelace_config_strategy_returns_yaml_mode(client, mocker):
     """WS returns a strategy-based config → get_lovelace_config returns YAML_MODE."""
-    from zigporter.ha_client import is_yaml_mode  # noqa: PLC0415
+    from zigporter.ha_client import is_yaml_mode
 
     mock_ws = _make_ws(mocker, {"strategy": {"type": "original-states"}})
     mocker.patch("websockets.connect", return_value=mock_ws)
@@ -674,7 +673,7 @@ async def test_get_lovelace_config_strategy_returns_yaml_mode(client, mocker):
 @respx.mock
 async def test_get_lovelace_config_rest_fallback_strategy_returns_yaml_mode(client, mocker):
     """WS fails (non-yaml-mode error) → REST returns strategy config → YAML_MODE."""
-    from zigporter.ha_client import is_yaml_mode  # noqa: PLC0415
+    from zigporter.ha_client import is_yaml_mode
 
     mock_ws = _make_ws_fail(mocker)
     mocker.patch("websockets.connect", return_value=mock_ws)

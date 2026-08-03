@@ -2,7 +2,6 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-
 from zigporter.commands.fix_device import (
     StalePair,
     _mqtt_ieee,
@@ -12,7 +11,6 @@ from zigporter.commands.fix_device import (
     run_fix_device,
 )
 from zigporter.utils import device_display_name, ieee_to_colon
-
 
 # ---------------------------------------------------------------------------
 # Pure helper function tests
@@ -424,7 +422,7 @@ async def test_run_fix_device_keyboard_interrupt_aborts(mocker):
 
 def test_fix_device_command_runs_asyncio(mocker):
     mock_run = mocker.patch("asyncio.run")
-    from zigporter.commands.fix_device import fix_device_command  # noqa: PLC0415
+    from zigporter.commands.fix_device import fix_device_command
 
     fix_device_command("https://ha.test", "token", True)
 
@@ -455,42 +453,42 @@ def _make_two_pairs():
 
 
 def test_match_pairs_by_name_partial():
-    from zigporter.commands.fix_device import _match_pairs  # noqa: PLC0415
+    from zigporter.commands.fix_device import _match_pairs
 
     p1, p2 = _make_two_pairs()
     assert _match_pairs("living", [p1, p2]) == [p1]
 
 
 def test_match_pairs_by_name_case_insensitive():
-    from zigporter.commands.fix_device import _match_pairs  # noqa: PLC0415
+    from zigporter.commands.fix_device import _match_pairs
 
     p1, p2 = _make_two_pairs()
     assert _match_pairs("BEDROOM", [p1, p2]) == [p2]
 
 
 def test_match_pairs_by_ieee_0x():
-    from zigporter.commands.fix_device import _match_pairs  # noqa: PLC0415
+    from zigporter.commands.fix_device import _match_pairs
 
     p1, p2 = _make_two_pairs()
     assert _match_pairs("0x0011223344556677", [p1, p2]) == [p1]
 
 
 def test_match_pairs_by_ieee_colon():
-    from zigporter.commands.fix_device import _match_pairs  # noqa: PLC0415
+    from zigporter.commands.fix_device import _match_pairs
 
     p1, p2 = _make_two_pairs()
     assert _match_pairs("00:11:22:33:44:55:66:77", [p1, p2]) == [p1]
 
 
 def test_match_pairs_no_match():
-    from zigporter.commands.fix_device import _match_pairs  # noqa: PLC0415
+    from zigporter.commands.fix_device import _match_pairs
 
     p1, p2 = _make_two_pairs()
     assert _match_pairs("Office Lamp", [p1, p2]) == []
 
 
 def test_match_pairs_ambiguous():
-    from zigporter.commands.fix_device import _match_pairs  # noqa: PLC0415
+    from zigporter.commands.fix_device import _match_pairs
 
     p1, p2 = _make_two_pairs()
     # Both contain "room"

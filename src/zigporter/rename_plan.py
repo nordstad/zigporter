@@ -7,7 +7,6 @@ from typing import Any
 from zigporter.ha_client import HAClient, is_yaml_mode
 from zigporter.lovelace import discover_dashboards as _discover_dashboards
 
-
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------

@@ -1,6 +1,5 @@
 import json
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 from zigporter.stale_state import (
     StaleDeviceStatus,
@@ -13,7 +12,6 @@ from zigporter.stale_state import (
     save_stale_state,
     unmark,
 )
-
 
 DEVICE_ID = "abc-device-id"
 DEVICE_NAME = "Kitchen Outlet"
@@ -49,9 +47,9 @@ def test_save_stale_state_persists(tmp_path):
 
 def test_record_first_seen_sets_timestamp(tmp_path):
     state = StaleState()
-    before = datetime.now(tz=timezone.utc)
+    before = datetime.now(tz=UTC)
     record_first_seen(state, DEVICE_ID, DEVICE_NAME)
-    after = datetime.now(tz=timezone.utc)
+    after = datetime.now(tz=UTC)
 
     entry = state.devices[DEVICE_ID]
     assert before <= entry.first_seen_offline_at <= after
@@ -130,9 +128,9 @@ def test_unmark_noop_when_missing():
 def test_save_updates_updated_at(tmp_path):
     path = tmp_path / "stale.json"
     state = StaleState()
-    before = datetime.now(tz=timezone.utc)
+    before = datetime.now(tz=UTC)
     save_stale_state(state, path)
-    after = datetime.now(tz=timezone.utc)
+    after = datetime.now(tz=UTC)
 
     loaded = load_stale_state(path)
     assert before <= loaded.updated_at <= after

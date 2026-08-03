@@ -1,5 +1,6 @@
 """Tests for the reverse migration wizard (Z2M -> ZHA)."""
 
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -43,10 +44,10 @@ def sample_z2m_device() -> Z2MDevice:
 
 @pytest.fixture
 def sample_z2m_export(sample_z2m_device) -> Z2MExport:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     return Z2MExport(
-        exported_at=datetime.now(tz=timezone.utc),
+        exported_at=datetime.now(tz=UTC),
         ha_url="http://ha.test:8123",
         devices=[sample_z2m_device],
     )

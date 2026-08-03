@@ -2,7 +2,6 @@
 
 import questionary
 
-
 QUESTIONARY_STYLE = questionary.Style(
     [
         ("qmark", "fg:ansicyan bold"),

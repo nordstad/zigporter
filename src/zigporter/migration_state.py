@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 
@@ -22,7 +22,7 @@ class DeviceState(BaseModel):
 
 
 class MigrationState(BaseModel):
-    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     zha_export: str
     devices: dict[str, DeviceState] = Field(default_factory=dict)
 
@@ -66,13 +66,13 @@ def mark_in_progress(state: MigrationState, ieee: str) -> None:
 
 def mark_migrated(state: MigrationState, ieee: str, z2m_friendly_name: str) -> None:
     state.devices[ieee].status = DeviceStatus.MIGRATED
-    state.devices[ieee].migrated_at = datetime.now(tz=timezone.utc)
+    state.devices[ieee].migrated_at = datetime.now(tz=UTC)
     state.devices[ieee].z2m_friendly_name = z2m_friendly_name
 
 
 def mark_migrated_reverse(state: MigrationState, ieee: str, zha_device_name: str) -> None:
     state.devices[ieee].status = DeviceStatus.MIGRATED
-    state.devices[ieee].migrated_at = datetime.now(tz=timezone.utc)
+    state.devices[ieee].migrated_at = datetime.now(tz=UTC)
     state.devices[ieee].zha_device_name = zha_device_name
 
 

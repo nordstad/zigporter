@@ -12,25 +12,25 @@ from zigporter.rename_plan import RenameLocation, RenamePlan
 
 
 def test_slugify_basic():
-    from zigporter.commands.rename_device import slugify  # noqa: PLC0415
+    from zigporter.commands.rename_device import slugify
 
     assert slugify("Living Room Lamp") == "living_room_lamp"
 
 
 def test_slugify_unicode_transliteration():
-    from zigporter.commands.rename_device import slugify  # noqa: PLC0415
+    from zigporter.commands.rename_device import slugify
 
     assert slugify("Büro (Office)") == "buro_office"
 
 
 def test_slugify_already_slug():
-    from zigporter.commands.rename_device import slugify  # noqa: PLC0415
+    from zigporter.commands.rename_device import slugify
 
     assert slugify("kitchen_plug") == "kitchen_plug"
 
 
 def test_slugify_leading_trailing_separators():
-    from zigporter.commands.rename_device import slugify  # noqa: PLC0415
+    from zigporter.commands.rename_device import slugify
 
     assert slugify("  my device  ") == "my_device"
 
@@ -41,7 +41,7 @@ def test_slugify_leading_trailing_separators():
 
 
 def test_compute_entity_pairs_all_match():
-    from zigporter.commands.rename_device import compute_entity_pairs  # noqa: PLC0415
+    from zigporter.commands.rename_device import compute_entity_pairs
 
     entities = [
         {"entity_id": "light.kitchen_plug", "original_name": "Light"},
@@ -55,7 +55,7 @@ def test_compute_entity_pairs_all_match():
 
 
 def test_compute_entity_pairs_odd_entity():
-    from zigporter.commands.rename_device import compute_entity_pairs  # noqa: PLC0415
+    from zigporter.commands.rename_device import compute_entity_pairs
 
     entities = [
         {"entity_id": "light.kitchen_plug", "original_name": "Light"},
@@ -68,7 +68,7 @@ def test_compute_entity_pairs_odd_entity():
 
 
 def test_compute_entity_pairs_empty_slug():
-    from zigporter.commands.rename_device import compute_entity_pairs  # noqa: PLC0415
+    from zigporter.commands.rename_device import compute_entity_pairs
 
     entities = [{"entity_id": "light.some_entity", "original_name": "Light"}]
     # empty old_slug → everything goes to odd
@@ -83,7 +83,7 @@ def test_compute_entity_pairs_empty_slug():
 
 
 async def test_fetch_ha_snapshot_returns_snapshot(mock_ha_snapshot_client):
-    from zigporter.rename_plan import fetch_ha_snapshot  # noqa: PLC0415
+    from zigporter.rename_plan import fetch_ha_snapshot
 
     snapshot = await fetch_ha_snapshot(mock_ha_snapshot_client)
     assert len(snapshot.entity_registry) == 2
@@ -92,7 +92,7 @@ async def test_fetch_ha_snapshot_returns_snapshot(mock_ha_snapshot_client):
 
 
 async def test_build_rename_plan_from_snapshot_finds_automation(mock_ha_snapshot_client):
-    from zigporter.rename_plan import (  # noqa: PLC0415
+    from zigporter.rename_plan import (
         build_rename_plan_from_snapshot,
         fetch_ha_snapshot,
     )
@@ -104,7 +104,7 @@ async def test_build_rename_plan_from_snapshot_finds_automation(mock_ha_snapshot
 
 
 async def test_build_rename_plan_from_snapshot_entity_not_found(mock_ha_snapshot_client):
-    from zigporter.rename_plan import (  # noqa: PLC0415
+    from zigporter.rename_plan import (
         build_rename_plan_from_snapshot,
         fetch_ha_snapshot,
     )
@@ -115,7 +115,7 @@ async def test_build_rename_plan_from_snapshot_entity_not_found(mock_ha_snapshot
 
 
 async def test_build_rename_plan_from_snapshot_new_entity_exists(mock_ha_snapshot_client):
-    from zigporter.rename_plan import (  # noqa: PLC0415
+    from zigporter.rename_plan import (
         build_rename_plan_from_snapshot,
         fetch_ha_snapshot,
     )
@@ -131,7 +131,7 @@ async def test_build_rename_plan_from_snapshot_new_entity_exists(mock_ha_snapsho
 
 
 def test_is_yaml_mode_sentinel():
-    from zigporter.ha_client import YAML_MODE, is_yaml_mode  # noqa: PLC0415
+    from zigporter.ha_client import YAML_MODE, is_yaml_mode
 
     assert is_yaml_mode(YAML_MODE) is True
     assert is_yaml_mode(None) is False
@@ -141,11 +141,11 @@ def test_is_yaml_mode_sentinel():
 
 async def test_build_rename_plan_from_snapshot_skips_yaml_mode(mock_ha_snapshot_client):
     """Dashboards returning YAML_MODE must be skipped (not crash, not counted as refs)."""
-    from zigporter.rename_plan import (  # noqa: PLC0415
+    from zigporter.ha_client import YAML_MODE
+    from zigporter.rename_plan import (
         build_rename_plan_from_snapshot,
         fetch_ha_snapshot,
     )
-    from zigporter.ha_client import YAML_MODE  # noqa: PLC0415
 
     mock_ha_snapshot_client.get_lovelace_config = AsyncMock(return_value=YAML_MODE)
     snapshot = await fetch_ha_snapshot(mock_ha_snapshot_client)
@@ -174,8 +174,10 @@ def mock_device_exec_client():
 
 
 async def test_execute_device_rename_renames_device_and_entities(mock_device_exec_client):
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     plan = DeviceRenamePlan(
         device_id="dev1",
@@ -206,8 +208,10 @@ async def test_execute_device_rename_renames_device_and_entities(mock_device_exe
 async def test_execute_device_rename_merges_shared_automation(mock_device_exec_client):
     """An automation referenced by two entities should be updated exactly once
     with both substitutions applied."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     shared_config = {
         "id": "a1",
@@ -278,8 +282,10 @@ async def test_execute_device_rename_merges_shared_automation(mock_device_exec_c
 
 
 def test_display_device_plan_no_raise():
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import display_device_plan  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        display_device_plan,
+    )
 
     plan = DeviceRenamePlan(
         device_id="dev1",
@@ -309,8 +315,10 @@ def test_display_device_plan_no_raise():
 def test_display_device_plan_shows_zero_ref_dashboards_when_auto_updated(mocker):
     """Dashboards that were scanned but had 0 refs should appear even when other
     locations were auto-updated."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import display_device_plan  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        display_device_plan,
+    )
 
     printed: list[str] = []
     mocker.patch(
@@ -343,8 +351,10 @@ def test_display_device_plan_shows_zero_ref_dashboards_when_auto_updated(mocker)
 def test_display_device_plan_shows_yaml_mode_dashboards_inline(mocker):
     """YAML-mode dashboards should appear inline in the auto-updated block
     with a YAML warning, even though they also appear in the manual steps below."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import display_device_plan  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        display_device_plan,
+    )
 
     printed: list[str] = []
     mocker.patch(
@@ -382,7 +392,7 @@ def test_display_device_plan_shows_yaml_mode_dashboards_inline(mocker):
 
 async def test_resolve_odd_entities_suggested():
     """Choosing 'suggested' appends the suggested entity pair."""
-    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+    from zigporter.commands.rename_device import resolve_odd_entities
 
     odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
     with (
@@ -399,7 +409,7 @@ async def test_resolve_odd_entities_suggested():
 
 async def test_resolve_odd_entities_skip():
     """Choosing 'skip' leaves entity_pairs unchanged."""
-    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+    from zigporter.commands.rename_device import resolve_odd_entities
 
     odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
     with (
@@ -416,7 +426,7 @@ async def test_resolve_odd_entities_skip():
 
 async def test_resolve_odd_entities_no_tty_no_apply_skips():
     """No TTY + apply=False → odd entities are skipped, entity_pairs unchanged."""
-    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+    from zigporter.commands.rename_device import resolve_odd_entities
 
     odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
     with patch("zigporter.commands.rename_device.sys") as mock_sys:
@@ -428,7 +438,7 @@ async def test_resolve_odd_entities_no_tty_no_apply_skips():
 
 async def test_resolve_odd_entities_no_tty_apply_uses_suggested():
     """No TTY + apply=True → odd entities are auto-renamed to their suggested IDs."""
-    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+    from zigporter.commands.rename_device import resolve_odd_entities
 
     odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
     with patch("zigporter.commands.rename_device.sys") as mock_sys:
@@ -441,7 +451,7 @@ async def test_resolve_odd_entities_no_tty_apply_uses_suggested():
 
 async def test_resolve_odd_entities_no_tty_apply_preserves_existing_pairs():
     """No TTY + apply=True → existing matched pairs are kept alongside the auto-accepted ones."""
-    from zigporter.commands.rename_device import resolve_odd_entities  # noqa: PLC0415
+    from zigporter.commands.rename_device import resolve_odd_entities
 
     existing = [("light.bedroom_lamp", "light.kitchen_plug")]
     odd = [{"entity_id": "sensor.custom_power", "original_name": "Power"}]
@@ -508,7 +518,7 @@ async def test_run_rename_device_apply_success(mocker):
     )
     mocker.patch("zigporter.commands.rename_device.execute_device_rename", new=AsyncMock())
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device(
         "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", True
@@ -520,7 +530,7 @@ async def test_run_rename_device_device_not_found(mocker):
     mocker.patch("zigporter.commands.rename_device.HAClient")
     mocker.patch("zigporter.commands.rename_device.find_device", new=AsyncMock(return_value=None))
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device(
         "https://ha.test", "token", True, "Nonexistent Device", "New Name", True
@@ -570,7 +580,7 @@ async def test_run_rename_device_no_tty_no_apply(mocker):
     )
     mocker.patch("zigporter.commands.rename_device.sys").stdin.isatty.return_value = False
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device(
         "https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", False
@@ -588,19 +598,19 @@ def test_rename_device_command_success(mocker):
         "zigporter.commands.rename_device.run_rename_device", new=AsyncMock(return_value=True)
     )
 
-    from zigporter.commands.rename_device import rename_device_command  # noqa: PLC0415
+    from zigporter.commands.rename_device import rename_device_command
 
     rename_device_command("https://ha.test", "token", True, "Kitchen Plug", "Bedroom Lamp", False)
 
 
 def test_rename_device_command_failure(mocker):
-    import typer  # noqa: PLC0415
+    import typer
 
     mocker.patch(
         "zigporter.commands.rename_device.run_rename_device", new=AsyncMock(return_value=False)
     )
 
-    from zigporter.commands.rename_device import rename_device_command  # noqa: PLC0415
+    from zigporter.commands.rename_device import rename_device_command
 
     with pytest.raises(typer.Exit):
         rename_device_command(
@@ -617,9 +627,9 @@ def test_rename_device_cli_invokes_rename_device_command(mocker):
     mocker.patch("zigporter.main._get_config", return_value=("https://ha.test", "token", True))
     mock_cmd = mocker.patch("zigporter.commands.rename_device.rename_device_command")
 
-    from typer.testing import CliRunner  # noqa: PLC0415
+    from typer.testing import CliRunner
 
-    from zigporter.main import app  # noqa: PLC0415
+    from zigporter.main import app
 
     runner = CliRunner()
     result = runner.invoke(app, ["rename-device", "Kitchen Plug", "Bedroom Lamp", "--apply"])
@@ -639,9 +649,9 @@ def test_rename_device_cli_filter_flag(mocker):
     mocker.patch("zigporter.main._get_config", return_value=("https://ha.test", "token", True))
     mock_cmd = mocker.patch("zigporter.commands.rename_device.rename_device_command")
 
-    from typer.testing import CliRunner  # noqa: PLC0415
+    from typer.testing import CliRunner
 
-    from zigporter.main import app  # noqa: PLC0415
+    from zigporter.main import app
 
     runner = CliRunner()
     result = runner.invoke(app, ["rename-device", "--filter=zigbee"])
@@ -663,28 +673,28 @@ def test_rename_device_cli_filter_flag(mocker):
 
 
 def test_is_zigbee_device_zha():
-    from zigporter.commands.rename_device import _is_zigbee_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _is_zigbee_device
 
     device = {"identifiers": [["zha", "00:11:22:33:44:55:66:77"]]}
     assert _is_zigbee_device(device) is True
 
 
 def test_is_zigbee_device_z2m():
-    from zigporter.commands.rename_device import _is_zigbee_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _is_zigbee_device
 
     device = {"identifiers": [["mqtt", "zigbee2mqtt_0x0011223344556677"]]}
     assert _is_zigbee_device(device) is True
 
 
 def test_is_zigbee_device_hue():
-    from zigporter.commands.rename_device import _is_zigbee_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _is_zigbee_device
 
     device = {"identifiers": [["hue", "aa:bb:cc:dd:ee:ff"]]}
     assert _is_zigbee_device(device) is False
 
 
 def test_is_zigbee_device_no_identifiers():
-    from zigporter.commands.rename_device import _is_zigbee_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _is_zigbee_device
 
     assert _is_zigbee_device({}) is False
     assert _is_zigbee_device({"identifiers": []}) is False
@@ -696,14 +706,14 @@ def test_is_zigbee_device_no_identifiers():
 
 
 def test_is_matter_device_matter():
-    from zigporter.commands.rename_device import _is_matter_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _is_matter_device
 
     device = {"identifiers": [["matter", "1234567890"]]}
     assert _is_matter_device(device) is True
 
 
 def test_is_matter_device_non_matter():
-    from zigporter.commands.rename_device import _is_matter_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _is_matter_device
 
     assert _is_matter_device({"identifiers": [["zha", "aa:bb:cc:dd"]]}) is False
     assert _is_matter_device({}) is False
@@ -726,7 +736,7 @@ def _make_select_side_effect(*return_values):
 
 @pytest.mark.asyncio
 async def test_pick_device_interactively_filter_zigbee(mocker):
-    from zigporter.commands.rename_device import pick_device_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_device import pick_device_interactively
 
     zha_device = {"id": "d1", "name": "ZHA Bulb", "identifiers": [["zha", "aa:bb:cc:dd"]]}
     z2m_device = {
@@ -742,7 +752,7 @@ async def test_pick_device_interactively_filter_zigbee(mocker):
 
     captured_choices: list = []
 
-    async def _fake_select(prompt, choices, style):  # noqa: ARG001
+    async def _fake_select(prompt, choices, style):
         captured_choices.extend(choices)
         return zha_device
 
@@ -770,7 +780,7 @@ async def test_pick_device_interactively_filter_zigbee(mocker):
 
 @pytest.mark.asyncio
 async def test_pick_device_interactively_filter_matter(mocker):
-    from zigporter.commands.rename_device import pick_device_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_device import pick_device_interactively
 
     matter_device = {"id": "d1", "name": "Matter Lock", "identifiers": [["matter", "111"]]}
     zha_device = {"id": "d2", "name": "ZHA Bulb", "identifiers": [["zha", "aa:bb:cc:dd"]]}
@@ -801,7 +811,7 @@ async def test_pick_device_interactively_filter_matter(mocker):
 
 @pytest.mark.asyncio
 async def test_run_rename_device_invalid_filter(mocker):
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device(
         ha_url="https://ha.test",
@@ -828,7 +838,7 @@ async def test_run_rename_device_old_name_none_no_tty(mocker):
     mocker.patch("zigporter.commands.rename_device.HAClient")
     mocker.patch("zigporter.commands.rename_device.sys").stdin.isatty.return_value = False
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device("https://ha.test", "token", True, None, None, False)
     assert result is False
@@ -868,7 +878,7 @@ async def test_run_rename_device_old_name_none_tty_picks_interactively(mocker):
     text_instance.unsafe_ask_async = AsyncMock(return_value="New Device")
     text_mock.return_value = text_instance
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     await run_rename_device("https://ha.test", "token", True, None, None, False)
     mock_pick.assert_awaited_once()
@@ -883,7 +893,7 @@ async def test_run_rename_device_new_name_none_no_tty(mocker):
         "zigporter.commands.rename_device.find_device", new=AsyncMock(return_value=_WIZARD_DEVICE)
     )
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device("https://ha.test", "token", True, "My Device", None, False)
     assert result is False
@@ -922,7 +932,7 @@ async def test_run_rename_device_new_name_none_tty_prefilled_with_actual_name(mo
     text_instance.unsafe_ask_async = AsyncMock(return_value="New Device")
     text_mock.return_value = text_instance
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     await run_rename_device("https://ha.test", "token", True, "My Device", None, False)
 
@@ -943,7 +953,7 @@ def _make_snapshot(
     titles=None,
     config_entries=None,
 ):
-    from zigporter.rename_plan import HASnapshot  # noqa: PLC0415
+    from zigporter.rename_plan import HASnapshot
 
     return HASnapshot(
         entity_registry=[
@@ -962,7 +972,7 @@ def _make_snapshot(
 
 def test_build_rename_plan_from_snapshot_script_match():
     """Lines 557-559: script with a matching entity ID."""
-    from zigporter.rename_plan import build_rename_plan_from_snapshot  # noqa: PLC0415
+    from zigporter.rename_plan import build_rename_plan_from_snapshot
 
     snap = _make_snapshot(
         scripts=[{"id": "s1", "alias": "My Script", "entity_id": "switch.kitchen_plug"}]
@@ -975,7 +985,7 @@ def test_build_rename_plan_from_snapshot_script_match():
 
 def test_build_rename_plan_from_snapshot_scene_match():
     """Lines 570-572: scene with a matching entity ID."""
-    from zigporter.rename_plan import build_rename_plan_from_snapshot  # noqa: PLC0415
+    from zigporter.rename_plan import build_rename_plan_from_snapshot
 
     snap = _make_snapshot(
         scenes=[
@@ -990,7 +1000,7 @@ def test_build_rename_plan_from_snapshot_scene_match():
 
 def test_build_rename_plan_from_snapshot_lovelace_match():
     """Lines 585-588: lovelace dashboard with a matching entity ID."""
-    from zigporter.rename_plan import build_rename_plan_from_snapshot  # noqa: PLC0415
+    from zigporter.rename_plan import build_rename_plan_from_snapshot
 
     lv_config = {"views": [{"cards": [{"entity": "switch.kitchen_plug"}]}]}
     snap = _make_snapshot(
@@ -1006,7 +1016,7 @@ def test_build_rename_plan_from_snapshot_lovelace_match():
 
 def test_build_rename_plan_from_snapshot_jinja_scene_detected():
     """Jinja2 template substring in a scene is added to jinja_template_names."""
-    from zigporter.rename_plan import build_rename_plan_from_snapshot  # noqa: PLC0415
+    from zigporter.rename_plan import build_rename_plan_from_snapshot
 
     snap = _make_snapshot(
         scenes=[
@@ -1025,7 +1035,7 @@ def test_build_rename_plan_from_snapshot_jinja_scene_detected():
 
 def test_build_rename_plan_from_snapshot_config_entry_match():
     """Lines 599-602: config_entry whose options contain the entity ID."""
-    from zigporter.rename_plan import build_rename_plan_from_snapshot  # noqa: PLC0415
+    from zigporter.rename_plan import build_rename_plan_from_snapshot
 
     snap = _make_snapshot(
         config_entries=[
@@ -1050,7 +1060,7 @@ def test_build_rename_plan_from_snapshot_config_entry_match():
 
 async def test_find_device_multiple_partial_matches(mocker):
     """Lines 649-663: questionary.select is called when multiple devices partially match."""
-    from zigporter.commands.rename_device import find_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import find_device
 
     devices = [
         {"id": "d1", "name": "Kitchen Plug A", "name_by_user": None},
@@ -1076,7 +1086,7 @@ async def test_find_device_multiple_partial_matches(mocker):
 
 def test_suggest_entity_id_empty_orig_slug():
     """Lines 702-705: entity has no name/original_name → just domain.new_slug."""
-    from zigporter.commands.rename_device import _suggest_entity_id  # noqa: PLC0415
+    from zigporter.commands.rename_device import _suggest_entity_id
 
     entity = {"entity_id": "switch.0x001234", "name": None, "original_name": None}
     result = _suggest_entity_id(entity, "bedroom_lamp")
@@ -1085,7 +1095,7 @@ def test_suggest_entity_id_empty_orig_slug():
 
 def test_suggest_entity_id_with_orig_slug():
     """When orig_name present → domain.new_slug_orig_slug."""
-    from zigporter.commands.rename_device import _suggest_entity_id  # noqa: PLC0415
+    from zigporter.commands.rename_device import _suggest_entity_id
 
     entity = {"entity_id": "switch.kitchen_plug", "name": None, "original_name": "Power"}
     result = _suggest_entity_id(entity, "bedroom_lamp")
@@ -1099,7 +1109,10 @@ def test_suggest_entity_id_with_orig_slug():
 
 def test_display_device_plan_no_location_details_with_scanned_and_energy(mocker):
     """Lines 786-787, 791-795: else-branch shows scanned counts and energy note."""
-    from zigporter.commands.rename_device import DeviceRenamePlan, display_device_plan  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        display_device_plan,
+    )
 
     device_plan = DeviceRenamePlan(
         device_id="dev1",
@@ -1138,7 +1151,10 @@ def test_display_device_plan_no_location_details_with_scanned_and_energy(mocker)
 
 def test_display_device_plan_multiple_failed_dashboards_spacer(mocker):
     """Line 831: spacer console.print() between 2+ failed dashboards."""
-    from zigporter.commands.rename_device import DeviceRenamePlan, display_device_plan  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        display_device_plan,
+    )
 
     device_plan = DeviceRenamePlan(
         device_id="dev1",
@@ -1190,7 +1206,10 @@ def mock_full_exec_client():
 
 async def test_execute_device_rename_script_scene_lovelace_config_entry(mock_full_exec_client):
     """Lines 887-894: script, scene, lovelace and config_entry branches are called."""
-    from zigporter.commands.rename_device import DeviceRenamePlan, execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     plan = DeviceRenamePlan(
         device_id="dev1",
@@ -1250,7 +1269,10 @@ async def test_execute_device_rename_lovelace_save_failure_warns_and_continues(
     mock_full_exec_client, mocker
 ):
     """save_lovelace_config raises RuntimeError → warns, does not crash, other updates continue."""
-    from zigporter.commands.rename_device import DeviceRenamePlan, execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     mock_full_exec_client.save_lovelace_config = AsyncMock(
         side_effect=RuntimeError("WebSocket command failed: Not supported")
@@ -1316,7 +1338,7 @@ def _make_snapshot_mock(entity_ids=None, automations=None, scripts=None, scenes=
 
 async def test_run_rename_device_fuzzy_match_prints_info(mocker):
     """Line 923: actual_name differs from query → prints fuzzy match info."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     mock_instance = MagicMock()
@@ -1339,7 +1361,7 @@ async def test_run_rename_device_fuzzy_match_prints_info(mocker):
 
 async def test_run_rename_device_no_entities(mocker):
     """Lines 931-932: no entities found → prints yellow warning, returns True."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     mock_instance = MagicMock()
@@ -1355,7 +1377,7 @@ async def test_run_rename_device_no_entities(mocker):
 
 async def test_run_rename_device_odd_entities_no_tty(mocker):
     """odd entities exist, no TTY, apply=False → skips them (no entity pairs, returns True)."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     # Entity whose suffix doesn't contain "kitchen_plug" slug → goes to odd list
@@ -1377,7 +1399,7 @@ async def test_run_rename_device_odd_entities_no_tty(mocker):
 
 async def test_run_rename_device_odd_entities_no_tty_apply(mocker):
     """odd entities exist, no TTY, apply=True → auto-accepts suggested IDs and executes."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     # Entity whose suffix doesn't contain "kitchen_plug" slug → goes to odd list
@@ -1430,7 +1452,7 @@ async def test_run_rename_device_odd_entities_no_tty_apply(mocker):
 
 async def test_run_rename_device_odd_entities_interactive_suggested(mocker):
     """Lines 963-970: interactive: user picks suggested."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     entities = [
@@ -1478,7 +1500,7 @@ async def test_run_rename_device_odd_entities_interactive_suggested(mocker):
 
 async def test_run_rename_device_odd_entities_interactive_custom(mocker):
     """Lines 965-970: interactive: user picks custom entity ID."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     entities = [
@@ -1529,7 +1551,7 @@ async def test_run_rename_device_odd_entities_interactive_custom(mocker):
 
 async def test_run_rename_device_entity_pairs_empty_after_odds(mocker):
     """Lines 973-974: entity_pairs empty after resolving odds → returns True."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     entities = [
@@ -1556,7 +1578,7 @@ async def test_run_rename_device_entity_pairs_empty_after_odds(mocker):
 
 async def test_run_rename_device_old_eid_not_in_registry_skipped(mocker):
     """Lines 985-988: old_eid not in registry → skip warning."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     entities = [
@@ -1602,7 +1624,7 @@ async def test_run_rename_device_old_eid_not_in_registry_skipped(mocker):
 
 async def test_run_rename_device_new_eid_already_exists_skipped(mocker):
     """Lines 990-991: new_eid already exists → skip warning, no valid plans → False."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     entities = [
@@ -1651,7 +1673,7 @@ async def test_run_rename_device_new_eid_already_exists_skipped(mocker):
 
 async def test_run_rename_device_no_valid_plans(mocker):
     """Lines 995-996: no valid plans after filtering → returns False."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     entities = [
@@ -1703,7 +1725,7 @@ async def test_run_rename_device_no_valid_plans(mocker):
 
 async def test_find_device_exact_match():
     """Line 654: exactly 1 exact match returns it directly."""
-    from zigporter.commands.rename_device import find_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import find_device
 
     devices = [
         {"id": "d1", "name": "Kitchen Plug", "name_by_user": None},
@@ -1717,7 +1739,7 @@ async def test_find_device_exact_match():
 
 async def test_find_device_no_match():
     """Line 658: no partial matches returns None."""
-    from zigporter.commands.rename_device import find_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import find_device
 
     mock_ha = MagicMock()
     mock_ha.get_device_registry = AsyncMock(
@@ -1731,7 +1753,7 @@ async def test_find_device_no_match():
 
 async def test_find_device_single_partial_match():
     """Line 660: exactly 1 partial match returns it directly."""
-    from zigporter.commands.rename_device import find_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import find_device
 
     mock_ha = MagicMock()
     mock_ha.get_device_registry = AsyncMock(
@@ -1750,7 +1772,7 @@ async def test_find_device_single_partial_match():
 
 async def test_run_rename_device_scanned_names_populated(mocker):
     """Lines 1000-1023: automations/scripts/scenes/dashboards populate scanned_names."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     entities = [
@@ -1804,7 +1826,7 @@ async def test_run_rename_device_scanned_names_populated(mocker):
 
 async def test_run_rename_device_dry_run_no_tty(mocker):
     """Lines 1040-1045: dry-run without TTY returns False."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     entities = [
@@ -1859,7 +1881,7 @@ async def test_run_rename_device_dry_run_no_tty(mocker):
 
 async def test_run_rename_device_dry_run_aborted(mocker):
     """Lines 1046-1051: dry-run with TTY, user aborts → returns True."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = {"id": "dev1", "name": "Kitchen Plug", "name_by_user": None}
     entities = [
@@ -1921,35 +1943,35 @@ async def test_run_rename_device_dry_run_aborted(mocker):
 
 
 def test_ieee_from_ha_device_returns_ieee():
-    from zigporter.commands.rename_device import _ieee_from_ha_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _ieee_from_ha_device
 
     device = {"identifiers": [["mqtt", "zigbee2mqtt_0x001234567890abcd"]]}
     assert _ieee_from_ha_device(device) == "0x001234567890abcd"
 
 
 def test_ieee_from_ha_device_case_insensitive():
-    from zigporter.commands.rename_device import _ieee_from_ha_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _ieee_from_ha_device
 
     device = {"identifiers": [["mqtt", "Zigbee2MQTT_0xABCDEF"]]}
     assert _ieee_from_ha_device(device) == "0xabcdef"
 
 
 def test_ieee_from_ha_device_skips_non_z2m_identifiers():
-    from zigporter.commands.rename_device import _ieee_from_ha_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _ieee_from_ha_device
 
     device = {"identifiers": [["zha", "00:11:22:33:44:55:66:77"], ["mqtt", "other_device_123"]]}
     assert _ieee_from_ha_device(device) is None
 
 
 def test_ieee_from_ha_device_empty_identifiers():
-    from zigporter.commands.rename_device import _ieee_from_ha_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _ieee_from_ha_device
 
     assert _ieee_from_ha_device({"identifiers": []}) is None
     assert _ieee_from_ha_device({}) is None
 
 
 def test_ieee_from_ha_device_uses_first_z2m_match():
-    from zigporter.commands.rename_device import _ieee_from_ha_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import _ieee_from_ha_device
 
     device = {
         "identifiers": [
@@ -1967,8 +1989,10 @@ def test_ieee_from_ha_device_uses_first_z2m_match():
 
 async def test_execute_device_rename_calls_z2m_rename(mock_device_exec_client):
     """When z2m_client and z2m_friendly_name are provided, rename_device is called."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     mock_z2m = MagicMock()
     mock_z2m.rename_device = AsyncMock(return_value=None)
@@ -2000,8 +2024,10 @@ async def test_execute_device_rename_calls_z2m_rename(mock_device_exec_client):
 
 async def test_execute_device_rename_z2m_failure_does_not_abort(mock_device_exec_client):
     """A Z2M rename failure prints a warning but does not raise."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     mock_z2m = MagicMock()
     mock_z2m.rename_device = AsyncMock(side_effect=RuntimeError("Z2M unreachable"))
@@ -2034,8 +2060,10 @@ async def test_execute_device_rename_z2m_failure_does_not_abort(mock_device_exec
 
 async def test_execute_device_rename_no_z2m_params_skips(mock_device_exec_client):
     """When z2m_client/z2m_friendly_name are None, Z2M rename is never called."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     mock_z2m = MagicMock()
     mock_z2m.rename_device = AsyncMock(return_value=None)
@@ -2073,7 +2101,10 @@ async def test_execute_device_rename_no_z2m_params_skips(mock_device_exec_client
 
 def test_display_device_plan_jinja_hits_shown(mocker):
     """Jinja2 warning is printed when plans have jinja_template_names."""
-    from zigporter.commands.rename_device import DeviceRenamePlan, display_device_plan  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        display_device_plan,
+    )
 
     printed: list[str] = []
     mocker.patch(
@@ -2109,7 +2140,10 @@ def test_display_device_plan_jinja_hits_shown(mocker):
 
 def test_display_device_plan_jinja_hits_many_entities_truncated(mocker):
     """When > 3 entities have Jinja2 hits, a (+N more) suffix is appended."""
-    from zigporter.commands.rename_device import DeviceRenamePlan, display_device_plan  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        display_device_plan,
+    )
 
     printed: list[str] = []
     mocker.patch(
@@ -2147,7 +2181,10 @@ def test_display_device_plan_jinja_hits_many_entities_truncated(mocker):
 
 def test_display_device_plan_jinja_deduplicates_hits(mocker):
     """Each (ctx_label, name) pair appears only once even when referenced by multiple entities."""
-    from zigporter.commands.rename_device import DeviceRenamePlan, display_device_plan  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        display_device_plan,
+    )
 
     printed: list[str] = []
     mocker.patch(
@@ -2186,8 +2223,10 @@ def test_display_device_plan_jinja_deduplicates_hits(mocker):
 
 async def test_execute_device_rename_reloads_z2m_integration_after_rename(mock_device_exec_client):
     """After a successful Z2M rename, the Z2M config entry is reloaded in HA."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     mock_z2m = MagicMock()
     mock_z2m.rename_device = AsyncMock(return_value=None)
@@ -2220,8 +2259,10 @@ async def test_execute_device_rename_reloads_z2m_integration_after_rename(mock_d
 
 async def test_execute_device_rename_reload_skipped_when_entry_not_found(mock_device_exec_client):
     """When get_z2m_config_entry_id returns None, reload is silently skipped."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     mock_device_exec_client.get_z2m_config_entry_id = AsyncMock(return_value=None)
     mock_z2m = MagicMock()
@@ -2254,8 +2295,10 @@ async def test_execute_device_rename_reload_skipped_when_entry_not_found(mock_de
 
 async def test_execute_device_rename_reload_skipped_on_z2m_failure(mock_device_exec_client):
     """When the Z2M rename fails, the HA integration reload is not attempted."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     mock_z2m = MagicMock()
     mock_z2m.rename_device = AsyncMock(side_effect=RuntimeError("Z2M unreachable"))
@@ -2288,8 +2331,10 @@ async def test_execute_device_rename_reload_skipped_on_z2m_failure(mock_device_e
 
 async def test_execute_device_rename_reload_config_entry_failure(mock_device_exec_client):
     """When reload_config_entry raises, the error is swallowed — rename still succeeds."""
-    from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
-    from zigporter.commands.rename_device import execute_device_rename  # noqa: PLC0415
+    from zigporter.commands.rename_device import (
+        DeviceRenamePlan,
+        execute_device_rename,
+    )
 
     mock_device_exec_client.reload_config_entry = AsyncMock(
         side_effect=RuntimeError("config entry not found")
@@ -2376,7 +2421,7 @@ def _make_z2m_run_mocks(mocker, device, execute_mock=None):
 
 async def test_run_rename_device_z2m_user_confirms(mocker):
     """Interactive: user says yes to Z2M prompt → execute called with z2m params."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = _make_z2m_test_device("0x001234567890abcd")
     exec_mock = _make_z2m_run_mocks(mocker, device)
@@ -2414,7 +2459,7 @@ async def test_run_rename_device_z2m_user_confirms(mocker):
 
 async def test_run_rename_device_z2m_user_declines(mocker):
     """Interactive: user says no to Z2M prompt → execute called without z2m params."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = _make_z2m_test_device("0x001234567890abcd")
     exec_mock = _make_z2m_run_mocks(mocker, device)
@@ -2445,7 +2490,7 @@ async def test_run_rename_device_z2m_user_declines(mocker):
 
 async def test_run_rename_device_z2m_apply_mode_skips_z2m(mocker):
     """--apply mode: Z2M lookup is never attempted (no network call, no prompt)."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = _make_z2m_test_device("0x001234567890abcd")
     exec_mock = _make_z2m_run_mocks(mocker, device)
@@ -2472,7 +2517,7 @@ async def test_run_rename_device_z2m_apply_mode_skips_z2m(mocker):
 
 async def test_run_rename_device_z2m_not_configured(mocker):
     """load_z2m_config raises ValueError → Z2M step silently skipped."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = _make_z2m_test_device("0x001234567890abcd")
     exec_mock = _make_z2m_run_mocks(mocker, device)
@@ -2493,7 +2538,7 @@ async def test_run_rename_device_z2m_not_configured(mocker):
 
 async def test_run_rename_device_no_z2m_identifier(mocker):
     """Device has no Z2M MQTT identifier → Z2M lookup never attempted."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = _make_z2m_test_device(ieee=None)  # no Z2M identifier
     exec_mock = _make_z2m_run_mocks(mocker, device)
@@ -2516,7 +2561,7 @@ async def test_run_rename_device_no_z2m_identifier(mocker):
 
 async def test_run_rename_device_z2m_device_not_found_in_z2m(mocker):
     """get_device_by_ieee returns None → execute called without Z2M params."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = _make_z2m_test_device("0x001234567890abcd")
     exec_mock = _make_z2m_run_mocks(mocker, device)
@@ -2541,7 +2586,7 @@ async def test_run_rename_device_z2m_device_not_found_in_z2m(mocker):
 
 async def test_run_rename_device_z2m_lookup_exception_skipped(mocker):
     """Any exception during Z2M lookup is silently swallowed."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = _make_z2m_test_device("0x001234567890abcd")
     exec_mock = _make_z2m_run_mocks(mocker, device)
@@ -2565,7 +2610,7 @@ async def test_run_rename_device_z2m_lookup_exception_skipped(mocker):
 
 async def test_run_rename_device_z2m_lookup_exception_interactive(mocker):
     """Z2M lookup exception in interactive (apply=False) mode is silently swallowed."""
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     device = _make_z2m_test_device("0x001234567890abcd")
     exec_mock = _make_z2m_run_mocks(mocker, device)
@@ -2598,7 +2643,7 @@ async def test_run_rename_device_z2m_lookup_exception_interactive(mocker):
 @pytest.mark.asyncio
 async def test_find_device_filter_zigbee():
     """find_device with device_filter='zigbee' filters registry before matching (line 852)."""
-    from zigporter.commands.rename_device import find_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import find_device
 
     zigbee_device = {
         "id": "z1",
@@ -2626,7 +2671,7 @@ async def test_find_device_filter_zigbee():
 @pytest.mark.asyncio
 async def test_find_device_filter_matter():
     """find_device with device_filter='matter' filters registry before matching (line 854)."""
-    from zigporter.commands.rename_device import find_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import find_device
 
     matter_device = {
         "id": "m1",
@@ -2658,7 +2703,7 @@ async def test_find_device_filter_matter():
 @pytest.mark.asyncio
 async def test_pick_device_interactively_no_devices_after_filter(mocker):
     """pick_device_interactively returns None when filter leaves no named devices (lines 897-899)."""
-    from zigporter.commands.rename_device import pick_device_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_device import pick_device_interactively
 
     # Device has no name and no name_by_user — won't survive the named_devices filter
     unnamed_device = {
@@ -2697,7 +2742,7 @@ async def test_run_rename_device_picker_cancelled(mocker):
         new=AsyncMock(return_value=None),
     )
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device("https://ha.test", "token", True, None, None, False)
     assert result is False
@@ -2724,7 +2769,7 @@ async def test_run_rename_device_new_name_tty_aborted(mocker):
     text_instance.unsafe_ask_async = AsyncMock(return_value="")
     text_mock.return_value = text_instance
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device("https://ha.test", "token", True, "My Device", None, False)
     assert result is True  # aborted is not an error
@@ -2771,7 +2816,7 @@ async def test_run_rename_device_apply_flag_skips_confirmation(mocker):
         "zigporter.commands.rename_device._prompt_apply_confirm", new=AsyncMock(return_value=True)
     )
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device(
         "https://ha.test", "token", True, "Kitchen Plug", "Living Room Plug", apply=True
@@ -2824,7 +2869,7 @@ async def test_run_rename_device_confirmed_applies_changes(mocker):
         "zigporter.commands.rename_device._prompt_apply_confirm", new=AsyncMock(return_value=True)
     )
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device(
         "https://ha.test", "token", True, "Kitchen Plug", "Living Room Plug", apply=False
@@ -2876,7 +2921,7 @@ async def test_run_rename_device_declined_aborts(mocker):
         "zigporter.commands.rename_device._prompt_apply_confirm", new=AsyncMock(return_value=False)
     )
 
-    from zigporter.commands.rename_device import run_rename_device  # noqa: PLC0415
+    from zigporter.commands.rename_device import run_rename_device
 
     result = await run_rename_device(
         "https://ha.test", "token", True, "Kitchen Plug", "Living Room Plug", apply=False

@@ -761,7 +761,7 @@ async def run_reverse_wizard(
     console.rule(f"[bold]Reverse-migrating: {name}[/bold]")
 
     console.print(
-        "\nThis wizard will migrate [bold]{name}[/bold] from Zigbee2MQTT back to ZHA "
+        f"\nThis wizard will migrate [bold]{name}[/bold] from Zigbee2MQTT back to ZHA "
         "in 7 steps (+ 1 optional):\n"
         "\n"
         "  [cyan]1[/cyan]  Remove from Z2M    Unpair the device from Zigbee2MQTT "
@@ -775,7 +775,7 @@ async def run_reverse_wizard(
         "  [cyan]8[/cyan]  Rename (optional)  Rename to a different name with full HA cascade\n"
         "\n"
         "[dim]You can abort safely at step 1. After that, the device must complete\n"
-        "pairing with ZHA before it can be used again.[/dim]".format(name=name)
+        "pairing with ZHA before it can be used again.[/dim]"
     )
 
     ieee_key = normalize_ieee(device.ieee)

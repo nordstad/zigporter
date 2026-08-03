@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 from zigporter.commands.check import (
     _check_config,
     _check_ha_reachable,
@@ -9,7 +8,6 @@ from zigporter.commands.check import (
     check_command,
 )
 from zigporter.models import CheckStatus
-
 
 # ---------------------------------------------------------------------------
 # Individual check unit tests

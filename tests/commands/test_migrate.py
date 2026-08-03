@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -205,7 +205,7 @@ async def test_step_rename_skips_on_cancel(sample_device, mock_z2m_client, mock_
 
 async def test_step_assign_area_keeps_original_area(sample_device, mock_ha_client):
     """When the user picks the original area, update_device_area is called with that area."""
-    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+    from zigporter.commands.migrate import _step_assign_area
 
     with patch("questionary.select") as mock_select:
         mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="kitchen")
@@ -217,7 +217,7 @@ async def test_step_assign_area_keeps_original_area(sample_device, mock_ha_clien
 
 async def test_step_assign_area_changes_area(sample_device, mock_ha_client):
     """When the user selects a different area, update_device_area is called with the new area."""
-    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+    from zigporter.commands.migrate import _step_assign_area
 
     with patch("questionary.select") as mock_select:
         mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="living_room")
@@ -229,7 +229,7 @@ async def test_step_assign_area_changes_area(sample_device, mock_ha_client):
 
 async def test_step_assign_area_no_area_device_assigns_area(mock_ha_client):
     """Device with no ZHA area: user can pick an area and it is applied."""
-    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+    from zigporter.commands.migrate import _step_assign_area
 
     device_no_area = ZHADevice(
         device_id="dev-x",
@@ -249,7 +249,7 @@ async def test_step_assign_area_no_area_device_assigns_area(mock_ha_client):
 
 async def test_step_assign_area_clears_area(sample_device, mock_ha_client):
     """When the user selects 'No area', update_device_area is called with an empty string."""
-    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+    from zigporter.commands.migrate import _step_assign_area
 
     with patch("questionary.select") as mock_select:
         mock_select.return_value.unsafe_ask_async = AsyncMock(return_value="__no_area__")
@@ -263,7 +263,7 @@ async def test_step_assign_area_registry_fetch_fails_restores_original(
     sample_device, mock_ha_client
 ):
     """When get_area_registry raises, the original ZHA area is restored silently."""
-    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+    from zigporter.commands.migrate import _step_assign_area
 
     mock_ha_client.get_area_registry = AsyncMock(side_effect=RuntimeError("WS error"))
 
@@ -275,7 +275,7 @@ async def test_step_assign_area_registry_fetch_fails_restores_original(
 
 async def test_step_assign_area_skips_when_no_z2m_device(sample_device, mock_ha_client):
     """When Z2M device is not yet in HA, area assignment is skipped gracefully."""
-    from zigporter.commands.migrate import _step_assign_area  # noqa: PLC0415
+    from zigporter.commands.migrate import _step_assign_area
 
     mock_ha_client.get_z2m_device_id = AsyncMock(return_value=None)
 
@@ -288,7 +288,7 @@ async def test_step_assign_area_skips_when_no_z2m_device(sample_device, mock_ha_
 
 async def test_prompt_area_returns_none_for_no_area():
     """Selecting '── No area ──' returns None."""
-    from zigporter.commands.migrate import _prompt_area  # noqa: PLC0415
+    from zigporter.commands.migrate import _prompt_area
 
     device = ZHADevice(
         device_id="d",
@@ -308,7 +308,7 @@ async def test_prompt_area_returns_none_for_no_area():
 
 async def test_prompt_area_returns_selected_area_id():
     """Selecting a named area returns its area_id."""
-    from zigporter.commands.migrate import _prompt_area  # noqa: PLC0415
+    from zigporter.commands.migrate import _prompt_area
 
     device = ZHADevice(
         device_id="d",
@@ -637,7 +637,7 @@ def test_show_status_renders(tmp_path):
     from zigporter.models import ZHAExport
 
     export = ZHAExport(
-        exported_at=datetime.now(tz=timezone.utc),
+        exported_at=datetime.now(tz=UTC),
         ha_url="https://ha.test",
         devices=[
             ZHADevice(
@@ -1062,7 +1062,7 @@ async def test_step_post_migrate_rename_executes(sample_device, mock_ha_client, 
             "zigporter.commands.migrate.build_device_rename_plan", new_callable=AsyncMock
         ) as mock_plan,
     ):
-        from zigporter.commands.rename_device import DeviceRenamePlan  # noqa: PLC0415
+        from zigporter.commands.rename_device import DeviceRenamePlan
 
         mock_plan.return_value = DeviceRenamePlan(
             device_id="z2m-device-id",

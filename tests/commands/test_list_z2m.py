@@ -5,7 +5,6 @@ import pytest
 
 from zigporter.commands.list_z2m import run_list_z2m
 
-
 HA_URL = "https://ha.test"
 TOKEN = "test-token"
 Z2M_URL = "https://z2m.test"
@@ -47,9 +46,11 @@ async def test_run_list_z2m_excludes_coordinator(z2m_devices, mocker):
     mock_client = mocker.MagicMock()
     mock_client.get_devices = AsyncMock(return_value=z2m_devices)
 
-    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
-        with patch("zigporter.commands.list_z2m.console"):
-            await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False)
+    with (
+        patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client),
+        patch("zigporter.commands.list_z2m.console"),
+    ):
+        await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False)
 
     mock_client.get_devices.assert_awaited_once()
 
@@ -66,15 +67,17 @@ async def test_run_list_z2m_unsupported_device_dim_style(z2m_devices, mocker):
     mock_table = mocker.MagicMock()
     mock_table.add_row = capture_add_row
 
-    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
-        with patch("zigporter.commands.list_z2m.Table", return_value=mock_table):
-            with patch("zigporter.commands.list_z2m.console"):
-                with patch("zigporter.commands.list_z2m.Progress") as mock_progress_cls:
-                    mock_progress = mocker.MagicMock()
-                    mock_progress.__enter__ = mocker.MagicMock(return_value=mock_progress)
-                    mock_progress.__exit__ = mocker.MagicMock(return_value=False)
-                    mock_progress_cls.return_value = mock_progress
-                    await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False)
+    with (
+        patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client),
+        patch("zigporter.commands.list_z2m.Table", return_value=mock_table),
+        patch("zigporter.commands.list_z2m.console"),
+        patch("zigporter.commands.list_z2m.Progress") as mock_progress_cls,
+    ):
+        mock_progress = mocker.MagicMock()
+        mock_progress.__enter__ = mocker.MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = mocker.MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+        await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False)
 
     styles = [r["style"] for r in added_rows]
     assert "dim" in styles
@@ -85,9 +88,11 @@ async def test_run_list_z2m_empty_device_list(mocker):
     mock_client = mocker.MagicMock()
     mock_client.get_devices = AsyncMock(return_value=[])
 
-    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
-        with patch("zigporter.commands.list_z2m.console"):
-            await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=True)
+    with (
+        patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client),
+        patch("zigporter.commands.list_z2m.console"),
+    ):
+        await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=True)
 
     mock_client.get_devices.assert_awaited_once()
 
@@ -117,15 +122,17 @@ async def test_run_list_z2m_fallback_fields(mocker):
     mock_table = mocker.MagicMock()
     mock_table.add_row = capture_add_row
 
-    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
-        with patch("zigporter.commands.list_z2m.Table", return_value=mock_table):
-            with patch("zigporter.commands.list_z2m.console"):
-                with patch("zigporter.commands.list_z2m.Progress") as mock_progress_cls:
-                    mock_progress = mocker.MagicMock()
-                    mock_progress.__enter__ = mocker.MagicMock(return_value=mock_progress)
-                    mock_progress.__exit__ = mocker.MagicMock(return_value=False)
-                    mock_progress_cls.return_value = mock_progress
-                    await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False)
+    with (
+        patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client),
+        patch("zigporter.commands.list_z2m.Table", return_value=mock_table),
+        patch("zigporter.commands.list_z2m.console"),
+        patch("zigporter.commands.list_z2m.Progress") as mock_progress_cls,
+    ):
+        mock_progress = mocker.MagicMock()
+        mock_progress.__enter__ = mocker.MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = mocker.MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+        await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False)
 
     assert len(added_rows) == 1
     row = added_rows[0]
@@ -154,15 +161,17 @@ async def test_run_list_z2m_uses_ieee_when_no_friendly_name(mocker):
     mock_table = mocker.MagicMock()
     mock_table.add_row = capture_add_row
 
-    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
-        with patch("zigporter.commands.list_z2m.Table", return_value=mock_table):
-            with patch("zigporter.commands.list_z2m.console"):
-                with patch("zigporter.commands.list_z2m.Progress") as mock_progress_cls:
-                    mock_progress = mocker.MagicMock()
-                    mock_progress.__enter__ = mocker.MagicMock(return_value=mock_progress)
-                    mock_progress.__exit__ = mocker.MagicMock(return_value=False)
-                    mock_progress_cls.return_value = mock_progress
-                    await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False)
+    with (
+        patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client),
+        patch("zigporter.commands.list_z2m.Table", return_value=mock_table),
+        patch("zigporter.commands.list_z2m.console"),
+        patch("zigporter.commands.list_z2m.Progress") as mock_progress_cls,
+    ):
+        mock_progress = mocker.MagicMock()
+        mock_progress.__enter__ = mocker.MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = mocker.MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+        await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False)
 
     assert added_rows[0][0] == "0xdeadbeefdeadbeef"
 
@@ -230,9 +239,11 @@ async def test_run_list_z2m_json_output_no_spinner(z2m_devices, mocker, capsys):
     mock_client = mocker.MagicMock()
     mock_client.get_devices = AsyncMock(return_value=z2m_devices)
 
-    with patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client):
-        with patch("zigporter.commands.list_z2m.Progress") as mock_progress_cls:
-            await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, json_output=True)
+    with (
+        patch("zigporter.commands.list_z2m.Z2MClient", return_value=mock_client),
+        patch("zigporter.commands.list_z2m.Progress") as mock_progress_cls,
+    ):
+        await run_list_z2m(HA_URL, TOKEN, Z2M_URL, verify_ssl=False, json_output=True)
 
     mock_progress_cls.assert_not_called()
 

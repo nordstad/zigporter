@@ -60,3 +60,6 @@ filterwarnings = [
 line-length = 100
 target-version = "py313"
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+

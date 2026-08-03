@@ -465,7 +465,7 @@ def _filter_by_backend(
         zha_reg_ids = {d.get("device_reg_id") for d in zha_devices}
         return [d for d in device_registry if d["id"] in zha_reg_ids]
     if backend == "z2m":
-        from zigporter.utils import parse_z2m_ieee_identifier  # noqa: PLC0415
+        from zigporter.utils import parse_z2m_ieee_identifier
 
         return [
             d
@@ -518,7 +518,7 @@ def _resolve_device_arg(device_str: str, all_data: dict[str, Any], backend: str)
 
     # 2. IEEE address — strip 0x prefix / colons / dashes, check for 16 hex chars
     _s = device_str.lower().replace(":", "").replace("-", "")
-    stripped = _s[2:] if _s.startswith("0x") else _s
+    stripped = _s.removeprefix("0x")
     if len(stripped) == 16 and all(c in "0123456789abcdef" for c in stripped):
         norm = normalize_ieee(device_str)
         # Check ZHA devices first
@@ -638,8 +638,8 @@ async def run_inspect(
         return
 
     if json_output:
-        import json  # noqa: PLC0415
-        from dataclasses import asdict  # noqa: PLC0415
+        import json
+        from dataclasses import asdict
 
         print(json.dumps(asdict(deps), indent=2))
     else:

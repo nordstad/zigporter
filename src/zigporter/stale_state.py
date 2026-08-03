@@ -4,7 +4,7 @@ State is stored in ``~/.config/zigporter/stale.json`` and tracks which offline
 devices the user has annotated as stale or ignored across sessions.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 
@@ -27,7 +27,7 @@ class StaleDeviceEntry(BaseModel):
 
 
 class StaleState(BaseModel):
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     devices: dict[str, StaleDeviceEntry] = Field(default_factory=dict)
 
 
@@ -40,7 +40,7 @@ def load_stale_state(path: Path) -> StaleState:
 
 def save_stale_state(state: StaleState, path: Path) -> None:
     """Persist stale state to disk."""
-    state.updated_at = datetime.now(tz=timezone.utc)
+    state.updated_at = datetime.now(tz=UTC)
     path.write_text(state.model_dump_json(indent=2))
 
 
@@ -50,7 +50,7 @@ def record_first_seen(state: StaleState, device_id: str, name: str) -> None:
         state.devices[device_id] = StaleDeviceEntry(
             device_id=device_id,
             name=name,
-            first_seen_offline_at=datetime.now(tz=timezone.utc),
+            first_seen_offline_at=datetime.now(tz=UTC),
         )
 
 

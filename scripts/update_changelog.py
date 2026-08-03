@@ -3,7 +3,7 @@
 
 import re
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -65,7 +65,7 @@ def update_changelog(
 ) -> None:
     """Update CHANGELOG.md with a new release entry."""
     if date is None:
-        date = datetime.now().strftime("%Y-%m-%d")
+        date = datetime.now(tz=UTC).strftime("%Y-%m-%d")
 
     categories = parse_github_release_notes(release_notes)
     new_entry = format_changelog_entry(version, date, categories)
@@ -128,7 +128,7 @@ def main() -> None:
     try:
         update_changelog(changelog_path, version, release_notes, date)
         print(f"✓ Updated CHANGELOG.md with version {version}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 

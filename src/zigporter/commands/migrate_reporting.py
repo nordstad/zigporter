@@ -77,7 +77,7 @@ async def step_show_inspect_summary(
     console: Console,
 ) -> None:
     """Show current entities and dashboard cards for the migrated Z2M device."""
-    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+    from zigporter.commands.inspect import show_migrate_inspect_summary
 
     try:
         z2m_device_id = await ha_client.get_z2m_device_id(device.ieee)
