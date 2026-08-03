@@ -85,7 +85,7 @@ def _compute_ring_radii(
     """Compute per-hop ring boundary radii so each ring has enough circumference for its devices."""
     max_hops = max((d for d in depth_map.values()), default=1)
     count_at_depth: dict[int, int] = {}
-    for ieee, depth in depth_map.items():
+    for depth in depth_map.values():
         if depth > 0:
             count_at_depth[depth] = count_at_depth.get(depth, 0) + 1
 
@@ -169,7 +169,7 @@ def _compute_path_min_lqi(
             seen.add(cur)
             path.append(cur)
             cur = parent_map.get(cur)
-        base = cache[cur] if cur in cache else 255
+        base = cache.get(cur, 255)
         for node in reversed(path):
             if node in lqi_map:
                 base = min(lqi_map[node], base)
@@ -534,13 +534,13 @@ def _draw_node(
             stroke_w = 2
             glow_filter = "url(#glow-warn)"
 
-    circle_attrs: dict[str, Any] = dict(
-        center=(round(x, 1), round(y, 1)),
-        r=nr,
-        fill=fill,
-        stroke=stroke_color,
-        stroke_width=stroke_w,
-    )
+    circle_attrs: dict[str, Any] = {
+        "center": (round(x, 1), round(y, 1)),
+        "r": nr,
+        "fill": fill,
+        "stroke": stroke_color,
+        "stroke_width": stroke_w,
+    }
     if glow_filter:
         circle_attrs["filter"] = glow_filter
     node_group.add(dwg.circle(**circle_attrs))

@@ -271,7 +271,7 @@ async def test_build_rename_plan_tracks_scanned_dashboards(mock_ha_client):
 
 async def test_build_rename_plan_tracks_yaml_mode_dashboards(mock_ha_client):
     """YAML-mode dashboards should populate yaml_mode_dashboard_names and not be scanned."""
-    from zigporter.ha_client import YAML_MODE  # noqa: PLC0415
+    from zigporter.ha_client import YAML_MODE
 
     mock_ha_client.get_lovelace_config = AsyncMock(return_value=YAML_MODE)
     plan = await build_rename_plan(mock_ha_client, "switch.kitchen_plug", "switch.new_plug")
@@ -701,7 +701,7 @@ async def test_run_rename_apply_success(mocker):
     mocker.patch("zigporter.commands.rename_entity.build_rename_plan", return_value=_SIMPLE_PLAN)
     mocker.patch("zigporter.commands.rename_entity.execute_rename", new=AsyncMock())
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", True)
     assert result is True
@@ -714,7 +714,7 @@ async def test_run_rename_validation_error(mocker):
         "zigporter.commands.rename_entity.build_rename_plan", side_effect=ValueError("not found")
     )
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", True)
     assert result is False
@@ -725,7 +725,7 @@ async def test_run_rename_no_tty_no_apply(mocker):
     mocker.patch("zigporter.commands.rename_entity.build_rename_plan", return_value=_SIMPLE_PLAN)
     mocker.patch("zigporter.commands.rename_entity.sys").stdin.isatty.return_value = False
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", False)
     assert result is False
@@ -740,7 +740,7 @@ async def test_run_rename_confirmed(mocker):
     mock_q.unsafe_ask_async = AsyncMock(return_value=True)
     mocker.patch("zigporter.commands.rename_entity.questionary.confirm", return_value=mock_q)
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", False)
     assert result is True
@@ -756,7 +756,7 @@ async def test_run_rename_aborted(mocker):
     mock_q.unsafe_ask_async = AsyncMock(return_value=False)
     mocker.patch("zigporter.commands.rename_entity.questionary.confirm", return_value=mock_q)
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "switch.old", "switch.new", False)
     assert result is True  # aborted is not an error
@@ -773,7 +773,7 @@ async def test_run_rename_old_id_none_no_tty(mocker):
     mocker.patch("zigporter.commands.rename_entity.HAClient")
     mocker.patch("zigporter.commands.rename_entity.sys").stdin.isatty.return_value = False
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, None, None, False)
     assert result is False
@@ -797,7 +797,7 @@ async def test_run_rename_old_id_none_tty_picks_interactively(mocker):
     mock_text.unsafe_ask_async = AsyncMock(return_value="switch.new")
     mocker.patch("zigporter.commands.rename_entity.questionary.text", return_value=mock_text)
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, None, None, False)
     assert result is True
@@ -810,7 +810,7 @@ async def test_run_rename_invalid_old_entity_id(mocker):
     """Invalid old_entity_id format → validation error, no HA calls."""
     mocker.patch("zigporter.commands.rename_entity.HAClient")
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "INVALID", "switch.new", False)
     assert result is False
@@ -821,7 +821,7 @@ async def test_run_rename_invalid_new_entity_id(mocker):
     """Invalid new_entity_id format → validation error, no HA calls."""
     mocker.patch("zigporter.commands.rename_entity.HAClient")
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "switch.old", "INVALID", False)
     assert result is False
@@ -833,7 +833,7 @@ async def test_run_rename_new_id_none_no_tty(mocker):
     mocker.patch("zigporter.commands.rename_entity.HAClient")
     mocker.patch("zigporter.commands.rename_entity.sys").stdin.isatty.return_value = False
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "switch.old", None, False)
     assert result is False
@@ -854,7 +854,7 @@ async def test_run_rename_new_id_none_tty_prefilled(mocker):
     text_instance.unsafe_ask_async = AsyncMock(return_value="switch.new")
     text_mock.return_value = text_instance
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "switch.old", None, False)
     assert result is True
@@ -869,17 +869,17 @@ async def test_run_rename_new_id_none_tty_prefilled(mocker):
 def test_rename_command_success(mocker):
     mocker.patch("zigporter.commands.rename_entity.run_rename", new=AsyncMock(return_value=True))
 
-    from zigporter.commands.rename_entity import rename_command  # noqa: PLC0415
+    from zigporter.commands.rename_entity import rename_command
 
     rename_command("https://ha.test", "token", True, "switch.old", "switch.new", False)
 
 
 def test_rename_command_failure(mocker):
-    import typer  # noqa: PLC0415
+    import typer
 
     mocker.patch("zigporter.commands.rename_entity.run_rename", new=AsyncMock(return_value=False))
 
-    from zigporter.commands.rename_entity import rename_command  # noqa: PLC0415
+    from zigporter.commands.rename_entity import rename_command
 
     with pytest.raises(typer.Exit):
         rename_command("https://ha.test", "token", True, "switch.old", "switch.new", False)
@@ -894,9 +894,9 @@ def test_rename_cli_invokes_rename_command(mocker):
     mocker.patch("zigporter.main._get_config", return_value=("https://ha.test", "token", True))
     mock_cmd = mocker.patch("zigporter.commands.rename_entity.rename_command")
 
-    from typer.testing import CliRunner  # noqa: PLC0415
+    from typer.testing import CliRunner
 
-    from zigporter.main import app  # noqa: PLC0415
+    from zigporter.main import app
 
     runner = CliRunner()
     result = runner.invoke(app, ["rename-entity", "switch.old", "switch.new", "--apply"])
@@ -929,7 +929,7 @@ def _make_select_side_effect(*return_values):
 @pytest.mark.asyncio
 async def test_pick_entity_interactively_browse(mocker):
     """User picks a domain then selects an entity directly from the browse list."""
-    from zigporter.commands.rename_entity import pick_entity_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_entity import pick_entity_interactively
 
     entities = [
         {"entity_id": "light.living_room", "name_by_user": "Living Room Light", "name": ""},
@@ -965,7 +965,10 @@ async def test_pick_entity_interactively_browse(mocker):
 @pytest.mark.asyncio
 async def test_pick_entity_interactively_search(mocker):
     """User picks a domain, selects Search sentinel, then uses autocomplete."""
-    from zigporter.commands.rename_entity import _SEARCH_SENTINEL, pick_entity_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_entity import (
+        _SEARCH_SENTINEL,
+        pick_entity_interactively,
+    )
 
     entities = [
         {"entity_id": "light.living_room", "name_by_user": "Living Room Light", "name": ""},
@@ -997,7 +1000,7 @@ async def test_pick_entity_interactively_search(mocker):
 @pytest.mark.asyncio
 async def test_pick_entity_interactively_no_friendly_name(mocker):
     """Entities without a distinct friendly name use the entity_id as the label."""
-    from zigporter.commands.rename_entity import pick_entity_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_entity import pick_entity_interactively
 
     entities = [{"entity_id": "switch.garage_door", "name_by_user": "", "name": ""}]
     ha_client = MagicMock()
@@ -1020,7 +1023,7 @@ async def test_pick_entity_interactively_no_friendly_name(mocker):
 @pytest.mark.asyncio
 async def test_pick_entity_interactively_domain_cancelled(mocker):
     """Returning None from the domain picker propagates None."""
-    from zigporter.commands.rename_entity import pick_entity_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_entity import pick_entity_interactively
 
     ha_client = MagicMock()
     ha_client.get_entity_registry = AsyncMock(
@@ -1041,7 +1044,7 @@ async def test_pick_entity_interactively_domain_cancelled(mocker):
 
 def test_display_plan_yaml_mode_spacing_between_multiple(mocker):
     """Line 350: console.print() spacer between yaml-mode dashboard entries."""
-    from zigporter.commands.rename_entity import display_plan  # noqa: PLC0415
+    from zigporter.commands.rename_entity import display_plan
 
     plan = RenamePlan(
         old_entity_id="switch.kitchen_plug",
@@ -1150,7 +1153,7 @@ def test_suggest_entity_ids_no_match():
 
 def test_validate_entity_id_empty_string():
     """Empty entity ID returns an error string (not True)."""
-    from zigporter.commands.rename_entity import _validate_entity_id  # noqa: PLC0415
+    from zigporter.commands.rename_entity import _validate_entity_id
 
     result = _validate_entity_id("   ")
     assert result == "Entity ID cannot be empty"
@@ -1164,7 +1167,7 @@ def test_validate_entity_id_empty_string():
 @pytest.mark.asyncio
 async def test_pick_entity_interactively_browse_cancelled(mocker):
     """User cancels the entity browse step → returns None (line 361)."""
-    from zigporter.commands.rename_entity import pick_entity_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_entity import pick_entity_interactively
 
     entities = [{"entity_id": "light.hall", "name_by_user": "", "name": ""}]
     ha_client = MagicMock()
@@ -1188,7 +1191,10 @@ async def test_pick_entity_interactively_browse_cancelled(mocker):
 @pytest.mark.asyncio
 async def test_pick_entity_interactively_search_cancelled(mocker):
     """User cancels the autocomplete search step → returns None (line 380)."""
-    from zigporter.commands.rename_entity import _SEARCH_SENTINEL, pick_entity_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_entity import (
+        _SEARCH_SENTINEL,
+        pick_entity_interactively,
+    )
 
     entities = [{"entity_id": "light.hall", "name_by_user": "", "name": ""}]
     ha_client = MagicMock()
@@ -1210,7 +1216,10 @@ async def test_pick_entity_interactively_search_cancelled(mocker):
 async def test_pick_entity_interactively_search_validate_fn(mocker):
     """The _validate closure passed to questionary.autocomplete rejects unknown values
     and accepts known labels (lines 368-370)."""
-    from zigporter.commands.rename_entity import _SEARCH_SENTINEL, pick_entity_interactively  # noqa: PLC0415
+    from zigporter.commands.rename_entity import (
+        _SEARCH_SENTINEL,
+        pick_entity_interactively,
+    )
 
     entities = [{"entity_id": "light.hall", "name_by_user": "Hall Light", "name": ""}]
     ha_client = MagicMock()
@@ -1254,7 +1263,7 @@ async def test_run_rename_entity_picker_cancelled(mocker):
         new=AsyncMock(return_value=None),
     )
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, None, None, False)
     assert result is False
@@ -1276,7 +1285,7 @@ async def test_run_rename_new_id_tty_aborted(mocker):
     text_instance.unsafe_ask_async = AsyncMock(return_value="")
     text_mock.return_value = text_instance
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename("https://ha.test", "token", True, "switch.old", None, False)
     assert result is True  # aborted is not an error
@@ -1316,7 +1325,7 @@ async def test_run_rename_not_found_with_suggestions(mocker):
         side_effect=lambda *a, **kw: printed.append(a[0] if a else ""),
     )
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename(
         "https://ha.test", "token", True, "switch.old_plug", "switch.new_plug", True
@@ -1347,7 +1356,7 @@ async def test_run_rename_apply_flag_skips_confirmation(mocker):
         "zigporter.commands.rename_entity._prompt_apply_confirm", new=AsyncMock(return_value=True)
     )
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename(
         "https://ha.test", "token", True, "switch.old", "switch.new", apply=True
@@ -1381,7 +1390,7 @@ async def test_run_rename_confirmed_applies_changes(mocker):
         "zigporter.commands.rename_entity._prompt_apply_confirm", new=AsyncMock(return_value=True)
     )
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename(
         "https://ha.test", "token", True, "switch.old", "switch.new", apply=False
@@ -1414,7 +1423,7 @@ async def test_run_rename_declined_aborts(mocker):
         "zigporter.commands.rename_entity._prompt_apply_confirm", new=AsyncMock(return_value=False)
     )
 
-    from zigporter.commands.rename_entity import run_rename  # noqa: PLC0415
+    from zigporter.commands.rename_entity import run_rename
 
     result = await run_rename(
         "https://ha.test", "token", True, "switch.old", "switch.new", apply=False

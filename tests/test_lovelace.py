@@ -2,7 +2,6 @@
 
 from zigporter.lovelace import cards_from_view, discover_dashboards
 
-
 # ---------------------------------------------------------------------------
 # discover_dashboards
 # ---------------------------------------------------------------------------

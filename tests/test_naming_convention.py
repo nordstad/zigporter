@@ -1,6 +1,6 @@
 """Tests for zigporter.naming_convention."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from zigporter.naming_convention import NamingConvention, load_convention, save_convention
 
@@ -39,7 +39,7 @@ def test_save_convention_writes_file(tmp_path):
 
 def test_save_convention_updates_timestamp(tmp_path):
     path = tmp_path / "naming-convention.json"
-    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    old_time = datetime(2020, 1, 1, tzinfo=UTC)
     convention = NamingConvention(pattern="{desc}", updated_at=old_time)
 
     save_convention(convention, path)

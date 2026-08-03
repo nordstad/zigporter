@@ -14,7 +14,6 @@ from zigporter.main import (
     app,
 )
 
-
 runner = CliRunner()
 
 
@@ -26,7 +25,7 @@ runner = CliRunner()
 def test_get_config_success(mocker):
     mocker.patch("zigporter.main._ensure_config")
     mocker.patch("zigporter.main.load_config", return_value=("https://ha.test", "token", True))
-    url, tok, ssl = _get_config()
+    url, _tok, _ssl = _get_config()
     assert url == "https://ha.test"
 
 
@@ -42,7 +41,7 @@ def test_get_config_exits_on_error(mocker):
 
 def test_get_z2m_config_success(mocker):
     mocker.patch("zigporter.main.load_z2m_config", return_value=("https://z2m.test", "zigbee2mqtt"))
-    url, topic = _get_z2m_config()
+    url, _topic = _get_z2m_config()
     assert url == "https://z2m.test"
 
 

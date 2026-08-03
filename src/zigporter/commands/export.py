@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -157,7 +157,7 @@ def build_export(
         )
 
     return ZHAExport(
-        exported_at=datetime.now(tz=timezone.utc),
+        exported_at=datetime.now(tz=UTC),
         ha_url=ha_url,
         devices=devices,
     )

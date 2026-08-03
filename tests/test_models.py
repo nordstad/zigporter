@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from zigporter.models import AutomationRef, ZHADevice, ZHAEntity, ZHAExport
 
@@ -68,7 +68,7 @@ def test_automation_ref():
 
 def test_zha_export_serialization():
     export = ZHAExport(
-        exported_at=datetime(2026, 2, 23, 10, 0, 0, tzinfo=timezone.utc),
+        exported_at=datetime(2026, 2, 23, 10, 0, 0, tzinfo=UTC),
         ha_url="https://ha.test",
         devices=[],
     )
@@ -85,7 +85,7 @@ def test_zha_export_devices_list():
         device_type="EndDevice",
     )
     export = ZHAExport(
-        exported_at=datetime.now(tz=timezone.utc),
+        exported_at=datetime.now(tz=UTC),
         ha_url="https://ha.test",
         devices=[device],
     )

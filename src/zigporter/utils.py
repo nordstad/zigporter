@@ -11,8 +11,7 @@ def ieee_to_colon(normalized: str) -> str:
 def normalize_ieee(ieee: str) -> str:
     """Normalize an IEEE address to a 16-char lowercase hex string (no separators or prefix)."""
     s = ieee.lower().replace(":", "").replace("-", "")
-    if s.startswith("0x"):
-        s = s[2:]
+    s = s.removeprefix("0x")
     return s.zfill(16)
 
 
@@ -27,11 +26,9 @@ def parse_z2m_ieee_identifier(identifier: str) -> str | None:
     - 00:11:22:33:44:55:66:77
     """
     s = identifier.strip().lower()
-    if s.startswith("zigbee2mqtt_"):
-        s = s[len("zigbee2mqtt_") :]
+    s = s.removeprefix("zigbee2mqtt_")
     s = s.replace(":", "").replace("-", "")
-    if s.startswith("0x"):
-        s = s[2:]
+    s = s.removeprefix("0x")
     if len(s) != 16:
         return None
     if any(c not in "0123456789abcdef" for c in s):

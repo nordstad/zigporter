@@ -14,8 +14,8 @@ from zigporter.rename_plan import (
     CONTEXT_LABEL,
     RenamePlan,
     apply_location_update,
-    fetch_ha_snapshot,
     build_rename_plan_from_snapshot,
+    fetch_ha_snapshot,
 )
 from zigporter.ui import QUESTIONARY_STYLE
 
@@ -35,7 +35,7 @@ async def build_rename_plan(
     new_entity_id: str,
 ) -> RenamePlan:
     """Scan all HA data and build a plan for renaming old_entity_id → new_entity_id."""
-    from zigporter.ha_client import is_yaml_mode as _is_yaml_mode  # noqa: PLC0415
+    from zigporter.ha_client import is_yaml_mode as _is_yaml_mode
 
     snapshot = await fetch_ha_snapshot(ha_client)
     plan = build_rename_plan_from_snapshot(snapshot, old_entity_id, new_entity_id)
@@ -400,7 +400,7 @@ def rename_command(
     new_entity_id: str | None,
     apply: bool,
 ) -> None:
-    import typer  # noqa: PLC0415
+    import typer
 
     ok = asyncio.run(run_rename(ha_url, token, verify_ssl, old_entity_id, new_entity_id, apply))
     if not ok:

@@ -203,7 +203,7 @@ async def _resolve_backend(
         ha_client = HAClient(ha_url, token, verify_ssl)
         await ha_client.get_zha_devices()
         zha_available = True
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110
         pass
 
     if z2m_available and zha_available:
@@ -322,8 +322,8 @@ def _build_routing_tree(
     changed = True
     while changed:
         changed = False
-        for ieee in nodes:
-            if nodes[ieee].get("type") == "Coordinator":
+        for ieee, node in nodes.items():
+            if node.get("type") == "Coordinator":
                 continue
             best_parent: str | None = None
             best_score: tuple[int, int] = (-1, -1)
@@ -502,7 +502,7 @@ def _render_table(
     critical_lqi: int,
     out: Console,
 ) -> None:
-    from rich.table import Table  # noqa: PLC0415
+    from rich.table import Table
 
     table = Table(show_header=True, header_style="bold")
     table.add_column("Device", no_wrap=True)
@@ -744,7 +744,7 @@ async def run_network_map(
             )
 
     if output_svg is not None:
-        from zigporter.commands.network_map_svg import render_svg  # noqa: PLC0415
+        from zigporter.commands.network_map_svg import render_svg
 
         with Progress(
             SpinnerColumn(), TextColumn("{task.description}"), console=console

@@ -2,7 +2,6 @@ import pytest
 
 import zigporter.config
 
-
 HA_URL = "https://ha.test"
 
 

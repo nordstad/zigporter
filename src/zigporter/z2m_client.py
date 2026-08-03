@@ -236,7 +236,7 @@ class Z2MClient:
                     raise RuntimeError(f"Timed out after {timeout}s waiting for Z2M network map")
                 try:
                     raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     raise RuntimeError(f"Timed out after {timeout}s waiting for Z2M network map")
 
                 msg = json.loads(raw)
@@ -349,9 +349,9 @@ class Z2MClient:
         This differs from the HA MQTT path which uses the full topic
         (``zigbee2mqtt/bridge/request/networkmap``).
         """
-        import ssl as _ssl  # noqa: PLC0415
+        import ssl as _ssl
 
-        import websockets  # noqa: PLC0415
+        import websockets
 
         ws_url = (
             self._z2m_url.replace("https://", "wss://").replace("http://", "ws://").rstrip("/")
@@ -397,7 +397,7 @@ class Z2MClient:
                         )
                     try:
                         raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         raise RuntimeError(
                             f"Timed out after {timeout}s waiting for Z2M network map"
                         )
@@ -482,7 +482,7 @@ class Z2MClient:
 
                 try:
                     raw = await asyncio.wait_for(ws.recv(), timeout=min(remaining, 2.0))
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
                 try:

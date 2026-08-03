@@ -90,9 +90,8 @@ def _is_zigbee_device(device: dict[str, Any]) -> bool:
             platform = pair[0]
             if platform == "zha":
                 return True
-            if platform == "mqtt" and len(pair) == 2:
-                if pair[1].lower().startswith("zigbee2mqtt_"):
-                    return True
+            if platform == "mqtt" and len(pair) == 2 and pair[1].lower().startswith("zigbee2mqtt_"):
+                return True
     return False
 
 
@@ -800,10 +799,9 @@ async def run_rename_device(
             console.print("[dim]Aborted.[/dim]")
             return True
 
-        if z2m_client and z2m_friendly_name:
-            if not await _prompt_z2m_confirm(z2m_friendly_name):
-                z2m_client = None
-                z2m_friendly_name = None
+        if z2m_client and z2m_friendly_name and not await _prompt_z2m_confirm(z2m_friendly_name):
+            z2m_client = None
+            z2m_friendly_name = None
 
     console.print()
     await execute_device_rename(
@@ -830,7 +828,7 @@ def rename_device_command(
     apply: bool,
     device_filter: str | None = None,
 ) -> None:
-    import typer  # noqa: PLC0415
+    import typer
 
     ok = asyncio.run(
         run_rename_device(ha_url, token, verify_ssl, old_name, new_name, apply, device_filter)

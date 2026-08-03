@@ -9,7 +9,6 @@ from zigporter.commands.list_devices import (
     run_list_devices,
 )
 
-
 HA_URL = "https://ha.test"
 TOKEN = "test-token"
 
@@ -115,11 +114,13 @@ async def test_run_list_devices_fetches_registry(mocker):
     mock_client.get_device_registry = AsyncMock(return_value=DEVICES)
     mock_client.get_area_registry = AsyncMock(return_value=AREAS)
 
-    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
-        with patch("zigporter.commands.list_devices.console"):
-            with patch("zigporter.commands.list_devices.Progress") as mock_cls:
-                mock_cls.return_value = _make_progress_mock(mocker)
-                await run_list_devices(HA_URL, TOKEN, True)
+    with (
+        patch("zigporter.commands.list_devices.HAClient", return_value=mock_client),
+        patch("zigporter.commands.list_devices.console"),
+        patch("zigporter.commands.list_devices.Progress") as mock_cls,
+    ):
+        mock_cls.return_value = _make_progress_mock(mocker)
+        await run_list_devices(HA_URL, TOKEN, True)
 
     mock_client.get_device_registry.assert_awaited_once()
     mock_client.get_area_registry.assert_awaited_once()
@@ -135,12 +136,14 @@ async def test_run_list_devices_filters_unnamed_devices(mocker):
     mock_table = mocker.MagicMock()
     mock_table.add_row = lambda *args: added_rows.append(args)
 
-    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
-        with patch("zigporter.commands.list_devices.console"):
-            with patch("zigporter.commands.list_devices.Table", return_value=mock_table):
-                with patch("zigporter.commands.list_devices.Progress") as mock_cls:
-                    mock_cls.return_value = _make_progress_mock(mocker)
-                    await run_list_devices(HA_URL, TOKEN, True)
+    with (
+        patch("zigporter.commands.list_devices.HAClient", return_value=mock_client),
+        patch("zigporter.commands.list_devices.console"),
+        patch("zigporter.commands.list_devices.Table", return_value=mock_table),
+        patch("zigporter.commands.list_devices.Progress") as mock_cls,
+    ):
+        mock_cls.return_value = _make_progress_mock(mocker)
+        await run_list_devices(HA_URL, TOKEN, True)
 
     # dev3 has no name — must be excluded
     assert len(added_rows) == 2
@@ -156,12 +159,14 @@ async def test_run_list_devices_area_names_resolved(mocker):
     mock_table = mocker.MagicMock()
     mock_table.add_row = lambda *args: added_rows.append(args)
 
-    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
-        with patch("zigporter.commands.list_devices.console"):
-            with patch("zigporter.commands.list_devices.Table", return_value=mock_table):
-                with patch("zigporter.commands.list_devices.Progress") as mock_cls:
-                    mock_cls.return_value = _make_progress_mock(mocker)
-                    await run_list_devices(HA_URL, TOKEN, True)
+    with (
+        patch("zigporter.commands.list_devices.HAClient", return_value=mock_client),
+        patch("zigporter.commands.list_devices.console"),
+        patch("zigporter.commands.list_devices.Table", return_value=mock_table),
+        patch("zigporter.commands.list_devices.Progress") as mock_cls,
+    ):
+        mock_cls.return_value = _make_progress_mock(mocker)
+        await run_list_devices(HA_URL, TOKEN, True)
 
     area_values = {row[1] for row in added_rows}
     assert "Kitchen" in area_values
@@ -189,12 +194,14 @@ async def test_run_list_devices_no_area_shows_empty_string(mocker):
     mock_table = mocker.MagicMock()
     mock_table.add_row = lambda *args: added_rows.append(args)
 
-    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
-        with patch("zigporter.commands.list_devices.console"):
-            with patch("zigporter.commands.list_devices.Table", return_value=mock_table):
-                with patch("zigporter.commands.list_devices.Progress") as mock_cls:
-                    mock_cls.return_value = _make_progress_mock(mocker)
-                    await run_list_devices(HA_URL, TOKEN, False)
+    with (
+        patch("zigporter.commands.list_devices.HAClient", return_value=mock_client),
+        patch("zigporter.commands.list_devices.console"),
+        patch("zigporter.commands.list_devices.Table", return_value=mock_table),
+        patch("zigporter.commands.list_devices.Progress") as mock_cls,
+    ):
+        mock_cls.return_value = _make_progress_mock(mocker)
+        await run_list_devices(HA_URL, TOKEN, False)
 
     assert added_rows[0][1] == ""
 
@@ -205,11 +212,13 @@ async def test_run_list_devices_empty_registry(mocker):
     mock_client.get_device_registry = AsyncMock(return_value=[])
     mock_client.get_area_registry = AsyncMock(return_value=[])
 
-    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
-        with patch("zigporter.commands.list_devices.console"):
-            with patch("zigporter.commands.list_devices.Progress") as mock_cls:
-                mock_cls.return_value = _make_progress_mock(mocker)
-                await run_list_devices(HA_URL, TOKEN, True)
+    with (
+        patch("zigporter.commands.list_devices.HAClient", return_value=mock_client),
+        patch("zigporter.commands.list_devices.console"),
+        patch("zigporter.commands.list_devices.Progress") as mock_cls,
+    ):
+        mock_cls.return_value = _make_progress_mock(mocker)
+        await run_list_devices(HA_URL, TOKEN, True)
 
 
 # ---------------------------------------------------------------------------
@@ -295,8 +304,10 @@ async def test_run_list_devices_json_output_no_spinner(mocker, capsys):
     mock_client.get_device_registry = AsyncMock(return_value=DEVICES)
     mock_client.get_area_registry = AsyncMock(return_value=AREAS)
 
-    with patch("zigporter.commands.list_devices.HAClient", return_value=mock_client):
-        with patch("zigporter.commands.list_devices.Progress") as mock_progress_cls:
-            await run_list_devices(HA_URL, TOKEN, True, json_output=True)
+    with (
+        patch("zigporter.commands.list_devices.HAClient", return_value=mock_client),
+        patch("zigporter.commands.list_devices.Progress") as mock_progress_cls,
+    ):
+        await run_list_devices(HA_URL, TOKEN, True, json_output=True)
 
     mock_progress_cls.assert_not_called()

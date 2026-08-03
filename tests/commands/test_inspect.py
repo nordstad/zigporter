@@ -381,9 +381,9 @@ def test_show_report_no_deps():
 
 async def test_show_migrate_inspect_summary_empty_entity_ids():
     """Empty entity_ids list returns immediately without calling ha_client."""
-    from unittest.mock import MagicMock  # noqa: PLC0415
+    from unittest.mock import MagicMock
 
-    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+    from zigporter.commands.inspect import show_migrate_inspect_summary
 
     ha_client = MagicMock()
     ha_client.get_panels = AsyncMock(return_value={})
@@ -393,9 +393,9 @@ async def test_show_migrate_inspect_summary_empty_entity_ids():
 
 async def test_show_migrate_inspect_summary_with_matching_dashboard():
     """Shows entities list and dashboard cards that reference them."""
-    from unittest.mock import MagicMock  # noqa: PLC0415
+    from unittest.mock import MagicMock
 
-    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+    from zigporter.commands.inspect import show_migrate_inspect_summary
 
     ha_client = MagicMock()
     ha_client.get_panels = AsyncMock(return_value={})
@@ -418,9 +418,9 @@ async def test_show_migrate_inspect_summary_with_matching_dashboard():
 
 async def test_show_migrate_inspect_summary_no_matching_dashboard():
     """Shows 'No dashboard cards' message when no cards reference the entities."""
-    from unittest.mock import MagicMock  # noqa: PLC0415
+    from unittest.mock import MagicMock
 
-    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+    from zigporter.commands.inspect import show_migrate_inspect_summary
 
     ha_client = MagicMock()
     ha_client.get_panels = AsyncMock(return_value={})
@@ -437,9 +437,9 @@ async def test_show_migrate_inspect_summary_no_matching_dashboard():
 
 async def test_show_migrate_inspect_summary_discovers_extra_dashboards():
     """Extra Lovelace dashboards discovered from panels are also scanned."""
-    from unittest.mock import MagicMock  # noqa: PLC0415
+    from unittest.mock import MagicMock
 
-    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+    from zigporter.commands.inspect import show_migrate_inspect_summary
 
     ha_client = MagicMock()
     ha_client.get_panels = AsyncMock(
@@ -499,9 +499,9 @@ def test_build_deps_mixed_yaml_mode_and_real_dashboard():
 
 async def test_show_migrate_inspect_summary_yaml_mode_does_not_raise():
     """show_migrate_inspect_summary must not crash when get_lovelace_config returns YAML_MODE."""
-    from unittest.mock import MagicMock  # noqa: PLC0415
+    from unittest.mock import MagicMock
 
-    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+    from zigporter.commands.inspect import show_migrate_inspect_summary
 
     ha_client = MagicMock()
     ha_client.get_panels = AsyncMock(return_value={})
@@ -515,9 +515,9 @@ async def test_show_migrate_inspect_summary_yaml_mode_does_not_raise():
 
 async def test_show_migrate_inspect_summary_yaml_mode_skipped_multiple_dashboards():
     """YAML_MODE dashboards are skipped; real ones are still scanned."""
-    from unittest.mock import MagicMock  # noqa: PLC0415
+    from unittest.mock import MagicMock
 
-    from zigporter.commands.inspect import show_migrate_inspect_summary  # noqa: PLC0415
+    from zigporter.commands.inspect import show_migrate_inspect_summary
 
     real_config = {
         "views": [
@@ -554,70 +554,70 @@ async def test_show_migrate_inspect_summary_yaml_mode_skipped_multiple_dashboard
 
 
 def test_resolve_device_arg_by_entity_id():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg("switch.kitchen_plug", _BASE_DATA, "zha")
     assert matches == ["dev-abc"]
 
 
 def test_resolve_device_arg_by_entity_id_no_match():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg("sensor.nonexistent", _BASE_DATA, "zha")
     assert matches == []
 
 
 def test_resolve_device_arg_by_ieee_0x_prefix():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg("0x0011223344556677", _BASE_DATA, "zha")
     assert matches == ["dev-abc"]
 
 
 def test_resolve_device_arg_by_ieee_colon():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg("00:11:22:33:44:55:66:77", _BASE_DATA, "zha")
     assert matches == ["dev-abc"]
 
 
 def test_resolve_device_arg_by_ieee_no_match():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg("0xffffffffffffffff", _BASE_DATA, "zha")
     assert matches == []
 
 
 def test_resolve_device_arg_by_name_partial():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg("Kitchen", _BASE_DATA, "zha")
     assert matches == ["dev-abc"]
 
 
 def test_resolve_device_arg_by_name_exact():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg("Kitchen Plug", _BASE_DATA, "zha")
     assert matches == ["dev-abc"]
 
 
 def test_resolve_device_arg_by_name_case_insensitive():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg("kitchen plug", _BASE_DATA, "zha")
     assert matches == ["dev-abc"]
 
 
 def test_resolve_device_arg_by_name_no_match():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg("Bedroom Sensor", _BASE_DATA, "zha")
     assert matches == []
 
 
 def test_resolve_device_arg_ambiguous_name():
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     data = {
         **_BASE_DATA,
@@ -640,7 +640,7 @@ _OTHER_DEVICE_HA_ID = "aaaa0000bbbb1111cccc2222dddd3333"
 
 def test_resolve_device_arg_by_ha_device_id():
     """32-char hex HA device ID is resolved directly without name/IEEE matching."""
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     matches = _resolve_device_arg(
         _ZHA_DEVICE_HA_ID,
@@ -662,7 +662,7 @@ def test_resolve_device_arg_by_ha_device_id():
 
 def test_resolve_device_arg_by_ha_device_id_not_backend():
     """HA device ID that exists but belongs to a different backend returns __not_backend__."""
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     data = {
         **_BASE_DATA,
@@ -677,7 +677,7 @@ def test_resolve_device_arg_by_ha_device_id_not_backend():
 
 def test_resolve_device_arg_non_zha_entity_returns_not_backend():
     """Entity that exists but belongs to a non-ZHA device returns __not_backend__."""
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     data = {
         **_BASE_DATA,
@@ -700,7 +700,7 @@ def test_resolve_device_arg_non_zha_entity_returns_not_backend():
 
 def test_resolve_device_arg_non_zha_name_returns_not_backend():
     """Name that matches a non-ZHA device returns __not_backend__."""
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     data = {
         **_BASE_DATA,
@@ -715,7 +715,7 @@ def test_resolve_device_arg_non_zha_name_returns_not_backend():
 
 def test_resolve_device_arg_backend_all_finds_any_device():
     """backend='all' matches non-ZHA devices too."""
-    from zigporter.commands.inspect import _resolve_device_arg  # noqa: PLC0415
+    from zigporter.commands.inspect import _resolve_device_arg
 
     data = {
         **_BASE_DATA,
@@ -734,7 +734,7 @@ def test_resolve_device_arg_backend_all_finds_any_device():
 
 
 async def test_run_inspect_headless_not_found(mocker, capsys):
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -750,7 +750,7 @@ async def test_run_inspect_headless_not_found(mocker, capsys):
 
 
 async def test_run_inspect_headless_ambiguous(mocker):
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     ambiguous_data = {
         **_BASE_DATA,
@@ -784,7 +784,7 @@ async def test_run_inspect_headless_ambiguous(mocker):
 
 
 async def test_run_inspect_json_output(mocker, capsys):
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -796,7 +796,7 @@ async def test_run_inspect_json_output(mocker, capsys):
 
     await run_inspect("url", "token", False, device="switch.kitchen_plug", json_output=True)
 
-    import json  # noqa: PLC0415
+    import json
 
     out = json.loads(capsys.readouterr().out)
     assert out["name"] == "Kitchen Plug"
@@ -806,7 +806,7 @@ async def test_run_inspect_json_output(mocker, capsys):
 
 
 async def test_run_inspect_headless_skips_picker_and_shows_report(mocker):
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -830,7 +830,7 @@ async def test_run_inspect_headless_skips_picker_and_shows_report(mocker):
 
 def test_filter_by_backend_z2m_accepts_standard_zigbee2mqtt_prefix():
     """Identifiers with 'zigbee2mqtt_0x...' prefix are accepted."""
-    from zigporter.commands.inspect import _filter_by_backend  # noqa: PLC0415
+    from zigporter.commands.inspect import _filter_by_backend
 
     dr = [
         {"id": "dev1", "identifiers": [["mqtt", "zigbee2mqtt_0x0011223344556677"]]},
@@ -842,7 +842,7 @@ def test_filter_by_backend_z2m_accepts_standard_zigbee2mqtt_prefix():
 
 def test_filter_by_backend_z2m_accepts_bare_ieee_mqtt_identifier():
     """Bare IEEE hex MQTT identifiers (no 'zigbee2mqtt' prefix) are accepted."""
-    from zigporter.commands.inspect import _filter_by_backend  # noqa: PLC0415
+    from zigporter.commands.inspect import _filter_by_backend
 
     dr = [{"id": "dev1", "identifiers": [["mqtt", "0011223344556677"]]}]
     result = _filter_by_backend(dr, [], "z2m")
@@ -851,7 +851,7 @@ def test_filter_by_backend_z2m_accepts_bare_ieee_mqtt_identifier():
 
 def test_filter_by_backend_z2m_accepts_0x_prefixed_mqtt_identifier():
     """MQTT identifiers with 0x-prefixed IEEE (no zigbee2mqtt_ prefix) are accepted."""
-    from zigporter.commands.inspect import _filter_by_backend  # noqa: PLC0415
+    from zigporter.commands.inspect import _filter_by_backend
 
     dr = [{"id": "dev1", "identifiers": [["mqtt", "0x0011223344556677"]]}]
     result = _filter_by_backend(dr, [], "z2m")
@@ -860,7 +860,7 @@ def test_filter_by_backend_z2m_accepts_0x_prefixed_mqtt_identifier():
 
 def test_filter_by_backend_z2m_rejects_non_ieee_mqtt_identifier():
     """MQTT identifiers that are not parseable as IEEE addresses are excluded."""
-    from zigporter.commands.inspect import _filter_by_backend  # noqa: PLC0415
+    from zigporter.commands.inspect import _filter_by_backend
 
     dr = [{"id": "dev1", "identifiers": [["mqtt", "some_other_integration_device"]]}]
     result = _filter_by_backend(dr, [], "z2m")
@@ -874,7 +874,7 @@ def test_filter_by_backend_z2m_rejects_non_ieee_mqtt_identifier():
 
 async def test_run_inspect_json_debug_produces_clean_json(mocker, capsys):
     """--json --debug must not write debug text to stdout; output must be valid JSON."""
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -888,7 +888,7 @@ async def test_run_inspect_json_debug_produces_clean_json(mocker, capsys):
         "url", "token", False, device="switch.kitchen_plug", json_output=True, debug=True
     )
 
-    import json  # noqa: PLC0415
+    import json
 
     captured = capsys.readouterr()
     # Must parse cleanly — no debug text mixed in
@@ -903,7 +903,7 @@ async def test_run_inspect_json_debug_produces_clean_json(mocker, capsys):
 
 async def test_run_inspect_invalid_backend_errors(mocker, capsys):
     """Unknown --backend value must print an error and return without calling HA."""
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -924,7 +924,7 @@ async def test_run_inspect_invalid_backend_errors(mocker, capsys):
 
 async def test_run_inspect_not_backend_zha_prints_integration_hint(mocker):
     """__not_backend__ with backend='zha' prints a hint about --backend all."""
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -945,7 +945,7 @@ async def test_run_inspect_not_backend_zha_prints_integration_hint(mocker):
 
 async def test_run_inspect_not_backend_all_prints_not_found(mocker):
     """__not_backend__ with backend='all' prints device not found (no integration hint)."""
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -971,7 +971,7 @@ async def test_run_inspect_not_backend_all_prints_not_found(mocker):
 
 async def test_run_inspect_interactive_picker_returns_none(mocker):
     """When device is None and the picker returns None, show_report is not called."""
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -989,7 +989,7 @@ async def test_run_inspect_interactive_picker_returns_none(mocker):
 
 async def test_run_inspect_interactive_picker_shows_report(mocker):
     """When device is None and picker returns a device_id, show_report is called."""
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -1012,7 +1012,7 @@ async def test_run_inspect_interactive_picker_shows_report(mocker):
 
 async def test_run_inspect_deps_none_prints_error(mocker):
     """build_deps returning None must print an error and not call show_report."""
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -1035,7 +1035,7 @@ async def test_run_inspect_deps_none_prints_error(mocker):
 
 async def test_run_inspect_debug_mode_calls_debug_lovelace(mocker):
     """debug=True without --json must call _debug_lovelace."""
-    from zigporter.commands.inspect import run_inspect  # noqa: PLC0415
+    from zigporter.commands.inspect import run_inspect
 
     mock_ha = mocker.AsyncMock()
     mocker.patch("zigporter.commands.inspect.HAClient", return_value=mock_ha)
@@ -1058,7 +1058,7 @@ async def test_run_inspect_debug_mode_calls_debug_lovelace(mocker):
 
 def test_debug_lovelace_all_branches():
     """_debug_lovelace must not raise for None, YAML_MODE, and real lovelace configs."""
-    from zigporter.commands.inspect import _debug_lovelace  # noqa: PLC0415
+    from zigporter.commands.inspect import _debug_lovelace
 
     all_data = {
         "_panels_data": {
@@ -1091,7 +1091,7 @@ def test_debug_lovelace_all_branches():
 
 def test_filter_by_backend_unknown_returns_full_registry():
     """An unrecognised backend string falls through to the full device_registry."""
-    from zigporter.commands.inspect import _filter_by_backend  # noqa: PLC0415
+    from zigporter.commands.inspect import _filter_by_backend
 
     dr = [{"id": "dev1"}, {"id": "dev2"}]
     result = _filter_by_backend(dr, [], "unknown_backend")

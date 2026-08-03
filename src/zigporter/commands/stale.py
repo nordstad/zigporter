@@ -36,9 +36,12 @@ _OFFLINE_STATES = {"unavailable", "unknown"}
 def _is_ha_core_device(device: dict[str, Any]) -> bool:
     """Return True if this is the special Home Assistant core device."""
     for identifier in device.get("identifiers", []):
-        if isinstance(identifier, list) and len(identifier) >= 1:
-            if identifier[0] == "homeassistant":
-                return True
+        if (
+            isinstance(identifier, list)
+            and len(identifier) >= 1
+            and identifier[0] == "homeassistant"
+        ):
+            return True
     return False
 
 

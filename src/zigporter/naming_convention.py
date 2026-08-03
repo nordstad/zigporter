@@ -6,7 +6,7 @@ passed on every invocation of ``/smart-rename``.
 State is stored in ``~/.config/zigporter/naming-convention.json``.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 class NamingConvention(BaseModel):
     pattern: str  # e.g. "{area}_{type}_{desc}"
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     examples: list[str] = Field(default_factory=list)  # well-named reference devices
 
 
@@ -27,5 +27,5 @@ def load_convention(path: Path) -> NamingConvention | None:
 
 def save_convention(convention: NamingConvention, path: Path) -> None:
     """Persist naming convention to disk."""
-    convention.updated_at = datetime.now(tz=timezone.utc)
+    convention.updated_at = datetime.now(tz=UTC)
     path.write_text(convention.model_dump_json(indent=2))

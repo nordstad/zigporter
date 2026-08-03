@@ -7,7 +7,6 @@ import respx
 from zigporter.utils import normalize_ieee, parse_z2m_ieee_identifier
 from zigporter.z2m_client import Z2MClient
 
-
 HA_URL = "https://ha.test"
 Z2M_URL = "https://ha.test/45df7312_zigbee2mqtt"
 TOKEN = "test-token"

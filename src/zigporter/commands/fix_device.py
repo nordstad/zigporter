@@ -208,7 +208,7 @@ def _show_plan(pair: StalePair) -> None:
 def _match_pairs(device_str: str, pairs: list[StalePair]) -> list[StalePair]:
     """Return StalePairs matching device_str by IEEE address or partial name."""
     _s = device_str.lower().replace(":", "").replace("-", "")
-    stripped = _s[2:] if _s.startswith("0x") else _s
+    stripped = _s.removeprefix("0x")
     if len(stripped) == 16 and all(c in "0123456789abcdef" for c in stripped):
         norm = normalize_ieee(device_str)
         ieee_matches = [p for p in pairs if p.ieee == norm]

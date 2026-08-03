@@ -1,11 +1,11 @@
 """Tests for the network-map command."""
 
-import asyncio
 import io
 import math
 import re
 import tempfile
 from pathlib import Path
+from typing import Self
 from unittest.mock import AsyncMock, patch
 
 from rich.console import Console
@@ -299,7 +299,7 @@ def test_build_routing_tree_no_cycles():
 
 def test_compute_path_min_lqi_cycle_safe():
     """_compute_path_min_lqi must not recurse/loop infinitely on a cyclic parent_map."""
-    from zigporter.commands.network_map_svg import _compute_path_min_lqi  # noqa: PLC0415
+    from zigporter.commands.network_map_svg import _compute_path_min_lqi
 
     # Artificially inject a two-node cycle: A → B, B → A
     parent_map: dict[str, str | None] = {
@@ -678,14 +678,14 @@ MOCK_ZHA_DEVICES: list[dict] = [
 
 
 def test_build_flat_zha_topology_node_count():
-    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+    from zigporter.commands.network_map import _build_flat_zha_topology
 
     nodes, _ = _build_flat_zha_topology(MOCK_ZHA_DEVICES)
     assert len(nodes) == 4  # coordinator + 2 routers + 1 end device
 
 
 def test_build_flat_zha_topology_coordinator_present():
-    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+    from zigporter.commands.network_map import _build_flat_zha_topology
 
     nodes, _ = _build_flat_zha_topology(MOCK_ZHA_DEVICES)
     coord = nodes["0000000000000000"]
@@ -694,7 +694,7 @@ def test_build_flat_zha_topology_coordinator_present():
 
 def test_build_flat_zha_topology_all_devices_at_depth1():
     """With flat topology, the routing tree places every device at depth 1."""
-    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+    from zigporter.commands.network_map import _build_flat_zha_topology
 
     nodes, links = _build_flat_zha_topology(MOCK_ZHA_DEVICES)
     _, _, depth_map = _build_routing_tree(nodes, links)
@@ -705,7 +705,7 @@ def test_build_flat_zha_topology_all_devices_at_depth1():
 
 def test_build_flat_zha_topology_lqi_from_device_field():
     """LQI in links comes from each device's lqi field."""
-    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+    from zigporter.commands.network_map import _build_flat_zha_topology
 
     devices = [
         {"ieee": "00:00:00:00:00:00:00:00", "device_type": "Coordinator", "name": "Coord"},
@@ -722,7 +722,7 @@ def test_build_flat_zha_topology_lqi_from_device_field():
 
 
 def test_build_flat_zha_topology_missing_lqi_defaults_to_zero():
-    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+    from zigporter.commands.network_map import _build_flat_zha_topology
 
     devices = [
         {"ieee": "00:00:00:00:00:00:00:00", "device_type": "Coordinator", "name": "Coord"},
@@ -733,7 +733,7 @@ def test_build_flat_zha_topology_missing_lqi_defaults_to_zero():
 
 
 def test_build_flat_zha_topology_empty_devices():
-    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+    from zigporter.commands.network_map import _build_flat_zha_topology
 
     nodes, links = _build_flat_zha_topology([])
     assert nodes == {}
@@ -742,7 +742,7 @@ def test_build_flat_zha_topology_empty_devices():
 
 def test_build_flat_zha_topology_no_coordinator_skips_links():
     """Without a coordinator entry, no links are created (nothing to link to)."""
-    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+    from zigporter.commands.network_map import _build_flat_zha_topology
 
     devices = [
         {"ieee": "00:00:00:00:00:00:00:01", "device_type": "Router", "name": "Router", "lqi": 200},
@@ -1231,13 +1231,13 @@ async def test_auto_backend_cancelled_by_user():
 
 
 def test_zha_lqi_none_returns_zero():
-    from zigporter.commands.network_map import _zha_lqi  # noqa: PLC0415
+    from zigporter.commands.network_map import _zha_lqi
 
     assert _zha_lqi(None) == 0
 
 
 def test_zha_lqi_invalid_string_returns_zero():
-    from zigporter.commands.network_map import _zha_lqi  # noqa: PLC0415
+    from zigporter.commands.network_map import _zha_lqi
 
     assert _zha_lqi("not-a-number") == 0
 
@@ -1272,7 +1272,7 @@ def test_build_zha_topology_from_devices_skips_neighbor_with_empty_ieee():
 
 
 def test_build_flat_zha_topology_skips_device_with_empty_ieee():
-    from zigporter.commands.network_map import _build_flat_zha_topology  # noqa: PLC0415
+    from zigporter.commands.network_map import _build_flat_zha_topology
 
     devices = [
         {"ieee": "", "device_type": "EndDevice", "name": "Bad"},
@@ -1396,7 +1396,13 @@ def _demo_topology() -> tuple[
     dict[str, list[str]],
 ]:
     """Return (nodes, parent_map, lqi_map, depth_map, children) for the 30-node demo."""
-    from scripts.gen_demo_svg import children, depth_map, lqi_map, nodes, parent_map  # noqa: PLC0415
+    from scripts.gen_demo_svg import (
+        children,
+        depth_map,
+        lqi_map,
+        nodes,
+        parent_map,
+    )
 
     return nodes, parent_map, lqi_map, depth_map, children
 
@@ -1414,7 +1420,7 @@ def _run_layout(
     str,
 ]:
     """Run the full layout pipeline and return (ring_radii, angles, positions, coord_ieee)."""
-    from zigporter.commands.network_map_svg import (  # noqa: PLC0415
+    from zigporter.commands.network_map_svg import (
         LABEL_MARGIN,
         _assign_angles,
         _resolve_collisions,
@@ -1484,7 +1490,7 @@ class TestLayoutInvariants:
 
     def test_no_same_ring_node_overlap(self) -> None:
         """No two nodes on the same ring are closer than COLLISION_GAP (center-to-center - radii)."""
-        from zigporter.commands.network_map_svg import _node_radius  # noqa: PLC0415
+        from zigporter.commands.network_map_svg import _node_radius
 
         by_depth: dict[int, list[str]] = {}
         for ieee, depth in self.depth_map.items():
@@ -1562,11 +1568,10 @@ class TestLayoutInvariants:
 # Standalone mode (no HA) tests
 # ---------------------------------------------------------------------------
 
-import json as _json  # noqa: E402 (needed at module level for helper)
+import json as _json
 
-from zigporter.commands.network_map import _resolve_backend  # noqa: E402
-from zigporter.z2m_client import Z2MClient  # noqa: E402
-
+from zigporter.commands.network_map import _resolve_backend
+from zigporter.z2m_client import Z2MClient
 
 _NM_RESPONSE_PAYLOAD = {
     "status": "ok",
@@ -1599,9 +1604,9 @@ class _FakeWS:
     async def recv(self) -> str:
         if self._messages:
             return self._messages.pop(0)
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
-    async def __aenter__(self) -> "_FakeWS":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *args: object) -> None:
@@ -1710,7 +1715,7 @@ async def test_z2m_ws_error_payload_raises() -> None:
     with patch("websockets.connect", return_value=fake_ws):
         try:
             await client._get_network_map_via_z2m_ws(timeout=5)
-            assert False, "Expected RuntimeError"  # noqa: B011
+            assert False, "Expected RuntimeError"
         except RuntimeError as exc:
             assert "not ready" in str(exc)
 
@@ -1748,7 +1753,7 @@ async def test_z2m_ws_deadline_exceeded_raises() -> None:
     ):
         try:
             await client._get_network_map_via_z2m_ws(timeout=1)
-            assert False, "Expected RuntimeError"  # noqa: B011
+            assert False, "Expected RuntimeError"
         except RuntimeError as exc:
             assert "Timed out" in str(exc)
 
@@ -1765,7 +1770,7 @@ async def test_z2m_ws_recv_timeout_raises() -> None:
     with patch("websockets.connect", return_value=fake_ws):
         try:
             await client._get_network_map_via_z2m_ws(timeout=5)
-            assert False, "Expected RuntimeError"  # noqa: B011
+            assert False, "Expected RuntimeError"
         except RuntimeError as exc:
             assert "Timed out" in str(exc)
 
@@ -1777,7 +1782,7 @@ async def test_z2m_ws_connection_refused_raises_friendly_error() -> None:
     with patch("websockets.connect", side_effect=OSError("Connection refused")):
         try:
             await client._get_network_map_via_z2m_ws(timeout=5)
-            assert False, "Expected RuntimeError"  # noqa: B011
+            assert False, "Expected RuntimeError"
         except RuntimeError as exc:
             assert "Could not connect" in str(exc)
             assert "z2m.local:8080" in str(exc)
