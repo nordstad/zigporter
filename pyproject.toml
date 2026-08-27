@@ -38,7 +38,7 @@ docs = [
     "zensical>=0.0.34",
     "mkdocstrings>=0.24.0",
     "mkdocstrings-python>=1.8.0",
-    "pygments>=2,<2.21",
+    "pygments>=2,<2.22",
 ]
 dev = [
     "pytest>=8",
