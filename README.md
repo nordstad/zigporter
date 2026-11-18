@@ -1,6 +1,6 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/nordstad/zigporter/main/docs/assets/mesh_house_pulse_256.gif" alt="zigporter" width="128">
-  <h1>zigporter</h1>
+  <h1>Zigporter CLI</h1>
   <a href="https://github.com/nordstad/zigporter/actions/workflows/ci.yml"><img src="https://github.com/nordstad/zigporter/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://codecov.io/gh/nordstad/zigporter"><img src="https://codecov.io/gh/nordstad/zigporter/branch/main/graph/badge.svg" alt="codecov"></a>
   <a href="https://nordstad.github.io/zigporter"><img src="https://img.shields.io/badge/docs-zensical-blue" alt="Documentation"></a>
