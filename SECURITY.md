@@ -1,21 +1,10 @@
 # Security Policy
 
-## Supported Versions
+## Reporting a vulnerability
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Please do not report security vulnerabilities in public GitHub issues.
+Instead, use [GitHub's private vulnerability reporting](https://github.com/nordstad/zigporter/security/advisories/new)
+to share the details with the maintainers.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
-
-## Reporting a Vulnerability
-
-Use this section to tell people how to report a vulnerability.
-
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Please include a description of the issue, steps to reproduce it, and the
+potential impact, if known. Thank you for helping keep Zigporter cli secure.
